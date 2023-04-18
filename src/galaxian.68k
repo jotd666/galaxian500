@@ -1,0 +1,34 @@
+***
+
+
+* exports
+
+    * ROM
+
+    .global galaxian_irq
+    .global galaxian_reset
+    .global infinite_lives_flag
+    .global invincible_flag
+	.global	bg_colorram
+	.global	bg_videoram
+	.global	vb_ticks_count
+
+
+	.include "galaxian.inc"
+
+galaxian_reset:
+	bsr		osd_break
+	rts
+galaxian_irq:
+	rts
+	
+bg_colorram:                            ds.b  0x800
+bg_videoram:                            ds.b  0x800
+
+invincible_flag:
+	.byte	0
+infinite_lives_flag:
+	.byte	0
+vb_ticks_count:
+	.byte	0
+	
