@@ -19,9 +19,6 @@
 galaxian_reset:
 	bra		INITIALISE_SYSTEM
 
-galaxian_irq:
-	move.w	#0x0F0,0xDFF180
-	rts
 	
 
 invincible_flag:
@@ -797,6 +794,145 @@ bg_colorram:
 ATTRIBUTE_RAM:						| $5800
 	ds.b	0x800
 
+* start of code
+
+*
+* A very primitive pseudo-random number generator.
+* (seems that it just multiplies by 5, adds 1 and wraps)
+*
+
+GENERATE_RANDOM_NUMBER:
+	move.b	RAND_NUMBER(pc),d0
+	move.b	d0,d1
+	add.b	d0,d0
+	add.b	d0,d0
+	add.b	d0,d1
+	addq.b	#1,d0
+	move.b	d0,RAND_NUMBER
+	rts
+
+galaxian_irq:
+
+* update screen in one go - IMPORTANT
+*0079: 21 20 40      ld   hl,0x4020            | pointer to OBJRAM_BACK_BUF buffer held in RAM
+*007C: 11 00 58      ld   de,0x5800            | start of screen attribute RAM
+*007F: 01 80 00      ld   bc,0x0080            | number of bytes to copy from OBJRAM_BACK_BUF 
+*0082: ED B0         ldir                     | update screen & sprites in one go
+
+* read ports and stash values read in RAM
+*0084: 3A 00 78      ld   a,(0x7800)           | kick the watchdog
+*0087: 3A 15 40      ld   a,(0x4015)           | read previous, previous state of port 6000 (SW0)
+*008A: 32 16 40      ld   (0x4016),a           | and write to PREV_PREV_PREV_STATE_6000 
+*008D: 3A 13 40      ld   a,(0x4013)           | read previous state of port 6000 (SW0)
+*0090: 32 15 40      ld   (0x4015),a           | and write to PREV_PREV_PORT_STATE_6000  
+*0093: 2A 10 40      ld   hl,(0x4010)          | read state of 6000 (SW0) and 6800 (SW1 & SOUND)
+*0096: 22 13 40      ld   (0x4013),hl          | and write to previous state value
+*0099: 3A 00 70      ld   a,(0x7000)           | read state of DIPSW
+*009C: 32 12 40      ld   (0x4012),a           | and write to PORT_STATE_7000 holder
+*009F: 3A 00 68      ld   a,(0x6800)           | read start button, p2 control, dipsw 1/2 state 
+*00A2: 32 11 40      ld   (0x4011),a           | and write to PORT_STATE_6800 holder
+*00A5: 3A 00 60      ld   a,(0x6000)           | read coin, p1 control, test & service state
+*00A8: 32 10 40      ld   (0x4010),a           | and write to PORT_STATE_6000 holder
+
+		subq.b	#1,TIMING_VARIABLE             | decrement value
+
+*00B4: CD EF 18      call 0x18EF               | call CHECK_IF_COIN_INSERTED
+*00B7: CD 31 19      call 0x1931               | call HANDLE_UNPROCESSED_COINS
+*00BD: CD F5 16      call 0x16F5               | call HANDLE_SOUND
+*00C0: CD 98 18      call 0x1898               | call HANDLE_SWARM_SOUND
+*00C3: CD C0 18      call 0x18C0               | call HANDLE_TEXT_SCROLL
+
+* invoke script [SCRIPT_NUMBER]
+	moveq	#0,d0
+	move.b	SCRIPT_NUMBER(pc),d0
+	add.w	d0,d0
+	add.w	d0,d0
+	lea		SCRIPT_TABLE(pc),a0
+	move.l	(a0,d0.w),a0
+	jmp		(a0)
+	
+
+SCRIPT_TABLE:
+     .long	SCRIPT_ZERO   
+     .long	SCRIPT_ONE
+     .long	SCRIPT_TWO
+     .long	SCRIPT_THREE
+     .long	SCRIPT_FOUR
+	
+SCRIPT_ZERO:
+00E6: 2A 0B 40      ld   hl,(0x400B)          | Read TEMP_CHAR_RAM_PTR. This holds character RAM to start clearing from
+00E9: 06 20         ld   b,0x20               | #0x20 (32 decimal) bytes to fill in a row
+00EB: 3E 10         ld   a,0x10               | ordinal of empty character
+00ED: D7            rst  0x10                 | Clear entire row of characters
+00EE: 22 0B 40      ld   (0x400B),hl          | save in TEMP_CHAR_RAM_PTR
+00F1: 21 08 40      ld   hl,0x4008            | load HL with address of TEMP_COUNTER_1
+00F4: 35            dec  (hl)                | decrement value
+00F5: C0            ret  nz                  | if counter hasn't hit zero, return
+
+00F6: 2D            dec  l                   | point HL to IS_GAME_OVER
+00F7: 36 01         ld   (hl),0x01               
+00F9: 2D            dec  l                   | point HL to IS_GAME_IN_PLAY
+00FA: 36 00         ld   (hl),0x00             
+00FC: 2D            dec  l                   | point HL to SCRIPT_NUMBER
+00FD: 36 01         ld   (hl),0x01 
+
+00FF: AF            xor  a
+0100: 32 0A 40      ld   (0x400A),a           | reset SCRIPT_STAGE to 0
+
+0103: 3A 11 40      ld   a,(0x4011)           | read PORT_STATE_6800
+0106: 07            rlca                     | move dip sw1 & dip sw2 state...
+0107: 07            rlca                     | ...into bits 0 & 1 of register a
+0108: E6 03         and  0x03
+010A: 32 00 40      ld   (0x4000),a           | and store into DIP_SWITCH_1_2_STATE
+
+010D: 3A 12 40      ld   a,(0x4012)           | read PORT_STATE_7000 
+0110: E6 04         and  0x04                 | mask in state of dip switch 5
+0112: 0F            rrca                     | move bit into...
+0113: 0F            rrca                     | bit 0 of register a
+0114: 32 1F 40      ld   (0x401F),a           | and store it in DIP_SWITCH_5_STATE
+
+0117: 11 1B 05      ld   de,0x051B            | load DE with address of PACKED_DEFAULT_SWARM_DEFINITION
+011A: CD 46 06      call 0x0646               | call UNPACK_ALIEN_SWARM
+
+* set IS_COCKTAIL flag from !SW0    upright/cocktail
+011D: 3A 10 40      ld   a,(0x4010)           | read PORT_STATE_6000
+0120: E6 20         and  0x20                 | read upright/cocktail bit                  
+0122: 07            rlca                     | move bit from bit 5.. 
+0123: 07            rlca
+0124: 07            rlca                     | ..to bit 0.
+0125: 32 0F 40      ld   (0x400F),a           | and store to IS_COCKTAIL
+
+* read DIP switches to calculate value of BONUS GALAXIP
+0128: 3A 00 70      ld   a,(0x7000)           | read state of dip switch 3,4,5,6
+012B: E6 03         and  0x03                 | mask in state of dip switches 3 & 4
+012D: 21 52 01      ld   hl,0x0152
+0130: E7            rst  0x20                 | call routine to fetch value @ HL + A 
+0131: 32 AC 40      ld   (0x40AC),a           | write BONUS GALIXIP @ value  
+
+* Set screen attribute colours then display "1UP" and "HIGH SCORE" 
+0134: CD 95 05      call 0x0595               | call SET_COLOUR_ATTRIBUTES_TABLE_1
+0137: 3E 01         ld   a,0x01
+0139: 32 40 53      ld   (0x5340),a           | poke "1" to character RAM
+013C: 3E 25         ld   a,0x25
+013E: 32 20 53      ld   (0x5320),a           | poke "U" to character RAM
+0141: 3E 20         ld   a,0x20
+0143: 32 00 53      ld   (0x5300),a           | poke "P" to character RAM - text "1UP" now drawn
+0146: 11 04 06      ld   de,0x0604            | command: PRINT_TEXT, parameter: 4 (index of "HIGH SCORE")
+0149: CD F2 08      call 0x08F2               | call QUEUE_COMMAND 
+014C: 11 03 05      ld   de,0x0503            : command: DISPLAY_SCORE_COMMAND , parameter: 3 (Displays player scores and high score)
+014F: C3 F2 08      jp   0x08F2               | jump to QUEUE COMMAND
+
+* Values for BONUS GALIXIP. 7 = 7000, 10 = 10000, 12 =12000, 20 = 20000
+0152: 07 10 12 20 
+
+
+	rts
+	
+SCRIPT_ONE:
+SCRIPT_TWO:
+SCRIPT_THREE:
+SCRIPT_FOUR:
+	rts
 	
 *
 * Called from $0004.
@@ -883,7 +1019,7 @@ PROCESS_CIRCULAR_COMMAND_QUEUE:
 	add.b	d0,d0							| multiply d0 by 2 to form an offset into jump table @0x203D
 	bcc.b	1f
 	
-    bsr		HANDLE_SWARM_ANIMATION
+    jbsr		HANDLE_SWARM_ANIMATION
 	bra.b	0b								| process next entry in circular queue
 1:
 	and  #0x0F,d0                 | mask in lower nibble
