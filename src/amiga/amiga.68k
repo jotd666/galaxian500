@@ -892,7 +892,7 @@ osd_w_bg_colorram:
 * must preserve A0 and D7 too
 osd_w_bg_videoram:
     .ifeq OPT_DISABLE_BG_LAYER
-	movem.l	d0-d1/a0,-(a7)
+	movem.l	d0-d3/a0-a1,-(a7)
 	lea		bg_videoram,a1
 	* dump both tables (color+char): S bg_data <address@0x110> $1000
 	add.w	d0,a1
@@ -901,9 +901,9 @@ osd_w_bg_videoram:
 	move.b	d1,(a1)	| update logical grid
 	lea		bg_colorram,a1
 	move.b	(a1,d0.w),d2	| color & X/Y flip data
-	**bsr.b		update_bg_tile
+	bsr.b		update_bg_tile
 0:
-	movem.l	(a7)+,d0-d1/a0
+	movem.l	(a7)+,d0-d3/a0-a1
     .endif | OPT_DISABLE_BG_LAYER
 	rts
 
@@ -912,7 +912,6 @@ osd_w_bg_videoram:
 	.set	offset,0
 	.rept	8
 	clr.b	(offset,a1)
-	clr.b	(offset,a2)
  	.set	offset,offset+NB_BYTES_PER_ROW
 	.endr
 	.endm
@@ -983,6 +982,28 @@ osd_w_bg_videoram:
 * d1: tile code (0-256 but extends to 512 with bit 0 of attribute)
 * d2: attribute (0-255, color is in bits 0-5, X/Y flip in 6:7)
 update_bg_tile:
+	* compute Y
+	move.w	d0,d3
+	lsr.w	#5,d0		| this is X
+	neg.w	d0
+	add.w	#32,d0
+	and.w	#0x1F,d3	| this is Y
+	lea		mulNB_BYTES_PER_ROW_table(pc),a0
+	add.w	d3,d3
+	lea		bg_screen_data,a1
+	add.w	(a0,d3.w),a1
+	add.w	d0,a1
+	lea		characters,a0
+	add.w	d1,d1
+	add.w	d1,d1
+	move.l	(a0,d1.w),a0
+	
+	.set	offset,0
+	.rept	8
+	move.b	(a0)+,(offset,a1)
+	.set	offset,offset+NB_BYTES_PER_ROW
+	.endr
+	
 	rts
 		
 		
@@ -999,7 +1020,6 @@ update_bg_tile:
 * just store the previous positions only by half (because the
 * others aren't updated anyway)
 
-	.include	"hw_sprite_types.68k"
 
 is_hw_sprite_table:
 	ds.b	256
@@ -1109,7 +1129,7 @@ osd_update_32_sprite_hw:
 	movem.l	(a7)+,d2-d5/a0-a2/a5
 12:
 	* then update the active sprites
-	lea		sprite_picbase,a3
+	**lea		sprite_picbase,a3
 	move.l	a4,-(a7)
 	move.w	#NB_SPRITES_TO_UPDATE-1,d4
 	tst		d7
@@ -1171,23 +1191,6 @@ osd_update_32_sprite_hw:
 	* BOB or 16x16 sprite (not a special hardware sprite)
 	cmp.w	#NB_LINES-15,d3
 	bgt.w	2f		| too low
-
-	.ifne  OPT_ENABLE_LOGGING
-	* log the sprite, use start address in 0x110 then
-	* S sprite_tile_log <address> !128*!320
-	* then run the "convert_graphics.py" script
-	* to discover the new sprite configurations
-	
-	lea		sprite_tile_log,a1
-	move.l	a1,0x110
-	movem.l	d0-d2,-(a7)
-	lsl.w	#7,d0		| times 128
-	add.l	d0,a1
-	and.w	#0x7F,d1	| significant color bits
-	bset	#4,d2		| so it's not 0
-	move.b	d2,(a1,d1.w)
-	movem.l	(a7)+,d0-d2
-	.endif
 
 	move.w	(6,a4),d5	| prepare X
 	move.w	d2,d6
@@ -1489,7 +1492,7 @@ draw_sprite_part:
 	* color configuration)
 	add.w	d1,d1
 
-	lea		_sprite_tile,a0
+	**lea		_sprite_tile,a0
 
 	add.l	d0,a0		| row offset
 	move.w	(a0,d1.w),d1	| col offset
@@ -1503,8 +1506,8 @@ draw_sprite_part:
 
 	
 	move.w	(a3,d1.w),d4	| object type
-	cmp.w	#BT_SPRITE,d4
-	beq.b	4f
+	**cmp.w	#BT_SPRITE,d4
+	**beq.b	4f
 
 	* count a BOB sprite
 	addq.w	#1,nb_active_bobs
@@ -2687,16 +2690,16 @@ fg_tile_layer:
 	
 .macro	DECL_3_BITPLANES	bpoff_start
 	.set	bpoff,\bpoff_start
-	.rept	4
+	.rept	NB_PLAYFIELD_PLANES
 	dc.w  0xe0+bpoff,0
 	dc.w  0xe2+bpoff,0
 	.set	bpoff,bpoff+8
 	.endr
 	.endm
 
-.macro	DECL_32_COLORS
-	.set	colidx,0
-	.rept	32
+.macro	DECL_16_COLORS	offset
+	.set	colidx,\offset
+	.rept	16
 	dc.w	color+(colidx*2),0
 	.set	colidx,colidx+1
 	.endr
@@ -2708,20 +2711,16 @@ debug_color:
 	dc.w	0
 	dc.l	-2
 	
+	* main copperlist
 copperlist:
-sprite_cols:
-	.set	colidx,0
-	.rept	16
-	dc.w	color+(colidx*2),0
-	.set	colidx,colidx+1
-	.endr
-
 fg_bitplanes:
-	DECL_3_BITPLANES	3
+	DECL_3_BITPLANES	4
 bg_bitplanes:
 	DECL_3_BITPLANES	0
 copperlist_colors:
-	DECL_32_COLORS
+	DECL_16_COLORS	0
+sprite_cols:
+	DECL_16_COLORS	16
 sprites:
     * #0
     .word    sprpt+0,0
@@ -2750,7 +2749,7 @@ sprites:
 end_color_copper:
    * dynamic colors for fg tile color each 8 lines
 	.set    beampos,0x1C01
-	.set    fgcol,color+2
+	.set    fgcol,0X1FE  | temp color+2
 	.set    testcol,0x0
 color_row_0:
 	dc.w	beampos,0xFFFE

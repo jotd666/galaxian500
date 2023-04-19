@@ -31,8 +31,8 @@ all: $(AMIGASRC)/graphics.68k $(AMIGASRC)/sounds.68k $(MAIN) $(WHDLOADER) $(WHDL
 clean:
 	del $(OBJS) "$(MAIN)"
 	
-#$(AMIGASRC)/graphics.68k: $(ASSETS)/convert_graphics.py $(ASSETS)/galaxian_gfx.c $(ASSETS)/sprite_tile_clut.json
-#	cmd /c $(ASSETS)\convert_graphics.py
+$(AMIGASRC)/graphics.68k: $(ASSETS)/convert_graphics.py
+	cmd /c $(ASSETS)\convert_graphics.py
 
 $(AMIGASRC)/sounds.68k: $(ASSETS)/convert_sounds.py
 	cmd /c $(ASSETS)\convert_sounds.py

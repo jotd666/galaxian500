@@ -8,6 +8,7 @@ import collections
 
 this_dir = os.path.dirname(__file__)
 src_dir = os.path.join(this_dir,"../../src/amiga")
+dump_dir = os.path.join(this_dir,"dumps")
 
 def dump_asm_bytes(*args,**kwargs):
     bitplanelib.dump_asm_bytes(*args,**kwargs,mit_format=True)
@@ -54,3 +55,36 @@ with open(os.path.join(src_dir,"palette.68k"),"w") as f:
     #f.write("palette:\n")
     bitplanelib.palette_dump(palette,f,pformat=bitplanelib.PALETTE_FORMAT_ASMGNU)
 
+# convert fonts
+fonts = Image.open(os.path.join(this_dir,"text.png"))
+
+fonts_matrix = [list(range(0x11,0x11+15)),
+list(range(0x11+15,0x11+27))+[5,5,5,5],  # yet unknown codes
+list(range(0,10))+[6,6,6],
+[7,7,7,7,7,7]  # namco unknown codes
+]
+
+character_codes = [None] * 256
+character_codes[0x10] = bytes(8)  # blank
+for j,lst in enumerate(fonts_matrix):
+    y = j * 8
+    for i,e in enumerate(lst):
+        x = i * 8
+        img = Image.new('RGB',(8,8))
+        img.paste(fonts,(-x,-y))
+        #img.save(os.path.join(dump_dir,f"{x}_{y}.png"))
+        p = bitplanelib.palette_extract(img)
+        character_codes[e] = bitplanelib.palette_image2raw(img,None,p,forced_nb_planes=1)
+
+with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
+    f.write("\t.global\tcharacters\n")
+    f.write("characters:\n")
+    for i,c in enumerate(character_codes):
+        if c is not None:
+            f.write(f"\t.long\tchar_{i}\n")
+        else:
+            f.write("\t.long\t0\n")
+    for i,c in enumerate(character_codes):
+        if c is not None:
+            f.write(f"char_{i}:")
+            bitplanelib.dump_asm_bytes(c,f,mit_format=True)

@@ -20,6 +20,7 @@ galaxian_reset:
 	bra		INITIALISE_SYSTEM
 
 galaxian_irq:
+	move.w	#0x0F0,0xDFF180
 	rts
 	
 
@@ -809,14 +810,14 @@ INITIALISE_SYSTEM:  | 1A55
 	move	#0x400-1,d0
 	move	#0x10,d1
 0:
-	bsr		osd_w_bg_videoram
+	jbsr		osd_w_bg_videoram
 	dbf		d0,0b
 	
 * clear attributes and reset scroll values
 	move	#0x100-1,d0
 	moveq	#0,d1
 0:
-	bsr		osd_w_bg_colorram	| write 0 to screen attribute RAM. Will both set colour to 0 and reset column scroll.
+	jbsr		osd_w_bg_colorram	| write 0 to screen attribute RAM. Will both set colour to 0 and reset column scroll.
 	dbf		d0,0b
 	
 * (skipped startup checks!)
@@ -872,8 +873,7 @@ jmp_2000:
 * In a circular queue, the first entry to be processed is not necessarily the head of the queue. 
 * The first entry to be processed could be anywhere in the queue. 
 *
-*
-* TODO: Detail algorithm
+
 
 PROCESS_CIRCULAR_COMMAND_QUEUE:
 0:
@@ -915,19 +915,49 @@ jump_table_203D:
     .long	DISPLAY_BOTTOM_OF_SCREEN
 	
 DRAW_ALIEN_COMMAND:
+	rts
+	
 DELETE_ALIEN_COMMAND:
+	rts
+	
 DISPLAY_PLAYER_COMMAND:
+	rts
+	
 UPDATE_PLAYER_SCORE_COMMAND:
+	rts
+	
 RESET_SCORE_COMMAND:
+	rts
+	
 DISPLAY_SCORE_COMMAND:
+	rts
+	
 PRINT_TEXT:
+	rts
 DISPLAY_BOTTOM_OF_SCREEN:
 	rts
 	
 HANDLE_SWARM_ANIMATION:
-	move.w	#0xF00,0xdff180		| unimplemented
+	**move.w	#0xF00,0xdff180		| unimplemented
 	rts
+
+* Called to display "BAD RAM [n]" or "BAD ROM [n]""
+* (just to debug our font engine!!)
+DISPLAY_BAD_RAM_OR_ROM_MESSAGE:
+	lea		bad_rom(pc),a0
+	move.w	#0x233,d0            | character RAM address to print text at
+	move.w	#0x20,d2
+	move.w	#6,d3               | there's 7 characters in "BAD RAM" (including the space between words)
+0:
+	move.b	(a0)+,d1
+	jbsr	osd_w_bg_videoram
+	add.w	d2,d0
+	dbf		d3,0b
+	dc.w	0X60FE
 	
+bad_rom:
+	dc.b	0x1D,0x1F,0x22,0x10,0x14,0x11,0x12 
+	.align	2
 *********
 
 rst_10:
