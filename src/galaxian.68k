@@ -1,4 +1,4 @@
-***
+* Galaxian, amiga 68k transcode
 
 
 * exports
@@ -32,3 +32,618 @@ infinite_lives_flag:
 vb_ticks_count:
 	.byte	0
 	
+*
+* Galaxian (C) 1979 NAMCO.
+*
+* Reverse engineering work by Scott Tunstall, Paisley, Scotland. 
+* Tools used: MAME debugger & Visual Studio Code text editor.
+* Date: 7 July 2019.  
+* 
+* Please send any questions, corrections and updates to scott.tunstall@ntlworld.com
+*
+* Be sure to check out my reverse engineering work for Robotron 2084 and Scramble too, 
+* at http://seanriddle.com/robomame.asm and http://seanriddle.com/scramble.asm asm respectively.
+*
+* Finally:
+* If you'd like to show appreciation for this work by buying me a coffee, feel free: https://ko-fi.com/scotttunstall
+* I'd be equally happy if you donated to Parkinsons UK or Chest Heart And Stroke (CHAS) Scotland.
+* Thanks.  
+
+/*
+Conventions: 
+
+NUMBERS
+=======
+
+The term "@ $" means "at memory address in hexadecimal". 
+e.g. @ $1234 means "refer to memory address 1234" or "program code @ memory location 1234" 
+
+The term "#$" means "immediate value in hexadecimal". It's a habit I have kept from 6502 days.
+e.g. #$60 means "immediate value of 60 hex" (96 decimal)
+
+If I don't prefix a number with $ or #$ in my comments, treat the value as a decimal number.
+
+
+LABELS
+======
+I have a labelling convention in place to help you identify the important parts of the code quicker.
+Any subroutine labelled with the SCRIPT_ , DISPLAY_ or HANDLE_ prefix are critical "top-level" functions responsible 
+for calling a series of "lower-level" functions to achieve a given result.   
+
+If this helps you any, think of the "top level" as the main entry point to code that achieves a specific purpose.  
+
+Routines prefixed HANDLE_ manage a particular aspect of the game.
+    For example, HANDLE_PLAYER_MOVE is the core routine for reading the player joystick and moving the player ship. 
+    HANDLE_PLAYER_SHOOT is the core routine for reading the player fire button and spawning a bullet.
+
+I expect the purpose of DISPLAY_ is obvious.
+
+SCRIPTS are documented below - see docs for SCRIPT_NUMBER ($4005)
+
+
+ARRAYS, LISTS, TABLES
+=====================
+
+The terms "entry", "slot", "item", "record" when used in an array, list or table context all mean the same thing.
+I try to be consistent with my terminology but obviously with a task this size that might not be the case.
+
+Unless I specify otherwise, I all indexes into arrays/lists/tables are zero-based, 
+meaning element [0] is the first element, [1] the second, [2] the third and so on.
+
+FLAGS
+=====
+The terms "Clear", "Reset", "Unset" in a flag context all mean the flag is set to zero.
+                                                                               
+
+COORDINATES
+===========
+
+X,Y refer to the X and Y axis in a 2D coordinate system, where X is horizontal and Y is vertical.
+
+The Galaxian monitor is rotated 90 degrees. This means that:
+a) updating the hardware Y position of a sprite presents itself to the player as changing the horizontal position.
+   To make a sprite appear to move left, you would increment its Y position.
+   To make a sprite appear to move right, you would decrement its Y position.
+
+b) updating the hardware X position of a sprite presents itself to the player as changing the vertical position. 
+   To make a sprite appear to move up, you would decrement its X position.
+   To make a sprite appear to move down, you would increment its X position.
+
+So when you see code updating the Y coordinate when you would expect X to be updated, or vice versa, you now know why.
+
+For info about the Galaxian video hardware see: https://github.com/mamedev/mame/blob/master/src/mame/video/galaxian.cpp
+
+
+Copied from MAME4All documentation: https://github.com/squidrpi/mame4all-pi/blob/master/src/drivers/galaxian.cpp
+Some corrections applied from: https://github.com/mamedev/mame/blob/master/src/mame/galaxian/galaxian.cpp
+
+Galaxian/Moon Cresta memory map.
+Compiled from information provided by friends and Uncles on RGVAC.
+
+Add 0x4000 to all addresses except for the ROM for Moon Cresta.
+            AAAAAA
+            111111AAAAAAAAAA     DDDDDDDD   Schem   function
+HEX         5432109876543210 R/W 76543210   name
+0000-3FFF                                           Game ROM
+4000-47FF                                           Working ram
+5000-57FF   01010AAAAAAAAAAA R/W DDDDDDDD   !Vram   Character ram           
+5800-583F   01011AAAAAAAAAAA R/W DDDDDDDD   !OBJRAM Screen attributes
+5840-585F   01011AAAAAAAAAAA R/W DDDDDDDD   !OBJRAM Sprites
+5860-5FFF   01011AAAAAAAAAAA R/W DDDDDDDD   !OBJRAM Bullets
+6000        0110000000000000 R   -------D   !SW0    coin1
+6000        0110000000000000 R   ------D-   !SW0    coin2
+6000        0110000000000000 R   -----D--   !SW0    p1 left
+6000        0110000000000000 R   ----D---   !SW0    p1 right
+6000        0110000000000000 R   ---D----   !SW0    p1shoot
+6000        0110000000000000 R   --D-----   !SW0    upright/cocktail
+6000        0110000000000000 R   -D------   !SW0    test
+6000        0110000000000000 R   D-------   !SW0    service
+6000        0110000000000001 W   -------D   !DRIVER lamp 1
+6001        0110000000000001 W   -------D   !DRIVER lamp 2
+6002        0110000000000001 W   -------D   !DRIVER coin lockout
+6003        0110000000000011 W   -------D   !DRIVER coin control
+6004        0110000000000100 W   -------D   !DRIVER Background lfo freq bit0
+6005        0110000000000101 W   -------D   !DRIVER Background lfo freq bit1
+6006        0110000000000110 W   -------D   !DRIVER Background lfo freq bit2
+6007        0110000000000111 W   -------D   !DRIVER Background lfo freq bit3
+6800        0110100000000000 R   -------D   !SW1    1p start
+6800        0110100000000000 R   ------D-   !SW1    2p start
+6800        0110100000000000 R   -----D--   !SW1    p2 left
+6800        0110100000000000 R   ----D---   !SW1    p2 right
+6800        0110100000000000 R   ---D----   !SW1    p2 shoot
+6800        0110100000000000 R   --D-----   !SW1    no used
+6800        0110100000000000 R   -D------   !SW1    dip sw1
+6800        0110100000000000 R   D-------   !SW1    dip sw2
+6800        0110100000000000 W   -------D   !SOUND  reset background F1
+                                                    (1=reset ?)
+6801        0110100000000001 W   -------D   !SOUND  reset background F2
+6802        0110100000000010 W   -------D   !SOUND  reset background F3
+6803        0110100000000011 W   -------D   !SOUND  player hit
+6804        0110100000000100 W   -------D   !SOUND  not used
+6805        0110100000000101 W   -------D   !SOUND  shoot on/off
+6806        0110100000000110 W   -------D   !SOUND  Vol of f1
+6807        0110100000000111 W   -------D   !SOUND  Vol of f2
+
+7000        0111000000000000 R   -------D   !DIPSW  dip sw 3
+7000        0111000000000000 R   ------D-   !DIPSW  dip sw 4
+7000        0111000000000000 R   -----D--   !DIPSW  dip sw 5
+7000        0111000000000000 R   ----D---   !DIPSW  dip s2 6
+7001/B000/1 0111000000000001 W   -------D   9Nregen NMIon
+7002        Unused - thanks to Phil Murray for letting me know
+7003        Unused
+7004        0111000000000100 W   -------D   9Nregen stars on  
+7006        0111000000000110 W   -------D   9Nregen hflip
+7007        0111000000000111 W   -------D   9Nregen vflip
+Note: 9n reg,other bits  used on moon cresta for extra graphics rom control.
+7800        0111100000000000 R   --------   !wdr    watchdog reset
+7800        0111100000000000 W   DDDDDDDD   !pitch  Sound Fx base frequency
+*/
+
+/*
+DIP SWITCH SETTINGS
+
+Taken from: http://arcarc.xmission.com/PDF_Arcade_Bally_Midway/Galaxian_Parts_and_Operating_Manual_(Feb_1980).pdf
+
+METHOD OF PLAY:
+                              SW.1          SW.2
+1 COIN = 1 PLAY               OFF           OFF
+2 COINS = 1 PLAY              ON            OFF
+1 COIN = 2 PLAYS              OFF           ON
+FREE PLAY                     ON            ON 
+
+
+BONUS GALIXIP (PLAYER SHIP) - the manual above is not correct with the Namco Galaxian ROM. After doing some research,
+here are the correct DIP switch settings: 
+
+
+                              SW.3          SW.4
+7000                          OFF           OFF  
+10000                         ON            OFF
+12000                         OFF           ON
+20000                         ON            ON
+
+
+NUMBER OF GALIXIP PER GAME
+                               SW.5
+2 GALIXIP PER GAME             OFF
+3 GALIXIP PER GAME             ON
+
+*/
+
+
+/*
+And now, the main game code.... enjoy.
+*/
+
+** variables
+
+DIP_SWITCH_1_2_STATE:                |  $4000         ; holds state of dip switches 1 & 2 in bits 0 & 1.
+COIN_COUNT:                          |  $4001         ; counts up to number of coins per credit as set by dip switches. When it reaches that value, resets to 0 
+NUM_CREDITS:                         |  $4002         ; number of credits
+COIN_CONTROL:                        |  $4003         ; is used to output to DRIVER|COIN CONTROL (see $1974)
+UNPROCESSED_COINS:                   |  $4004         ; bumps up when coin inserted. See $190B and $1931.
+
+*
+* The game follows what I call "scripts". A SCRIPT is a predefined sequence of STAGES (ie: subroutines) that implement an overall goal.
+* The whole game is script-driven, from attract mode to the game itself.
+*
+* The NMI interrupt handler uses SCRIPT_NUMBER ($4005) to identify what script to run and, depending on the script, SCRIPT_STAGE ($400A) to 
+* determine what subroutine to call to do the work for that stage of the script.  When the subroutine has completed its work, 
+* it increments SCRIPT_STAGE which is akin to, "OK, I'm done; proceed to next stage of script".
+*
+* For example, a script for HELLO WORLD might be implemented as three stages:
+* 1. Display Hello World on screen. Set SCRIPT_STAGE to 2.
+* 2. Wait for key. Set SCRIPT_STAGE to 3 after key pressed.
+* 3. Terminate program.
+*
+* When I've finished working out what all the scripts do, I'll replace the Hello World above with a real example from the game.
+*
+*
+* The main take-aways from the above are:
+* 1. The whole game is driven by the NMI interrupt.
+* 2. Script stage and number are really just indexes into jump tables. 
+*
+* see $00CA for the NMI script handler. 
+
+SCRIPT_NUMBER:                       |  $4005         ; 0-based index into pointer table beginning @ $00CE
+IS_GAME_IN_PLAY:                     |  $4006         ; If set to 1, game is in play with a human in control.
+IS_GAME_OVER:                        |  $4007         ; Set to 1 when GAME OVER message appears. TODO: Check if set any other place than GAME OVER 
+TEMP_COUNTER_1:                      |  $4008         ; temporary counter used for delays, such as waiting before transitioning to next stage of a script
+TEMP_COUNTER_2:                      |  $4009         ; temporary counter used for delays
+									 |
+SCRIPT_STAGE:                        |  $400A         ; Identifies what stage of the script we are at.  
+                                     |                ; 0-based index into script tables located @ $0164, $0400, $0540, $0785
+TEMP_CHAR_RAM_PTR:                   |  $400B         ; pointer to character RAM. Used by screen-related routines (e.g. power on colour test) to remember where to plot characters on next call.                                   |                                                                     
+CURRENT_PLAYER:                      |  $400D         ; 0 = PLAYER ONE, 1 = PLAYER TWO
+IS_TWO_PLAYER_GAME:                  |  $400E         ; 0 = One player game, 1 = 2 player game 
+IS_COCKTAIL:                         |  $400F         ; 0 = upright, 1 = Cocktail 
+PORT_STATE_6000:                     |  $4010         ; copy of state for memory address 6000 (SW0)          
+PORT_STATE_6800:                     |  $4011         ; copy of state for memory address 6800 (SW1 & SOUND)
+PORT_STATE_7000:                     |  $4012         ; copy of state for memory address 7000 (DIPSW)
+PREV_PORT_STATE_6000:                |  $4013         ; holds the previous state of memory address 6000 (SW0)  
+PREV_PORT_STATE_6800:                |  $4014         ; holds the previous state of memory address 6800 (SW1 & SOUND)
+PREV_PREV_PORT_STATE_6000:           |  $4015         ; holds the previous, previous (!) state of memory address 6000 (SW0) 
+PREV_PREV_PREV_STATE_6000:           |  $4016         ; holds the previous, previous, previous state of memory address 6000 (SW0)
+									 |
+DISPLAY_IS_COCKTAIL_P2:              |  $4018         ; set to 1 when in cocktail mode and it's player 2's turn, so the screen's upside down.
+PUSH_START_BUTTON_COUNTER:           |  $4019         ; On inserting credit or GAME OVER: if you have credit, how long to wait before PUSH START BUTTON appears.  
+DIAGNOSTIC_MESSAGE_TYPE:             |  $401A         ; Read by the NMI handler. Refer to code @1BCD for docs.  
+									 |
+RAND_NUMBER:                         |  $401E         ; TENTATIVE NAME. Random number used in tests and in-game 
+DIP_SWITCH_5_STATE:                  |  $401F         ; holds cached state of dip switch 5 in bit 0
+
+* Object RAM back buffer. 
+* Colour attributes, scroll offsets and sprite state are held in this buffer and updated by the game. 
+* When all the updates are complete and ready to be presented on screen to the player, 
+* the back buffer is copied to the hardware's OBJRAM by an LDIR operation - see $0079.
+* Effectively all colours, scroll and sprites are updated as part of a single operation.
+* This back buffering technique is still used today in modern games.
+*
+* The back buffer is organised thus:
+*
+* From $4020 - 405f: column scroll and colour attributes. Maps directly to $5800 - $583F. 
+*    Note: Even numbered addresses hold scroll offsets, odd numbered addresses colour attributes. 
+* From $4060 - 407F: 8 entries of type INFLIGHT_ALIEN_SPRITE. Maps directly to $5840 - $585F.
+* From $4080 - 409F: alien bullets and player bullet sprite state. Maps directly to $5860 - $587F. 
+
+OBJRAM_BACK_BUF:                     |  $4020            
+OBJRAM_BACK_BUF_SPRITES:             |  $4060 
+
+*struct INFLIGHT_ALIEN_SPRITE
+*{
+*   BYTE Y;                      
+*   BYTE Code;                   * bits 0..5: sprite frame. bit 6 set = XFlip. bit 7 set = YFlip
+*   BYTE Colour;
+*   BYTE X;                      
+*} - sizeof(INFLIGHT_ALIEN_SPRITE) is 4 bytes
+
+
+OBJRAM_BACK_BUF_BULLETS:             |  $4080
+OBJRAM_BUF_PLAYER_BULLET_Y:          |  $409D
+OBJRAM_BUF_PLAYER_BULLET_X:          |  $409F
+OBJRAM_BACK_BUF_END:                 |  $409F                        
+
+
+PLAYER_ONE_SCORE:                      |  $40A2       | stored as 3 BCD bytes, 2 digits per byte: $40A2 = last 2 digits of score (tens), $40A3 = 3rd & 4th digits, $40A4 = 1st & 2nd
+
+                                                      | e.g. a score of 123456 would be stored like so:
+                                                      | $40A2: 56
+                                                      | $40A3: 34
+                                                      | $40A4: 12
+													  |
+PLAYER_TWO_SCORE:                      |  $40A5       | stored as 3 BCD bytes, 2 digits per byte: same format & order as PLAYER_ONE_SCORE
+HI_SCORE:                              |  $40A8       | ; stored as 3 BCD bytes, 2 digits per byte: same format & order as PLAYER_ONE_SCORE
+													  |
+CAN_BLINK_1UP_2UP:                     |  $40AB       | ; When IS_GAME_IN_PLAY is set to 1, this flag is set to 1 to allow 1UP or 2UP to "blink". See @$20A7
+BONUS_GALIXIP_FOR:                     |  $40AC       | ; stored as BCD in 1 byte. e.g. 07 = bonus galixip for 7000, 20 = bonus galixip for 20000. 
+PLAYER_ONE_AWARDED_EXTRA_LIFE:         |  $40AD       | Set to 1 if player one has been awarded an extra life. No more extra lives will be given. 
+PLAYER_TWO_AWARDED_EXTRA_LIFE:         |  $40AE       | Set to 1 if player two has been awarded an extra life. No more extra lives will be given. 
+													  |
+													  |
+IS_COLUMN_SCROLLING:                 |  $40B0         | Set to 1 if a column is being scrolled. For example when points are scrolled into view on the WE ARE THE GALAXIANS screen
+COLUMN_SCROLL_ATTR_BACKBUF_PTR:      |  $40B1         | pointer to scroll attribute data to update in OBJRAM_BACK_BUF. 
+COLUMN_SCROLL_NEXT_CHAR_PTR:         |  $40B3         | pointer to ordinal of next character to scroll on
+COLUMN_SCROLL_CHAR_RAM_PTR:          |  $40B5         | pointer to character RAM where next character will be plotted. 
+
+
+* Phil Murray (PhilMurr on UKVAC) gave me a heads up on this.  
+*
+* $40C0 to $40FF is reserved for a circular queue. The queue is comprised of byte pairs representing a command and parameter.
+* NB: I term the byte pair a *Queue Entry* in the code @$08f2 and $200A.
+*
+* As 64 bytes are reserved for the queue, that means 32 commands and parameters can be stored. 
+*
+* The memory layout of the queue is quite simple.
+* 
+* $40C0: command A
+* $40C1: parameter for command A 
+* $40C2: command B
+* $40C3: parameter for command B
+* $40C4: command C
+* $40C5: parameter for command C
+* ..and so on.
+*
+* See docs @ $08f2 for info about what commands are available, and how to add commands to the queue.
+* See docs @ $200A for info about how commands are processed.
+*
+
+
+CIRC_CMD_QUEUE_PTR_LO:           |  $40A0             ; low byte of a pointer to a (hopefully) vacant entry in the circular queue. See $08F2 
+CIRC_CMD_QUEUE_PROC_LO:          |  $40A1             ; low byte of a pointer to the next entry in the circular queue to be processed. See $200C
+CIRC_CMD_QUEUE_START:            |  $40C0
+CIRC_CMD_QUEUE_END:              |  $40FF
+
+
+*
+* ALIEN_SWARM_FLAGS (name subject to change) is an array 128 bytes in size.   
+* Each byte contains a bit flag indicating the presence of an alien at a given position.
+* If you start a new game in MAME, then open the debugger and view memory location 4100 (hex) you will see this:
+*
+* 4100:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  
+* 4110:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  
+* 4120:  00 00 00 01 01 01 01 01 01 01 01 01 01 00 00 00  
+* 4130:  00 00 00 01 01 01 01 01 01 01 01 01 01 00 00 00  
+* 4140:  00 00 00 01 01 01 01 01 01 01 01 01 01 00 00 00  
+* 4150:  00 00 00 00 01 01 01 01 01 01 01 01 00 00 00 00  
+* 4160:  00 00 00 00 00 01 01 01 01 01 01 00 00 00 00 00  
+* 4170:  00 00 00 00 00 00 01 00 00 01 00 00 00 00 00 00     
+*
+* This is the representation of the swarm in memory! 01 means "an alien is here" and 00 means "nothing here".
+* The memory representation is upside down *and* flipped horizontally.  
+*
+* To visualise it properly, turn the dump above upside down using your favourite text editor, erase the "00"s and you get:
+* 4170:                    01       01                       ; flagships
+* 4160:                 01 01 01 01 01 01                    ; red
+* 4150:              01 01 01 01 01 01 01 01                 ; purple
+* 4140:           01 01 01 01 01 01 01 01 01 01              ; blue
+* 4130:           01 01 01 01 01 01 01 01 01 01              ; blue
+* 4120:           01 01 01 01 01 01 01 01 01 01              ; blue
+* 
+* Look familiar? 
+*
+*  
+
+ALIEN_SWARM_FLAGS:                   *  $4100         ; 128 bytes, occupying $4100 to $417F in RAM
+
+
+* When it's player 1's turn, the packed swarm definition PLAYER_ONE_PACKED_SWARM_DEF is unpacked to ALIEN_SWARM_FLAGS and the fields comprising PLAYER_ONE_STATE ($4190-4197) 
+* are written to their counterparts in CURRENT_PLAYER_STATE (see docs @$4218)                
+PLAYER_ONE_PACKED_SWARM_DEF:           |  $4180       ; Used to track state of the swarm for player one, e.g. so swarm can be restored after player two's turn is over 
+PLAYER_ONE_STATE:                      |  $4190
+PLAYER_ONE_DIFFICULTY_COUNTER_1:       |  $4190         
+PLAYER_ONE_DIFFICULTY_COUNTER_2:       |  $4191
+PLAYER_ONE_DIFFICULTY_EXTRA_VALUE:     |  $4192           
+PLAYER_ONE_DIFFICULTY_BASE_VALUE:      |  $4193         
+PLAYER_ONE_LEVEL:                      |  $4194
+PLAYER_ONE_LIVES:                      |  $4195
+PLAYER_ONE_FLAGSHIP_SURVIVOR_COUNT:    |  $4196         
+PLAYER_ONE_LFO_FREQ_BITS:              |  $4197         
+
+
+* When it's player 2's turn, the packed swarm definition PLAYER_TWO_PACKED_SWARM_DEF is unpacked to ALIEN_SWARM_FLAGS and the fields comprising PLAYER_TWO_STATE ($41B0-41B7) 
+* are written to their counterparts in CURRENT_PLAYER_STATE (see docs @$4218)                
+PLAYER_TWO_PACKED_SWARM_DEF:           |  $41A0       ; Used to track state of the swarm for player two, e.g. so swarm can be restored after player one's turn is over
+PLAYER_TWO_STATE:                      |  $41B0
+PLAYER_TWO_DIFFICULTY_COUNTER_1:       |  $41B0         
+PLAYER_TWO_DIFFICULTY_COUNTER_2:       |  $41B1
+PLAYER_TWO_DIFFICULTY_EXTRA_VALUE:     |  $41B2           
+PLAYER_TWO_DIFFICULTY_BASE_VALUE:      |  $41B3         
+PLAYER_TWO_LEVEL:                      |  $41B4
+PLAYER_TWO_LIVES:                      |  $41B5
+PLAYER_TWO_FLAGSHIP_SURVIVOR_COUNT:    |  $41B6         
+PLAYER_TWO_LFO_FREQ_BITS:              |  $41B7         
+
+
+SOUND_VOL:                           |  $41C0         ; Bit 0 and 1 are written to !SOUND Vol of F1 and !SOUND Vol of F2 respectively. See $1712
+PITCH_SOUND_FX_BASE_FREQ:            |  $41C1         ; used to write to !pitch  Sound Fx base frequency. See $171F
+ENABLE_ALIEN_ATTACK_SOUND:           |  $41C2         ; When set to 1, turns on alien attack noise, see $17D0
+UNKNOWN_SOUND_41C3:                  |  $41C3          
+UNKNOWN_SOUND_41C4:                  |  $41C4         ; Seems to affect the pitch of the alien attack noise. 
+									 |
+PLAY_EXTRA_LIFE_SOUND:               |  $41C7         ; when set to 1, play the sound of an extra life being awarded. See $184F
+EXTRA_LIFE_SOUND_COUNTER:            |  $41C8            
+PLAY_PLAYER_CREDIT_SOUND:            |  $41C9         ; when set to 1, play the sound of player credits being added. See $1876
+PLAYER_CREDIT_SOUND_COUNTER:         |  $41CA         ; The higher the value, the longer the player credit sound plays.:
+                                     |  $41CB          
+PLAY_PLAYER_SHOOT_SOUND:             |  $41CC         ; When set to 1, play the sound of the player's bullet. See $1723
+IS_COMPLEX_SOUND_PLAYING:            |  $41CD         ; When set to 1, a sequence of sounds, or a melody, is playing. 
+PLAYER_SHOOT_SOUND_COUNTER:          |  $41CE         ; The higher the value, the longer the player spaceship bullet sound plays.:
+                                     |  $41CF 
+RESET_SWARM_SOUND_TEMPO:             |  $41D0         ; When set to 1, resets the tempo of the "swarm" sound to slow again. See $1898
+PLAY_GAME_START_MELODY:              |  $41D1         ; When set to 1, plays the game start tune.: 
+                                     |  $41D2         ; sound related
+COMPLEX_SOUND_POINTER:               |  $41D3         ; If music or complex sound effect is playing, this points to the current sound/musical note being played. See $1782:
+                                     |  $41D5         ; Used to set !Pitch Sound FX base frequency
+DELAY_BEFORE_NEXT_SOUND:             |  $41D6         ; counter. When counts to zero the next sound/musical note is played. See $177B
+ALIEN_DEATH_SOUND:                   |  $41DF         ; Tentative name. When set to $06: plays alien death sound. When set to $16, plays flagship death sound. See @$1819:
+                                     |  $41E8
+
+* HAVE_ALIENS_IN_ROW_FLAGS is an array of 6 bytes. Each byte contains a bit flag specifying if there are any aliens on a given row.
+HAVE_ALIENS_IN_ROW_FLAGS:            |  $41E8
+NEVER_USED_ROW_1:                    |  $41E8
+NEVER_USED_ROW_2:                    |  $41E9
+
+HAVE_ALIENS_IN_6TH_ROW:              |  $41EA         ; flag set to 1 if there are any aliens in the bottom row (blue aliens)
+HAVE_ALIENS_IN_5TH_ROW:              |  $41EB         ; flag set to 1 if there are any aliens in the 5th row (blue aliens)
+HAVE_ALIENS_IN_4TH_ROW:              |  $41EC         ; flag set to 1 if there are any aliens in the 4th row (blue aliens)
+HAVE_ALIENS_IN_3RD_ROW:              |  $41ED         ; flag set to 1 if there are any aliens in the 3rd row (purple aliens)
+HAVE_ALIENS_IN_2ND_ROW:              |  $41EE         ; flag set to 1 if there are any aliens in the 2nd row (red aliens)
+HAVE_ALIENS_IN_TOP_ROW:              |  $41EF         ; flag set to 1 if there are any aliens in the top row (flagships)
+
+
+* ALIEN_IN_COLUMN_FLAGS is an array 16 bytes in size. Each byte contains a bit flag specifying if there are any aliens in a specific column. 
+* IMPORTANT: The flags are ordered from rightmost column of aliens to the leftmost. Only 10 of the flags are used.
+* 
+* In a nutshell:
+* $41F0..$41F2: unused. Always set to 0.
+* $41F3: set to 1 if any aliens are in the rightmost column of the swarm.
+* $41F4: set to 1 if any aliens are in the 2nd rightmost column of the swarm.
+* $41F5: set to 1 if any aliens are in the 3rd rightmost column of the swarm.
+* ..
+* $41FC: set to 1 if any aliens are in the leftmost column of the swarm.
+* $41FD..$41FF: unused. Always set to 0.
+*
+* The flags have three purposes: 
+* 1: To halt the swarm when a bullet is getting too close (see $0936)
+* 2: to calculate how far the swarm can scroll before it needs to change direction (see $093E)
+* 3: to find aliens at the swarm edges to attack the player (see code from $137B onwards) 
+*
+*
+* To further clarify in case there's any confusion, let's assume you've just started the game and you're on the first level. 
+* You haven't shot anything yet. The alien swarm will be in the following formation:
+*
+*      F  F                     F = Flagship row  
+*     RRRRRR                    R = Red alien row
+*    PPPPPPPP                   P = Purple alien row
+*   BBBBBBBBBB                  B = Blue alien row
+*   BBBBBBBBBB
+*   BBBBBBBBBB 
+*
+* Press PAUSE in MAME and open the memory debugger at location $41F0.
+* The flags will look like so in the MAME memory window:
+* 00 00 00 01 01 01 01 01 01 01 01 01 01 00 00 00
+*
+* You'll note that there are 10 flags set to TRUE (01) in a row. That is because the bottommost row has 10 blue aliens. 
+* If you were to shoot the blue aliens in the rightmost column, you would see the first 01 (at memory address $41F3) turn into a 0, 
+* meaning that column no longer contains any aliens. 
+* 
+* 0 is also written to the flags when the only alien in a column breaks off from the swarm to attack the player.
+* 
+                                           
+ALIEN_IN_COLUMN_FLAGS:               |  $41F0          
+ALIEN_IN_COLUMN_FLAGS_END:           |  $41FF     
+
+
+HAS_PLAYER_SPAWNED:                  |  $4200         | set to 1 when player has spawned. (Also set in attract mode) 
+IS_PLAYER_DYING:                     |  $4201         | set to 1 when player is in the process of exploding horribly. See $1327
+PLAYER_Y:                            |  $4202         | Player Y coordinate. Used to set scroll offsets for column containing ship characters. See $0865
+													  |
+IS_PLAYER_HIT:                       |  $4204         | When set to 1, player has been hit by a missile or collided with an alien.         
+PLAYER_EXPLOSION_COUNTER:            |  $4205         | Only evaluated when IS_PLAYER_DYING is set to 1. Determines how long the player explosion animation lasts. 
+                                                      | When it counts down to 0, explosion animation stops. See $132C
+PLAYER_EXPLOSION_ANIM_FRAME:         |  $4206         | Set by $12FE 
+HAS_PLAYER_BULLET_BEEN_FIRED:        |  $4208         | set 1 when the player has fired a bullet and the bullet is still onscreen. See $08BC
+PLAYER_BULLET_X:                     |  $4209         | Current X coordinate of player bullet. 
+PLAYER_BULLET_Y:                     |  $420A         | Current Y coordinate of player bullet. 
+IS_PLAYER_BULLET_DONE:               |  $420B         | set 1 when player bullet goes as far as it can upscreen (see $08CD), or hits an alien (see $0B4F & $125B).
+													  |
+SWARM_DIRECTION:                     |  $420D         | Direction of swarm (really? ;) )  0 = Moving left, 1 = moving right . See $0945              
+SWARM_SCROLL_VALUE:                  |  $420E         | 16 bit value. Used to set the scroll values for the character columns containing the swarm.                            
+SWARM_SCROLL_MAX_EXTENTS:            |  $4210         | Used to limit the scrolling of the swarm so no alien goes "off screen". See $09CE 
+
+* INFLIGHT_ALIEN_SHOOT_EXACT_X and MINFLIGHT_ALIEN_SHOOT_RANGE_MUL are used to determine if an alien can shoot a bullet. See $0E54 for information.
+INFLIGHT_ALIEN_SHOOT_RANGE_MUL:      |  $4213         ; Range multiplier.   
+INFLIGHT_ALIEN_SHOOT_EXACT_X:        |  $4214         ; Exact X coordinate that calculated value must match for alien to shoot.
+
+ALIENS_ATTACK_FROM_RIGHT_FLANK:      |  $4215         ; Flag used to determine what side of swarm aliens break off from. (0=break from left, 1=break from right). See $136f and $1426: 
+                                     |  $4217         ; 
+
+* $4218 - $421F holds important, albeit transient, state for the current player such as number of lives and difficulty level.
+CURRENT_PLAYER_STATE:                |  $4218                    
+
+* These 2 counters are used to gradually increase the DIFFICULTY_EXTRA_VALUE over time. See $14F3 for algorithm details.
+DIFFICULTY_COUNTER_1:                |  $4218         ; Counts down to zero. 
+DIFFICULTY_COUNTER_2:                |  $4219         ; Counts down to zero. When it reaches zero, DIFFICULTY_EXTRA_VALUE is incremented.
+
+* These values determine how often aliens attack (see $1524 and $1583), and how many can attack at one time (see $1352). 
+DIFFICULTY_EXTRA_VALUE:              |  $421A         ; DIFFICULTY_EXTRA_VALUE is incremented during the level. Maximum value of 7. See $1509.  
+DIFFICULTY_BASE_VALUE:               |  $421B         ; DIFFICULTY_BASE_VALUE is incremented when you complete a level. Maximum value of 7. See $1656.
+
+PLAYER_LEVEL:                        |  $421C         ; Current player's level. Starts from 0. Add 1 to get true value. See $252C.
+PLAYER_LIVES:                        |  $421D         ; current player's lives
+FLAGSHIP_SURVIVOR_COUNT:             |  $421E         ; When starting a new level, how many surviving flagships can we bring over from the previous level? Maximum value 2.  See $166C
+LFO_FREQ_BITS:                       |  $421F         ; Value used to set !DRIVER Background lfo frequency ports (0-3) for the "swarm" noise
+
+CURRENT_PLAYER_STATE_END:            |  $421F                
+
+HAVE_NO_ALIENS_IN_SWARM:             |  $4220         ; Set to 1 when $4100 - $417F are set to 0. Aliens are either all dead, or are in flight and out of the swarm. See $0A0F
+HAVE_NO_BLUE_OR_PURPLE_ALIENS:       |  $4221         ; When set to 1, all the blue and purple aliens have died, or are in flight. See $09FA and $1571  
+LEVEL_COMPLETE:                      |  $4222         ; When set to 1, the level is treated as complete. See @$1621, $1637
+NEXT_LEVEL_DELAY_COUNTER:            |  $4223         ; After all aliens have fled or been killed, this counts down to give the player breathing space. When it hits 0, the next wave starts. See $1637
+HAVE_AGGRESSIVE_ALIENS:              |  $4224         ; when set to 1, inflight aliens will not return to swarm and keep attacking player until they die - or you die. See $16B8
+HAVE_NO_INFLIGHT_OR_DYING_ALIENS:    |  $4225         ; When set to 1, there are no aliens inflight, or dying. See $06BC
+HAVE_NO_INFLIGHT_ALIENS:             |  $4226         ; When set to 1, no aliens have broken off from the swarm to attack the player.
+CAN_ALIEN_ATTACK:                    |  $4228         ; When set to 1, a single alien should break off from the swarm to attack the player. See $1344.
+CAN_FLAGSHIP_OR_RED_ALIENS_ATTACK:   |  $4229         ; When set to 1, a flagship should attack the player, with an escort if possible. If no flagships alive, send red aliens.  See $140C.
+FLAGSHIP_ESCORT_COUNT:               |  $422A         ; Number of red aliens escorting the flagship. Max value of 2. See $0D58.
+
+* When you shoot an enemy flagship in flight that this puts the aliens into a state of "shock" where they are afraid to leave the swarm for a while.
+* No aliens will leave the swarm while $422B is set to 1 and $422C is non-zero. 
+IS_FLAGSHIP_HIT:                     |  $422B         ; Set to 1 when you've shot a flagship in flight. See $127C  
+ALIENS_IN_SHOCK_COUNTER:             |  $422C         ; When $422B is set to 1, this counter decrements. When it hits 0, $422B will be set to 0, meaning aliens can leave the swarm again.  
+FLAGSHIP_SCORE_FACTOR:               |  $422D         ; When you shoot a flagship, this is used to compute your score. Couldn't think of a better name! See $127C
+
+ENABLE_FLAGSHIP_ATTACK_SECONDARY_COUNTER:      *  $422E         ; when set to 1, FLAGSHIP_ATTACK_SECONDARY_COUNTER is allowed to decrement.             
+FLAGSHIP_ATTACK_SECONDARY_COUNTER:   *  $422F         ; Counts down to 0. When reaches zero, CAN_FLAGSHIP_OR_RED_ALIENS_ATTACK will be set to 1.
+
+DISABLE_SWARM_ANIMATION:             |  $4238         ; When set to 1, alien swarm won't animate. See $2067 for docs. 
+ATTRACT_MODE_FAKE_CONTROLLER:        |  $423F         ; used to simulate a players movements on the ATTRACT MODE screen. Contains bit values that map to SW0.
+ATTRACT_MODE_SCROLL_ID:              |  $4241         ; Identifies what points values are being scrolled in on attract mode. 1:Flagship. 2: Red Alien. 3: Purple alien. 4: Blue alien. 
+
+* These 2 counters are used to determine when a flagship is permitted to attack.  See $156A.
+FLAGSHIP_ATTACK_MASTER_COUNTER_1:    |  $4245          
+FLAGSHIP_ATTACK_MASTER_COUNTER_2:    |  $4246          
+
+* ALIEN_ATTACK_COUNTERS is an array of BYTE counters that control when aliens (but not flagships) break off from the swarm to attack. 
+* ALIEN_ATTACK_MASTER_COUNTER at $424A is the first element of the array. The secondary counters are stored in $424B to $425A. 
+* The ALIEN_ATTACK_MASTER_COUNTER acts as a gateway to the secondary counters; only when the master counter reaches zero will the secondary counters in the array be decremented.
+* If any of the secondary counters reach zero, an alien will attack the player. See $1532 for more info.
+ALIEN_ATTACK_COUNTERS:               |  $424A  
+ALIEN_ATTACK_MASTER_COUNTER:         |  $424A
+ALIEN_ATTACK_SECONDARY_COUNTERS:     |  $425B         
+ALIEN_ATTACK_SECONDARY_COUNTERS_END: |  $425A     
+
+
+TIMING_VARIABLE:                     |  $425F         ; Perpetually decremented by the NMI handler. Routines use this variable to determine when to execute.
+                                                         
+
+* ENEMY_BULLETS is an array of type ENEMY_BULLET. 
+*
+* The array occupies memory locations $4260 - $42A5; It is thus 70 bytes in size. 
+* As an ENEMY_BULLET record only requires 5 bytes, this means that there's room for 14 enemy bullets in the array.
+*
+
+* struct ENEMY_BULLET
+
+IsActive = 0
+X = 1
+YL = 2                                       | low byte of the Y coordinate. Used to represent "fractional part" of Y coordinate
+YH = 3                                       | high byte of the Y coordinate.  
+YDelta = 4                                   | packed delta to add to YH *and* YL. Bit 7 = sign bit. Bits 0-6 = delta. See @$0AA1.                                  
+* - sizeof(ENEMY_BULLET) is 5 bytes
+
+ENEMY_BULLETS:                       |  $4260
+ENEMY_BULLETS_START:                 |  $4260                                                                        
+ENEMY_BULLETS_END:                   |  $42A5
+
+
+
+* INFLIGHT_ALIENS is an array of type INFLIGHT_ALIEN. 
+* An "Inflight alien" is my term for an alien that has broken off from the main swarm body to attack the player. 
+*
+* The array occupies memory locations $42B0 - $43AF; It is thus 256 bytes in size. 
+* As the INFLIGHT_ALIEN type is 32 bytes in size, this means that there's room for 8 entries in the array. 
+*
+* Slot 0 in the array is actually reserved for misc use, such as when you shoot an alien in the swarm body and an 
+* explosion animation needs a free sprite to play. (See: $0B52 for an example of this)
+*
+* Slot  1 is reserved for the flagship. 
+* Slots 2 and 3 are reserved for the flagship's escorts.
+* Slots 4,5,6,7 are reserved for individual attacking aliens.
+*
+* This means there can be 7 aliens in flight maximum. 
+*
+*  
+
+*
+* struct INFLIGHT_ALIEN
+
+IsActive              = 0x0            | Set to 1 when the alien is to be processed. 
+IsDying               = 0x1            | Set to 1 when the alien is in the process of exploding.
+StageOfLife           = 0x2            | See $0CD6 for details. 
+X                     = 0x3            | X coordinate
+Y                     = 0x4            | Y coordinate. 
+AnimationFrame        = 0x5            |
+ArcClockwise          = 0x6            | Set to 1 if the alien will rotate clockwise as it leaves the swarm or loops the loop. See $0D71 and $101F
+IndexInSwarm          = 0x7            | index of alien within ALIEN_SWARM_FLAGS array
+PivotYValue           = 0x9            | When alien is attacking, this value + $19 produces INFLIGHT_ALIEN.Y coordinate. See $0DF6
+AnimFrameStartCode    = 0xF            | Base animation frame number to which a number is added to compute sprite "code"
+TempCounter1          = 0x10           | Counter used for various timing purposes
+TempCounter2          = 0x11           | Secondary counter for various timing purposes
+DeathAnimCode         = 0x12           | when IsDying is set to 1, specifies the animation frame to display. See @$0C9F
+ArcTableLsb           = 0x13           | LSB of pointer into INFLIGHT_ALIEN_ARC_TABLE @$1E00. See docs @$0D71 and $1E00.
+Colour                = 0x16           |
+SortieCount           = 0x17           | Number of times the alien has reached the bottom of the screen then resumed attack on the player. Reset to 0 when rejoins swarm. See $0E9D.
+Speed                 = 0x18           | Value from 0..3. The higher the number the faster the alien moves. See $116B. 
+PivotYValueAdd        = 0x19           | Signed number which is added to INFLIGHT_ALIEN.PivotYValue to produce INFLIGHT_ALIEN.Y. See $0DF6
+
+inflight_alien_size   = 0x20
+          
+*  - sizeof(INFLIGHT_ALIEN) is 32 bytes
+
+
+INFLIGHT_ALIENS:                     |  $42B0
+	ds.b	inflight_alien_size*8
+INFLIGHT_ALIENS_END:                 |  $43AF
+
+
