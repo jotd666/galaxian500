@@ -22,8 +22,6 @@ galaxian_reset:
 galaxian_irq:
 	rts
 	
-bg_colorram:                            ds.b  0x800
-bg_videoram:                            ds.b  0x800
 
 invincible_flag:
 	.byte	0
@@ -217,6 +215,7 @@ And now, the main game code.... enjoy.
 
 ** variables
 
+VARIABLES_START:
 DIP_SWITCH_1_2_STATE:                |  $4000         ; holds state of dip switches 1 & 2 in bits 0 & 1.
 	ds.b	0x01
 COIN_COUNT:                          |  $4001         ; counts up to number of coins per credit as set by dip switches. When it reaches that value, resets to 0 
@@ -335,11 +334,11 @@ OBJRAM_BUF_PLAYER_BULLET_X:          |  $409F
 OBJRAM_BACK_BUF_END:                 |  $409F                        
 
 	ds.b	0x01
-CIRC_CMD_QUEUE_PTR_LO:           |  $40A0             ; low byte of a pointer to a (hopefully) vacant entry in the circular queue. See $08F2 
-	ds.b	0x01
-CIRC_CMD_QUEUE_PROC_LO:          |  $40A1             ; low byte of a pointer to the next entry in the circular queue to be processed. See $200C
-
-	ds.b	0x01
+	.align	2
+CIRC_CMD_QUEUE_PTR:           		|  $40A0             ; pointer to a (hopefully) vacant entry in the circular queue. See $08F2 
+	.long	0
+CIRC_CMD_QUEUE_PROC:          |  $40A1             ; (low byte of a ) pointer to the next entry in the circular queue to be processed. See $200C
+	.long	0
 PLAYER_ONE_SCORE:                      |  $40A2       | stored as 3 BCD bytes, 2 digits per byte: $40A2 = last 2 digits of score (tens), $40A3 = 3rd & 4th digits, $40A4 = 1st & 2nd
 
                                                       | e.g. a score of 123456 would be stored like so:
@@ -396,8 +395,8 @@ COLUMN_SCROLL_CHAR_RAM_PTR:          |  $40B5         | pointer to character RAM
 
 	ds.b	0x0b
 CIRC_CMD_QUEUE_START:            |  $40C0
-	ds.b	0x3f
-CIRC_CMD_QUEUE_END:              |  $40FF
+	ds.b	0x40
+CIRC_CMD_QUEUE_END:              |  $4100
 
 
 *
@@ -787,10 +786,13 @@ inflight_alien_size   = 0x20
 INFLIGHT_ALIENS:                     |  $42B0
 	ds.b	inflight_alien_size*8
 INFLIGHT_ALIENS_END:                 |  $43B0
+VARIABLES_END:
 
 	.align	0x100
+bg_videoram:
 CHARACTER_RAM:						| $5000
 	ds.b	0x800
+bg_colorram:
 ATTRIBUTE_RAM:						| $5800
 	ds.b	0x800
 
@@ -804,45 +806,127 @@ ATTRIBUTE_RAM:						| $5800
 INITIALISE_SYSTEM:  | 1A55
 
 * Clear screen 
-	lea		CHARACTER_RAM(pc),a0
-	move	#0x400-1,d1
-	move	#0x10,d0
+	move	#0x400-1,d0
+	move	#0x10,d1
 0:
-	move.b	d0,(a0)+
-	dbf		d1,0b
+	bsr		osd_w_bg_videoram
+	dbf		d0,0b
 	
 * clear attributes and reset scroll values
-	lea		ATTRIBUTE_RAM(pc),a0
-	move	#0x100-1,d1
-	moveq	#0,d0
+	move	#0x100-1,d0
+	moveq	#0,d1
 0:
-	move.b	d0,(a0)+	| write 0 to screen attribute RAM. Will both set colour to 0 and reset column scroll.
-	dbf		d1,0b
+	bsr		osd_w_bg_colorram	| write 0 to screen attribute RAM. Will both set colour to 0 and reset column scroll.
+	dbf		d0,0b
 	
 * (skipped startup checks!)
 
 * When we get here, all the diagnostic tests have succeeded. 
 * There are no errors, and the game can start proper.
+* original game sets all to 0 except for 0x40C0->0x4100
+* I almost could blindly follow that but some of the pointers
+* are 1-byte pointer nibbles, had to switch to full 32 bit
 
-	lea		DIP_SWITCH_1_2_STATE(pc),a0		| Start of working RAM
-	moveq	#0,d0
-	move.w	#0xC0,d1
-	jbsr	rst_10
-	subq	#1,d0
-	move.w	#0x40,d1
-	jbsr	rst_10
-	moveq	#0,d0
-	jbsr	rst_10
-	jbsr	rst_10
-	move.w	#0xa0,d1
-	jbsr	rst_10
+	lea		VARIABLES_START(pc),a0		| Start of working RAM
+	move.w	#VARIABLES_END-VARIABLES_START-1,d0
+0:
+	clr.b	(a0)+
+	dbf		d0,0b
 	
-	jbsr		osd_stars_on
-	lea		DIP_SWITCH_1_2_STATE(pc),a0		| Start of working RAM
+	* message queue set to all invalid (negative)
+	lea		CIRC_CMD_QUEUE_START(pc),a0
+	move.w	#CIRC_CMD_QUEUE_END-CIRC_CMD_QUEUE_START-1,d0
+1:
+	st.b	(a0)+
+	dbf		d0,1b
+	
+	move.b	#0x20,TEMP_COUNTER_1			| set TEMP_COUNTER_1
+	move.b	#3,DIAGNOSTIC_MESSAGE_TYPE
+	lea		CIRC_CMD_QUEUE_START(pc),a0
+	move.l	a0,CIRC_CMD_QUEUE_PTR			| reset CIRC_CMD_QUEUE_PTR
+	move.l	a0,CIRC_CMD_QUEUE_PROC			| reset CIRC_CMD_QUEUE_PROC
+	
+	jbsr	osd_stars_on					| Set 9Nregen stars on. Starry background now appears 
+	jbsr	osd_enable_vblank_interrupt		| Enable 9Nregen NMIon
+	bra		jmp_2000
 	
 	bsr		osd_break
 	
 	
+
+* reset all player-related state including score, high score
+jmp_2000:
+	lea		PLAYER_ONE_SCORE(pc),a0
+	move.w	#15-1,d0
+0:
+	clr.w	(a0)+
+	dbf		d0,0b
+	
+*
+* Process the circular command queue starting @ 0x40C0 (CIRC_CMD_QUEUE_START)
+*
+* Notes:
+* The value in 0x40A1 (I have named it CIRC_CMD_QUEUE_PROC_LO) is the low byte of a pointer to the first entry in 
+* the queue to be processed. The high byte of the pointer is always #0x40.
+* 
+* In a circular queue, the first entry to be processed is not necessarily the head of the queue. 
+* The first entry to be processed could be anywhere in the queue. 
+*
+*
+* TODO: Detail algorithm
+
+PROCESS_CIRCULAR_COMMAND_QUEUE:
+0:
+	move.l	CIRC_CMD_QUEUE_PROC(pc),a0		| now a0 = pointer to a queue entry in the queue to be processed
+	moveq	#0,d0
+	move.b	(a0),d0							| read command number from queue entry into d0. 
+	add.b	d0,d0							| multiply d0 by 2 to form an offset into jump table @0x203D
+	bcc.b	1f
+	
+    bsr		HANDLE_SWARM_ANIMATION
+	bra.b	0b								| process next entry in circular queue
+1:
+	and  #0x0F,d0                 | mask in lower nibble
+	add		d0,d0							
+	add		d0,d0							| multiply d0 by 4 to form an offset into jump table @0x203D
+	lea	jump_table_203D(pc),a1			| pointer to jump table beginning @ 0x203D
+	add.w	d0,a1
+	
+	st	(a0)+                             | write #0xFF (255 decimal) to first byte of byte pair, to mark it as "free"
+	move.b	(a0),d4		                  | read parameter value from queue entry into E. 
+	st	(a0)+                             | write #0xFF (255 decimal) to second byte of byte pair, to mark it as "free"
+	cmp.l	#CIRC_CMD_QUEUE_END,a0		  | is HL == 0x4100? If so, comparing L (which will be 0) to #0xC0 (192 decimal) will set the carry flag. 
+	bcc.b	2f							  | if carry is not set, then we have not reached the end of the queue (0x4100), goto 0x202C
+	lea		CIRC_CMD_QUEUE_START(pc),a0		  | otherwise, we have reached end of queue. 
+2:
+	move.l	a0,CIRC_CMD_QUEUE_PROC       | Set lo byte of pointer to 0xC0 (0x40C0 = start of circular queue)
+	move.b	d4,d0		                 | Now d0 = parameter to command
+	pea		0b(pc)						 | push it onto stack, so when we hit a RET it'll return to 0x200A
+	jmp		(a1)		                 | jump to proper code from the table below					 
+
+jump_table_203D:
+    .long	DRAW_ALIEN_COMMAND
+    .long	DELETE_ALIEN_COMMAND
+    .long	DISPLAY_PLAYER_COMMAND
+    .long	UPDATE_PLAYER_SCORE_COMMAND
+    .long	RESET_SCORE_COMMAND
+    .long	DISPLAY_SCORE_COMMAND
+    .long	PRINT_TEXT
+    .long	DISPLAY_BOTTOM_OF_SCREEN
+	
+DRAW_ALIEN_COMMAND:
+DELETE_ALIEN_COMMAND:
+DISPLAY_PLAYER_COMMAND:
+UPDATE_PLAYER_SCORE_COMMAND:
+RESET_SCORE_COMMAND:
+DISPLAY_SCORE_COMMAND:
+PRINT_TEXT:
+DISPLAY_BOTTOM_OF_SCREEN:
+	rts
+	
+HANDLE_SWARM_ANIMATION:
+	move.w	#0xF00,0xdff180		| unimplemented
+	rts
 	
 *********
 

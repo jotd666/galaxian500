@@ -812,11 +812,10 @@ platform_init:
 	bsr		set_bg_bitplanes
 
 	
+	* load palette
+	bsr		load_palette_in_copperlist
 	* set copperlist
 	move.l	#copperlist,cop1lc(a5)
-	* load palette
-	*lea		palette(pc),a0
-	*bsr		set_color_registers	
 	
     * init sprite, bitplane, whatever dma
 	* now it's no longer possible to change
@@ -849,19 +848,15 @@ platform_init:
     rts
 
 	
-* A0: out updated by 32
-load_colors:
+load_palette_in_copperlist:
 	movem.l	d0-d1/a1,-(a7)
-	lea		_custom,a5
-	* shut off dma to avoid conflicts with copperlist
-	move.w	#0x4000,dmacon(a5)
-	move.w	d0,bplcon3(a5)
-	move.w	#15,d0
-	lea		color(a5),a1
+	lea		palette(pc),a0
+	move.w	#TOTAL_NB_COLORS-1,d0
+	lea		copperlist_colors+2,a1
 1:
 	move.w	(a0)+,(a1)+
+	add.w	#2,a1
 	dbf		d0,1b
-	move.w	#0x8000,dmacon(a5)
 	movem.l	(a7)+,d0-d1/a1
 	rts
 	
@@ -1791,14 +1786,6 @@ sprite_y_tables:
 set_bg_bitplanes:
     lea		bg_screen_data,a0
     moveq #NB_PLAYFIELD_PLANES-1,d1
-	move.w	scroll_offset(pc),d2
-	lea	mulNB_BYTES_PER_ROW_table(pc),a1
-	.ifdef	NO68020
-	add.w	d2,d2
-	add.w	(a1,d2.w),a0
-	.else
-	add.w	(a1,d2.w*2),a0
-	.endif
 	move.l	a0,d0
     lea	bg_bitplanes+2,a0
 1:
@@ -2564,8 +2551,6 @@ intro_music_counter:
 	.word	0
 nb_active_bobs:
 	.word	0
-scroll_offset:
-	.word	0
 vbl_counter:
 	.word	0
 _resload:
@@ -2632,15 +2617,8 @@ _end_of_ng_code:
 		
 		.text
 	.align 2
-* bg tiles (game floor) (0-15) + bobs (16-32) in AGA dual playfield
 palette:
 	.include "palette.68k"
-* used for bg "galaxian" tiles for title screen
-title_palette:
-	.include "title_palette.68k"
-* only used for fg tile color (specially when flashing galaxian title)
-original_palette:
-	.include "original_palette.68k"
 
 		.bss
 
@@ -2707,7 +2685,7 @@ fg_tile_layer:
 	.endif
 	.datachip
 	
-.macro	DECL_4_BITPLANES	bpoff_start
+.macro	DECL_3_BITPLANES	bpoff_start
 	.set	bpoff,\bpoff_start
 	.rept	4
 	dc.w  0xe0+bpoff,0
@@ -2739,9 +2717,11 @@ sprite_cols:
 	.endr
 
 fg_bitplanes:
-	DECL_4_BITPLANES	4
+	DECL_3_BITPLANES	3
 bg_bitplanes:
-	DECL_4_BITPLANES	0
+	DECL_3_BITPLANES	0
+copperlist_colors:
+	DECL_32_COLORS
 sprites:
     * #0
     .word    sprpt+0,0
@@ -2770,7 +2750,7 @@ sprites:
 end_color_copper:
    * dynamic colors for fg tile color each 8 lines
 	.set    beampos,0x1C01
-	.set    fgcol,color+17*2
+	.set    fgcol,color+2
 	.set    testcol,0x0
 color_row_0:
 	dc.w	beampos,0xFFFE

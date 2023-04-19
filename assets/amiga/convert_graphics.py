@@ -50,6 +50,7 @@ flagship_sprite_palette +   # 4-5: 2 flagships
 
 palette = tile_palette + bob_palette + sprite_palette
 
-bitplanelib.palette_dump(palette,os.path.join(src_dir,"palette.68k"),
-                                    pformat=bitplanelib.PALETTE_FORMAT_ASMGNU)
+with open(os.path.join(src_dir,"palette.68k"),"w") as f:
+    #f.write("palette:\n")
+    bitplanelib.palette_dump(palette,f,pformat=bitplanelib.PALETTE_FORMAT_ASMGNU)
 
