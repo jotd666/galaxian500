@@ -875,9 +875,11 @@ osd_disable_vblank_interrupt:
 	rts
 		
 * d0=offset (preserved), d1=attribute (preserved)
+* d0 starts at 0x5000
 osd_w_bg_colorram:
     .ifeq OPT_DISABLE_BG_LAYER
 	movem.l	d0-d1/d7/a0-a1,-(a7)
+	sub.w	#0x5000,d0
 	lea		bg_colorram,a1
 	move.b	d1,(a1,d0.w)	| store attribute in bg table
 	lea		bg_videoram,a1
@@ -889,10 +891,12 @@ osd_w_bg_colorram:
 	rts
 
 * d0=offset (preserved), d1=tile (preserved)
+* d0 starts at 0x5000
 * must preserve A0 and D7 too
 osd_w_bg_videoram:
     .ifeq OPT_DISABLE_BG_LAYER
 	movem.l	d0-d3/a0-a1,-(a7)
+	sub.w	#0x5000,d0
 	lea		bg_videoram,a1
 	* dump both tables (color+char): S bg_data <address@0x110> $1000
 	add.w	d0,a1

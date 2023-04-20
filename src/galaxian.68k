@@ -261,8 +261,9 @@ TEMP_COUNTER_2:                      |  $4009         ; temporary counter used f
 SCRIPT_STAGE:                        |  $400A         ; Identifies what stage of the script we are at.  
                                      |                ; 0-based index into script tables located @ $0164, $0400, $0540, $0785
 	ds.b	0x01
+	.align	2
 TEMP_CHAR_RAM_PTR:                   |  $400B         ; pointer to character RAM. Used by screen-related routines (e.g. power on colour test) to remember where to plot characters on next call.                                   |                                                                     
-	ds.b	0x02
+	.word	0
 CURRENT_PLAYER:                      |  $400D         ; 0 = PLAYER ONE, 1 = PLAYER TWO
 	ds.b	0x01
 IS_TWO_PLAYER_GAME:                  |  $400E         ; 0 = One player game, 1 = 2 player game 
@@ -362,12 +363,13 @@ PLAYER_TWO_AWARDED_EXTRA_LIFE:         |  $40AE       | Set to 1 if player two h
 	ds.b	0x02
 IS_COLUMN_SCROLLING:                 |  $40B0         | Set to 1 if a column is being scrolled. For example when points are scrolled into view on the WE ARE THE GALAXIANS screen
 	ds.b	0x01
+	.align	2
 COLUMN_SCROLL_ATTR_BACKBUF_PTR:      |  $40B1         | pointer to scroll attribute data to update in OBJRAM_BACK_BUF. 
-	ds.b	0x02
+	.word	0
 COLUMN_SCROLL_NEXT_CHAR_PTR:         |  $40B3         | pointer to ordinal of next character to scroll on
-	ds.b	0x02
+	.word	0
 COLUMN_SCROLL_CHAR_RAM_PTR:          |  $40B5         | pointer to character RAM where next character will be plotted. 
-
+	.word	0
 
 * Phil Murray (PhilMurr on UKVAC) gave me a heads up on this.  
 *
@@ -391,7 +393,7 @@ COLUMN_SCROLL_CHAR_RAM_PTR:          |  $40B5         | pointer to character RAM
 *
 
 
-	ds.b	0x0b
+	.align	2
 CIRC_CMD_QUEUE_START:            |  $40C0
 	ds.b	0x40
 CIRC_CMD_QUEUE_END:              |  $4100
@@ -859,71 +861,74 @@ SCRIPT_TABLE:
      .long	SCRIPT_THREE
      .long	SCRIPT_FOUR
 	
+
 SCRIPT_ZERO:
-00E6: 2A 0B 40      ld   hl,(0x400B)          | Read TEMP_CHAR_RAM_PTR. This holds character RAM to start clearing from
-00E9: 06 20         ld   b,0x20               | #0x20 (32 decimal) bytes to fill in a row
-00EB: 3E 10         ld   a,0x10               | ordinal of empty character
-00ED: D7            rst  0x10                 | Clear entire row of characters
-00EE: 22 0B 40      ld   (0x400B),hl          | save in TEMP_CHAR_RAM_PTR
-00F1: 21 08 40      ld   hl,0x4008            | load HL with address of TEMP_COUNTER_1
-00F4: 35            dec  (hl)                | decrement value
-00F5: C0            ret  nz                  | if counter hasn't hit zero, return
+			move.w	TEMP_CHAR_RAM_PTR(pc),d0	| Read TEMP_CHAR_RAM_PTR. This holds character RAM to start clearing from
+			move.w	#0x20-1,d2                  | #0x20 (32 decimal) bytes to fill in a row
+			move.w	#0x10,d1				| ordinal of empty character
+0:
+			jbsr	osd_w_bg_videoram
+			addq.w	#1,d0
+			dbf		d1,0b
+			
+			move.w	d0,TEMP_CHAR_RAM_PTR       | save in TEMP_CHAR_RAM_PTR
+			subq.b	#1,TEMP_COUNTER_1        | decrement value
+			beq.b	1f
+			rts                          | if counter hasn't hit zero, return
+1:
+			move.b	#1,IS_GAME_OVER		| point HL to IS_GAME_OVER (set to 1)
+			clr.b   IS_GAME_IN_PLAY     | point HL to IS_GAME_IN_PLAY
+			move.b	#1,SCRIPT_NUMBER    | point HL to SCRIPT_NUMBER
+			clr.b	SCRIPT_STAGE   | reset SCRIPT_STAGE to 0
 
-00F6: 2D            dec  l                   | point HL to IS_GAME_OVER
-00F7: 36 01         ld   (hl),0x01               
-00F9: 2D            dec  l                   | point HL to IS_GAME_IN_PLAY
-00FA: 36 00         ld   (hl),0x00             
-00FC: 2D            dec  l                   | point HL to SCRIPT_NUMBER
-00FD: 36 01         ld   (hl),0x01 
-
-00FF: AF            xor  a
-0100: 32 0A 40      ld   (0x400A),a           | reset SCRIPT_STAGE to 0
-
-0103: 3A 11 40      ld   a,(0x4011)           | read PORT_STATE_6800
-0106: 07            rlca                     | move dip sw1 & dip sw2 state...
-0107: 07            rlca                     | ...into bits 0 & 1 of register a
-0108: E6 03         and  0x03
-010A: 32 00 40      ld   (0x4000),a           | and store into DIP_SWITCH_1_2_STATE
-
-010D: 3A 12 40      ld   a,(0x4012)           | read PORT_STATE_7000 
-0110: E6 04         and  0x04                 | mask in state of dip switch 5
-0112: 0F            rrca                     | move bit into...
-0113: 0F            rrca                     | bit 0 of register a
-0114: 32 1F 40      ld   (0x401F),a           | and store it in DIP_SWITCH_5_STATE
-
-0117: 11 1B 05      ld   de,0x051B            | load DE with address of PACKED_DEFAULT_SWARM_DEFINITION
-011A: CD 46 06      call 0x0646               | call UNPACK_ALIEN_SWARM
-
-* set IS_COCKTAIL flag from !SW0    upright/cocktail
-011D: 3A 10 40      ld   a,(0x4010)           | read PORT_STATE_6000
-0120: E6 20         and  0x20                 | read upright/cocktail bit                  
-0122: 07            rlca                     | move bit from bit 5.. 
-0123: 07            rlca
-0124: 07            rlca                     | ..to bit 0.
-0125: 32 0F 40      ld   (0x400F),a           | and store to IS_COCKTAIL
+*0103: 3A 11 40      ld   a,(0x4011)           | read PORT_STATE_6800
+*0106: 07            rlca                     | move dip sw1 & dip sw2 state...
+*0107: 07            rlca                     | ...into bits 0 & 1 of register a
+*0108: E6 03         and  0x03
+*010A: 32 00 40      ld   (0x4000),a           | and store into DIP_SWITCH_1_2_STATE
+*
+*010D: 3A 12 40      ld   a,(0x4012)           | read PORT_STATE_7000 
+*0110: E6 04         and  0x04                 | mask in state of dip switch 5
+*0112: 0F            rrca                     | move bit into...
+*0113: 0F            rrca                     | bit 0 of register a
+*0114: 32 1F 40      ld   (0x401F),a           | and store it in DIP_SWITCH_5_STATE
+*
+				lea	PACKED_DEFAULT_SWARM_DEFINITION(pc),a1  | load DE with address of PACKED_DEFAULT_SWARM_DEFINITION
+				bsr UNPACK_ALIEN_SWARM                      | call UNPACK_ALIEN_SWARM
+*
+** set IS_COCKTAIL flag from !SW0    upright/cocktail
+*011D: 3A 10 40      ld   a,(0x4010)           | read PORT_STATE_6000
+*0120: E6 20         and  0x20                 | read upright/cocktail bit                  
+*0122: 07            rlca                     | move bit from bit 5.. 
+*0123: 07            rlca
+*0124: 07            rlca                     | ..to bit 0.
+*0125: 32 0F 40      ld   (0x400F),a           | and store to IS_COCKTAIL
 
 * read DIP switches to calculate value of BONUS GALAXIP
-0128: 3A 00 70      ld   a,(0x7000)           | read state of dip switch 3,4,5,6
-012B: E6 03         and  0x03                 | mask in state of dip switches 3 & 4
-012D: 21 52 01      ld   hl,0x0152
-0130: E7            rst  0x20                 | call routine to fetch value @ HL + A 
-0131: 32 AC 40      ld   (0x40AC),a           | write BONUS GALIXIP @ value  
+*0128: 3A 00 70      ld   a,(0x7000)           | read state of dip switch 3,4,5,6
+*012B: E6 03         and  0x03                 | mask in state of dip switches 3 & 4
+*012D: 21 52 01      ld   hl,0x0152   see below table
+*0130: E7            rst  0x20                 | call routine to fetch value @ HL + A 
+*0131: 32 AC 40      ld   (0x40AC),a           | write BONUS GALIXIP @ value  
 
 * Set screen attribute colours then display "1UP" and "HIGH SCORE" 
-0134: CD 95 05      call 0x0595               | call SET_COLOUR_ATTRIBUTES_TABLE_1
-0137: 3E 01         ld   a,0x01
-0139: 32 40 53      ld   (0x5340),a           | poke "1" to character RAM
-013C: 3E 25         ld   a,0x25
-013E: 32 20 53      ld   (0x5320),a           | poke "U" to character RAM
-0141: 3E 20         ld   a,0x20
-0143: 32 00 53      ld   (0x5300),a           | poke "P" to character RAM - text "1UP" now drawn
-0146: 11 04 06      ld   de,0x0604            | command: PRINT_TEXT, parameter: 4 (index of "HIGH SCORE")
-0149: CD F2 08      call 0x08F2               | call QUEUE_COMMAND 
-014C: 11 03 05      ld   de,0x0503            : command: DISPLAY_SCORE_COMMAND , parameter: 3 (Displays player scores and high score)
-014F: C3 F2 08      jp   0x08F2               | jump to QUEUE COMMAND
-
+			jbsr	SET_COLOUR_ATTRIBUTES_TABLE_1 | call SET_COLOUR_ATTRIBUTES_TABLE_1
+			move.b	#1,d1
+			move.w	#0x5340,d0
+			jbsr	osd_w_bg_videoram		| poke "1" to character RAM
+			move.b	#0x25,d1
+			move.w	#0x5320,d0		          
+			jbsr	osd_w_bg_videoram		| poke "U" to character RAM
+			move.b	#0x20,d1
+			move.w	#0x5300,d0		          
+			jbsr	osd_w_bg_videoram		| poke "P" to character RAM - text "1UP" now drawn
+*0146: 11 04 06      ld   de,0x0604            | command: PRINT_TEXT, parameter: 4 (index of "HIGH SCORE")
+*0149: CD F2 08      call 0x08F2               | call QUEUE_COMMAND 
+*014C: 11 03 05      ld   de,0x0503            : command: DISPLAY_SCORE_COMMAND , parameter: 3 (Displays player scores and high score)
+*014F: C3 F2 08      jp   0x08F2               | jump to QUEUE COMMAND
+	dc.w	0x60FE
 * Values for BONUS GALIXIP. 7 = 7000, 10 = 10000, 12 =12000, 20 = 20000
-0152: 07 10 12 20 
+**0152: 0x07,0x10,0x12,0x20 
 
 
 	rts
@@ -934,6 +939,43 @@ SCRIPT_THREE:
 SCRIPT_FOUR:
 	rts
 	
+SET_COLOUR_ATTRIBUTES_TABLE_1:
+		lea		COLOUR_ATTRIBUTE_TABLE_1(pc),a0 
+
+SET_COLOUR_ATTRIBUTES:
+*0598: 11 21 40      ld   de,0x4021            | address of first attribute in OBJRAM_BACK_BUF 
+*059B: 06 20         ld   b,0x20               | we're setting attributes for all 32 columns in the row
+*059D: 7E            ld   a,(hl)              | read attribute value from ROM 
+*059E: 12            ld   (de),a              | write to attribute value in OBJRAM_BACK_BUF
+*059F: 23            inc  hl                  | bump HL to next value in ROM
+*05A0: 1C            inc  e                   | Add 2 to DE..
+*05A1: 1C            inc  e                   | .. so that it points to the next attribute value
+*05A2: 10 F9         djnz 0x059D               | and do until b==0
+*05A4: C9            ret
+	rts
+
+UNPACK_ALIEN_SWARM:
+* TODO
+	rts
+	
+*0646: 21 00 41      ld   hl,0x4100            | load HL with address of ALIEN_SWARM_FLAGS
+*0649: 06 10         ld   b,0x10               | There's 16 bytes to be unpacked to 128 flags
+*064B: 0E 01         ld   c,0x01
+*
+*064D: 1A            ld   a,(de)              | read from (de) 
+*064E: A1            and  c                   | test if bit is set
+*064F: 28 0B         jr   z,0x065C             | if bit is not set, goto 0x065C 
+*0651: 36 01         ld   (hl),0x01            | bit is set, write 1 to (hl) - create an alien 
+*0653: 23            inc  hl                  | bump hl to next byte
+*0654: CB 01         rlc  c                   | rotate c left one bit
+*0656: 30 F5         jr   nc,0x064D            | if bit 7 of C wasn't set, goto 0x064D
+*0658: 13            inc  de                  | move to next byte
+*0659: 10 F2         djnz 0x064D               | do until b ==0
+*065B: C9            ret
+*065C: 36 00         ld   (hl),0x00            | write 0 to (hl) 
+*065E: C3 53 06      jp   0x0653               | 
+
+
 *
 * Called from $0004.
 * 
@@ -985,6 +1027,13 @@ INITIALISE_SYSTEM:  | 1A55
 	
 	jbsr	osd_stars_on					| Set 9Nregen stars on. Starry background now appears 
 	jbsr	osd_enable_vblank_interrupt		| Enable 9Nregen NMIon
+	
+	* part done in diagnostic, we don't want diagnostic but we need those inits
+	move.w	#0x5000,TEMP_CHAR_RAM_PTR    | set TEMP_CHAR_RAM_PTR
+	move.b	#0x20,TEMP_COUNTER_1
+	clr.b	DIAGNOSTIC_MESSAGE_TYPE
+	clr.b	SCRIPT_NUMBER
+
 	bra		jmp_2000
 	
 	bsr		osd_break
@@ -1081,7 +1130,7 @@ HANDLE_SWARM_ANIMATION:
 * (just to debug our font engine!!)
 DISPLAY_BAD_RAM_OR_ROM_MESSAGE:
 	lea		bad_rom(pc),a0
-	move.w	#0x233,d0            | character RAM address to print text at
+	move.w	#0x5233,d0            | character RAM address to print text at
 	move.w	#0x20,d2
 	move.w	#6,d3               | there's 7 characters in "BAD RAM" (including the space between words)
 0:
@@ -1093,7 +1142,41 @@ DISPLAY_BAD_RAM_OR_ROM_MESSAGE:
 	
 bad_rom:
 	dc.b	0x1D,0x1F,0x22,0x10,0x14,0x11,0x12 
+
+
+DEFAULT_SWARM_DEFINITION_AND_PLAYER_STATE:    | EQU 0x051B
+PACKED_DEFAULT_SWARM_DEFINITION:
+    | The first 16 bytes defining the default alien swarm. 
+    | For information on how the bytes are unpacked, please see docs @ 0x0646
+    .byte	0x00,0x00,0x00,0x00,0xF8,0x1F,0xF8,0x1F,0xF8,0x1F,0xF0,0x0F,0xE0,0x07,0x40,0x02
+
+    | When starting a new game, these are the default values 
+DEFAULT_PLAYER_STATE:
+	.byte	0x3C                                 | Default value for DIFFICULTY_COUNTER_1 
+    .byte	0x14                                 | Default value for DIFFICULTY_COUNTER_2
+    .byte	0x00,0x02,0x00,0x02,0x00,0x0F,0x00,0x00,0x00     
+
+* Referenced by code @ 0x0595
+COLOUR_ATTRIBUTE_TABLE_1:
+	.byte	0x00,0x05,0x00,0x00,0x01,0x01,0x02,0x03,0x03,0x04,0x04,0x04,0x04,0x00,0x00,0x00
+	.byte	0x00,0x00,0x00,0x05,0x05,0x05,0x05,0x05,0x00,0x00,0x06,0x06,0x06,0x06,0x06,0x06
+	
+* Referenced by code @ 0x0408
+COLOUR_ATTRIBUTE_TABLE_2:
+	.byte	0x00,0x05,0x00,0x00,0x01,0x01,0x02,0x03,0x03,0x04,0x04,0x04,0x04,0x00,0x00,0x00
+	.byte	0x06,0x06,0x06,0x06,0x06,0x06,0x05,0x06,0x06,0x06,0x06,0x06,0x06,0x06,0x06,0x06
+
+* Referenced by code @ 0x0212
+COLOUR_ATTRIBUTE_TABLE_3:
+	.byte	0x00,0x05,0x00,0x00,0x01,0x01,0x02,0x03,0x05,0x04,0x05,0x04,0x04,0x00,0x00,0x00
+	.byte	0x00,0x06,0x06,0x06,0x06,0x06,0x06,0x06,0x06,0x06,0x00,0x00,0x07,0x07,0x06,0x06
+* ",".join("0x{}".format(x) for x in s.split())
+
+* Referenced by code @ 0x0D1D
+	.byte	0x00,0x00,0x00,0x00,0x04,0x01,0x04,0x02,0x04,0x01,0x03,0x03,0x02,0x02,0x01,0x02
+
 	.align	2
+	
 *********
 
 rst_10:
