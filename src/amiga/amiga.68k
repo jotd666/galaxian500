@@ -898,7 +898,6 @@ osd_w_bg_videoram:
 	movem.l	d0-d3/a0-a1,-(a7)
 	sub.w	#0x5000,d0
 	lea		bg_videoram,a1
-	* dump both tables (color+char): S bg_data <address@0x110> $1000
 	add.w	d0,a1
 	cmp.b	(a1),d1
 	beq.b	0f		| already the proper value
@@ -983,31 +982,37 @@ osd_w_bg_videoram:
 	.endm
 	
 * d0: offset
-* d1: tile code (0-256 but extends to 512 with bit 0 of attribute)
-* d2: attribute (0-255, color is in bits 0-5, X/Y flip in 6:7)
+* d1: tile code
+* d2: attribute
 update_bg_tile:
 	* compute Y
+	and.w	#0xFF,d1	| mask up to 255
 	move.w	d0,d3
 	lsr.w	#5,d0		| this is X
 	neg.w	d0
 	add.w	#32,d0
 	and.w	#0x1F,d3	| this is Y
+	* multiply by 240
 	lea		mulNB_BYTES_PER_ROW_table(pc),a0
 	add.w	d3,d3
 	lea		bg_screen_data,a1
-	add.w	(a0,d3.w),a1
+	move.w	(a0,d3.w),d3
+	lsl.w	#3,d3		| times 8
+	add.w	d3,a1
 	add.w	d0,a1
 	lea		characters,a0
 	add.w	d1,d1
 	add.w	d1,d1
-	move.l	(a0,d1.w),a0
+	move.l	(a0,d1.w),d0
+	beq.b	0f
+	move.l	d0,a0
 	
 	.set	offset,0
 	.rept	8
 	move.b	(a0)+,(offset,a1)
 	.set	offset,offset+NB_BYTES_PER_ROW
 	.endr
-	
+0:
 	rts
 		
 		

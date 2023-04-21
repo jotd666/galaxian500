@@ -894,8 +894,8 @@ SCRIPT_ZERO:
 *0113: 0F            rrca                     | bit 0 of register a
 *0114: 32 1F 40      ld   (0x401F),a           | and store it in DIP_SWITCH_5_STATE
 *
-				lea	PACKED_DEFAULT_SWARM_DEFINITION(pc),a1  | load DE with address of PACKED_DEFAULT_SWARM_DEFINITION
-				bsr UNPACK_ALIEN_SWARM                      | call UNPACK_ALIEN_SWARM
+			lea	PACKED_DEFAULT_SWARM_DEFINITION(pc),a1  | load DE with address of PACKED_DEFAULT_SWARM_DEFINITION
+			bsr UNPACK_ALIEN_SWARM                      | call UNPACK_ALIEN_SWARM
 *
 ** set IS_COCKTAIL flag from !SW0    upright/cocktail
 *011D: 3A 10 40      ld   a,(0x4010)           | read PORT_STATE_6000
@@ -931,17 +931,161 @@ SCRIPT_ZERO:
 			jra		QUEUE_COMMAND
   
 * Values for BONUS GALIXIP. 7 = 7000, 10 = 10000, 12 =12000, 20 = 20000
-**0152: 0x07,0x10,0x12,0x20 
+**0152: 
+	.byte	0x07,0x10,0x12,0x20 
 
 
-	rts
-	
 SCRIPT_ONE:
+	rts
 SCRIPT_TWO:
+	rts
 SCRIPT_THREE:
+	rts
 SCRIPT_FOUR:
 	rts
 	
+* < A1: player score which replaces high score
+UPDATE_HIGH_SCORE:
+		bsr	LEA_DE_OF_CURRENT_PLAYER_SCORE	| Now DE = pointer to current player score
+		lea	HI_SCORE(pc),a0		| address of high score
+		moveq	#2,d2			| high score occupies 3 bytes
+0:
+		move.b	(a1)+,(a0)+
+		dbf		d2,0b
+		subq.w	#1,a1
+l_21F8: move.w	#0x5241,d1            | character RAM address where HIGH SCORE will be drawn
+		bra.b	PLOT_SCORE_CHARACTERS
+
+
+*
+* Value in register A       What it represents
+* =====================================================
+* 0                         Display Player one's score 
+* 1                         Display Player two's score 
+* 2                         Display high score.
+* 3                         Do all of the above.
+*
+
+DISPLAY_SCORE_COMMAND:	
+	cmp.b	#3,d0
+	bcc.b		DISPLAY_ALL_SCORES       	| if A>= #0x03, goto 0x224D, DISPLAY_ALL_SCORES
+	lea			PLAYER_ONE_SCORE+2(pc),a0	| pointer to last 2 BCD digits of PLAYER_ONE_SCORE
+	beq.b		DECIDE_TO_DISPLAY_PLAYER_ONE_OR_PLAYER_TWO_SCORE	| if A is 0
+	subq.b		#1,d0				    | if A was 1 on entry, then Z flag is now set
+	bne.b		DISPLAY_HIGH_SCORE
+	tst.b		IS_TWO_PLAYER_GAME
+	bne.b		0f
+	rts					| if it's zero, then we're just in a single player game, return
+0:
+	lea			PLAYER_TWO_SCORE+2(pc),a0	        | pointer to last 2 BCD digits of PLAYER_TWO_SCORE
+	jra			DECIDE_TO_DISPLAY_PLAYER_ONE_OR_PLAYER_TWO_SCORE
+
+DISPLAY_HIGH_SCORE:
+	lea		HI_SCORE+2(pc),a0            | pointer to last 2 BCD digits of HI_SCORE
+	bra.b	l_21F8
+
+* This displays player scores and high scores
+DISPLAY_ALL_SCORES:
+	subq.b	#1,d0
+	move.w	d0,-(a7)
+	jbsr	DISPLAY_SCORE_COMMAND
+	move.w	(a7)+,d0
+	bne.b	DISPLAY_ALL_SCORES
+	rts
+
+* 
+* Expects:
+*
+* Value in register A       Action taken                     
+* ====================================================
+* 0                         Display player one's score       
+* 1                         Display player two's score
+*      
+* DE = pointer to *last* byte of 3 BCD bytes representing a score (ie: player 1 score, player 2 score)
+
+DECIDE_TO_DISPLAY_PLAYER_ONE_OR_PLAYER_TWO_SCORE:
+	move.w	#0x5381,d1            | pointer to character RAM location for player one's score
+	tst.b	d0                    | test if A is 0.  
+	beq.b	PLOT_SCORE_CHARACTERS | if A is 0 then we want to draw player one's score, goto 0x2261
+	move.w	#0x5121,d1            | pointer to character RAM location for player one's score
+
+*
+* Plot score to the screen. 
+*
+* Expects:
+*
+* DE = pointer to *last* byte of 3 BCD bytes representing a score (ie: player 1 score, player 2 score, or high score)
+*      See docs for PLAYER_ONE_SCORE to understand how scores are packed as BCD 
+*
+* IX = pointer to character RAM to begin plotting characters from
+*
+*
+
+PLOT_SCORE_CHARACTERS:
+	move.w	d1,d0		| screen address
+	move.w	#-0x20,d5	| load HL with 0xFFE0 (-32 decimal) 
+	moveq	#2,d3       | a score is 3 bytes in size..                
+	moveq	#4,d2		| max number of leading zeros that can be skipped. For example,
+                                             | when you start the game you have a score of zero. It renders as "00". 
+                                             | So this says "skip the first 4 zeros in the score, but display the rest"
+0:
+	move.b	(a0),d1		| read BCD digits from score byte
+	lsr.b	#4,d1       | move high nibble (first digit of BCD number)...
+	jbsr	PLOT_LOWER_NIB_AS_DIGIT   | call  to plot the first digit                 
+	move.b	(a0),d1		| read BCD digits from score byte
+	jbsr	PLOT_LOWER_NIB_AS_DIGIT     | call to plot the second digit 
+	subq.w	#1,a0		| bump to *previous* BCD byte
+	dbf		d3,0b       | do until all BCD digits in score have been drawn
+	rts
+
+
+* Pokes a digit of the score to character RAM.
+*
+* Expects:
+*
+* Lower nibble of D1: BCD digit to be plotted as a character on screen 
+* D2 = max number of leading zero digits in the score that can be skipped. 
+* If D2 is 0, zero digits will always be drawn
+* D0 = pointer to character RAM where digit will be plotted.
+
+PLOT_LOWER_NIB_AS_DIGIT:
+	and.b	#0xF,d1		| mask in lower nibble
+	beq.b	0f			| if the lower nibble is zero, goto 0x2281
+
+* OK, we have a nonzero digit.
+	clr		d2              | tell the plot routine to draw all digits, even if they are zero, from now on
+	bra.b	1f				| go plot the character
+
+* we have a zero digit. Do we print it, or print a space instead?
+0:
+	tst.b	d2        | how many zero digits can we skip over?   
+	beq.b	1f		| if we can't skip over any more leading zero digits, then goto 0x2288 to draw "0". 
+
+* Otherwise, we are skipping a leading "0" digit and will print an empty space instead..
+	move.b	#0x80,d1	| when added to 0x90 this will produce 0x10 (16 decimal) - ordinal for empty character
+	subq.b	#1,d2		| decrement count of leading zeros we are allowed to ignore
+1:
+	add.b	#0x90,d1    | transform A into ordinal of character to be plotted
+	jbsr	osd_w_bg_videoram		| plot character for score to screen
+	add.w	d5,d0		| now IX points to character directly above one just plotted
+	rts
+
+
+*
+* Load DE (A1) with the [effective] address of the current player's score.
+* 
+
+
+LEA_DE_OF_CURRENT_PLAYER_SCORE:
+	lea	PLAYER_ONE_SCORE(pc),a1            | address of 
+	tst.b	CURRENT_PLAYER     | read CURRENT_PLAYER           
+	bne.b	0f					| if it is zero, then current player is player one. Return.
+	rts
+0:
+	lea		PLAYER_TWO_SCORE(pc),a1	| address of PLAYER_TWO_SCORE
+	rts
+
+
 SET_COLOUR_ATTRIBUTES_TABLE_1:
 		lea		COLOUR_ATTRIBUTE_TABLE_1(pc),a0 
 
@@ -1095,20 +1239,21 @@ INITIALISE_SYSTEM:  | 1A55
 	clr.b	DIAGNOSTIC_MESSAGE_TYPE
 	clr.b	SCRIPT_NUMBER
 
-	bra		jmp_2000
-	
-	bsr		osd_break
-	
+*	bra		jmp_2000
+*	nop
 	
 
 * reset all player-related state including score, high score
 jmp_2000:
 	lea		PLAYER_ONE_SCORE(pc),a0
-	move.w	#15-1,d0
+	move.w	#(CIRC_CMD_QUEUE_START-PLAYER_ONE_SCORE)/2-1,d0
 0:
 	clr.w	(a0)+
 	dbf		d0,0b
 	
+	* now would be a good time to read highscore from saved state
+	lea		PLAYER_ONE_SCORE(pc),a0
+	*bsr		osd_read_hiscores
 *
 * Process the circular command queue starting @ 0x40C0 (CIRC_CMD_QUEUE_START)
 *
@@ -1141,7 +1286,7 @@ PROCESS_CIRCULAR_COMMAND_QUEUE:
 	move.b	(a0),d4		                  | read parameter value from queue entry into E. 
 	st	(a0)+                             | write #0xFF (255 decimal) to second byte of byte pair, to mark it as "free"
 	cmp.l	#CIRC_CMD_QUEUE_END,a0		  | is HL == 0x4100? If so, comparing L (which will be 0) to #0xC0 (192 decimal) will set the carry flag. 
-	bcc.b	2f							  | if carry is not set, then we have not reached the end of the queue (0x4100), goto 0x202C
+	bcs.b	2f							  | if carry is set, then we have not reached the end of the queue (0x4100), goto 0x202C
 	lea		CIRC_CMD_QUEUE_START(pc),a0		  | otherwise, we have reached end of queue. 
 2:
 	move.l	a0,CIRC_CMD_QUEUE_PROC       | Set lo byte of pointer to 0xC0 (0x40C0 = start of circular queue)
@@ -1174,8 +1319,6 @@ UPDATE_PLAYER_SCORE_COMMAND:
 RESET_SCORE_COMMAND:
 	rts
 	
-DISPLAY_SCORE_COMMAND:
-	rts
 	
 *
 * A = index of string to print

@@ -75,6 +75,10 @@ for j,lst in enumerate(fonts_matrix):
         p = bitplanelib.palette_extract(img)
         character_codes[e] = bitplanelib.palette_image2raw(img,None,p,forced_nb_planes=1)
 
+# duplicate digits in 0x90 area
+for i in range(0,10):
+    character_codes[0x90+i] = character_codes[i]
+
 with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
     f.write("\t.global\tcharacters\n")
     f.write("characters:\n")
