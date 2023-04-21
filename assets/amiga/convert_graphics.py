@@ -1,8 +1,6 @@
 import os,re,bitplanelib,ast,json
 from PIL import Image,ImageOps
 
-import gen_color_dict
-import sprite_specific
 
 import collections
 
@@ -58,10 +56,11 @@ with open(os.path.join(src_dir,"palette.68k"),"w") as f:
 # convert fonts
 fonts = Image.open(os.path.join(this_dir,"text.png"))
 
+# missing: colon (0xD3), dash (0x91)
 fonts_matrix = [list(range(0x11,0x11+15)),
 list(range(0x11+15,0x11+27))+[5,5,5,5],  # yet unknown codes
 list(range(0,10))+[6,6,6],
-[7,7,7,7,7,7]  # namco unknown codes
+[0xCA,0xCB,0xCC,0xCD,0xCE,0xCF,0x9E,0x9F]  # namco codes
 ]
 
 character_codes = [None] * 256

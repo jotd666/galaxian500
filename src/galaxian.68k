@@ -869,7 +869,7 @@ SCRIPT_ZERO:
 0:
 			jbsr	osd_w_bg_videoram
 			addq.w	#1,d0
-			dbf		d1,0b
+			dbf		d2,0b
 			
 			move.w	d0,TEMP_CHAR_RAM_PTR       | save in TEMP_CHAR_RAM_PTR
 			subq.b	#1,TEMP_COUNTER_1        | decrement value
@@ -881,6 +881,7 @@ SCRIPT_ZERO:
 			move.b	#1,SCRIPT_NUMBER    | point HL to SCRIPT_NUMBER
 			clr.b	SCRIPT_STAGE   | reset SCRIPT_STAGE to 0
 
+*TODO
 *0103: 3A 11 40      ld   a,(0x4011)           | read PORT_STATE_6800
 *0106: 07            rlca                     | move dip sw1 & dip sw2 state...
 *0107: 07            rlca                     | ...into bits 0 & 1 of register a
@@ -922,11 +923,13 @@ SCRIPT_ZERO:
 			move.b	#0x20,d1
 			move.w	#0x5300,d0		          
 			jbsr	osd_w_bg_videoram		| poke "P" to character RAM - text "1UP" now drawn
-*0146: 11 04 06      ld   de,0x0604            | command: PRINT_TEXT, parameter: 4 (index of "HIGH SCORE")
-*0149: CD F2 08      call 0x08F2               | call QUEUE_COMMAND 
-*014C: 11 03 05      ld   de,0x0503            : command: DISPLAY_SCORE_COMMAND , parameter: 3 (Displays player scores and high score)
-*014F: C3 F2 08      jp   0x08F2               | jump to QUEUE COMMAND
-	dc.w	0x60FE
+			moveq	#6,d3
+			moveq	#4,d4			       | command: PRINT_TEXT, parameter: 4 (index of "HIGH SCORE")
+			jbsr	QUEUE_COMMAND
+			moveq	#5,d3
+			moveq	#3,d4			       | command: DISPLAY_SCORE_COMMAND , parameter: 3 (Displays player scores and high score)
+			jra		QUEUE_COMMAND
+  
 * Values for BONUS GALIXIP. 7 = 7000, 10 = 10000, 12 =12000, 20 = 20000
 **0152: 0x07,0x10,0x12,0x20 
 
@@ -942,6 +945,7 @@ SCRIPT_FOUR:
 SET_COLOUR_ATTRIBUTES_TABLE_1:
 		lea		COLOUR_ATTRIBUTE_TABLE_1(pc),a0 
 
+*TODO
 SET_COLOUR_ATTRIBUTES:
 *0598: 11 21 40      ld   de,0x4021            | address of first attribute in OBJRAM_BACK_BUF 
 *059B: 06 20         ld   b,0x20               | we're setting attributes for all 32 columns in the row
@@ -955,7 +959,7 @@ SET_COLOUR_ATTRIBUTES:
 	rts
 
 UNPACK_ALIEN_SWARM:
-* TODO
+*TODO
 	rts
 	
 *0646: 21 00 41      ld   hl,0x4100            | load HL with address of ALIEN_SWARM_FLAGS
@@ -974,6 +978,63 @@ UNPACK_ALIEN_SWARM:
 *065B: C9            ret
 *065C: 36 00         ld   (hl),0x00            | write 0 to (hl) 
 *065E: C3 53 06      jp   0x0653               | 
+
+
+*
+* Try to insert into the circular command queue located @ 0x40C0. (CIRC_CMD_QUEUE_START)
+* if insert is not possible, exit function immediately.
+*
+* Expects:
+* D is a command number (0..7) 
+* E is a parameter to pass to the command. 
+*
+* 0x40A0 contains the low byte of a pointer to a (hopefully) free entry in the queue.  
+*
+* REMARKS:
+*
+* Value in D                Action it invokes 
+* ===============================================================
+* 0                         Invokes DRAW_ALIEN_COMMAND
+* 1                         Invokes DELETE_ALIEN_COMMAND
+* 2:                        Invokes DISPLAY_PLAYER_COMMAND
+* 3:                        Invokes UPDATE_PLAYER_SCORE_COMMAND
+* 4:                        Invokes RESET_SCORE_COMMAND
+* 5:                        Invokes DISPLAY_SCORE_COMMAND
+* 6:                        Invokes PRINT_TEXT 
+* 7:                        Invokes BOTTOM_OF_SCREEN_INFO_COMMAND
+* 
+* The purpose of the parameter in E depends on the command.
+*
+* SEE ALSO:
+* The code @ 0x200C which processes the entries in the queue.
+
+* ALGORITHM:
+* 1. Form a pointer to an entry in the circular queue using #0x40 as the high byte of the pointer
+*    and the contents of 0x40A0 (CIRC_CMD_QUEUE_PTR_LO) as the low byte. 
+* 2. Read a byte from the queue entry the pointer points to 
+* 3. IF bit 7 of the byte is unset, then the queue entry is in use, we can't insert. Exit function.  
+* 4. ELSE:
+*    4a) store register DE at the pointer
+*    4b) bump pointer to next queue entry 
+* 5. Exit function
+
+QUEUE_COMMAND:
+	move.l	a0,-(a7)
+	move.l	CIRC_CMD_QUEUE_PTR(pc),a0
+	tst		(a0)	| if bit 7 not set, this entry cannot be used, goto 0x090B and exit
+	bpl.b	1f
+	move.b	d3,(a0)+
+	move.b	d4,(a0)+
+	cmp.l	#CIRC_CMD_QUEUE_END,a0
+	bne.b	0f
+	move.l	#CIRC_CMD_QUEUE_START,a0
+0:
+	move.l	a0,CIRC_CMD_QUEUE_PTR		| update CIRC_CMD_QUEUE_PTR_LO to point to next queue entry
+1:
+	move.l	(a7)+,a0
+	rts
+	
+
 
 
 *
@@ -1072,10 +1133,9 @@ PROCESS_CIRCULAR_COMMAND_QUEUE:
 	bra.b	0b								| process next entry in circular queue
 1:
 	and  #0x0F,d0                 | mask in lower nibble
-	add		d0,d0							
 	add		d0,d0							| multiply d0 by 4 to form an offset into jump table @0x203D
 	lea	jump_table_203D(pc),a1			| pointer to jump table beginning @ 0x203D
-	add.w	d0,a1
+	move.l	(a1,d0.w),a1
 	
 	st	(a0)+                             | write #0xFF (255 decimal) to first byte of byte pair, to mark it as "free"
 	move.b	(a0),d4		                  | read parameter value from queue entry into E. 
@@ -1117,8 +1177,134 @@ RESET_SCORE_COMMAND:
 DISPLAY_SCORE_COMMAND:
 	rts
 	
+*
+* A = index of string to print
+*
+* Bit 6 set: scroll this text onto screen
+* Bit 7 set: clear this text
+*
+* Value in A (ANDed with 0x3F)       Text printed
+* =============================================================
+* 0                                 GAME OVER
+* 1                                 PUSH START BUTTON  
+* 2                                 PLAYER ONE 
+* 3                                 PLAYER TWO 
+* 4                                 HIGH SCORE
+* 5                                 CREDIT
+* 6                                 BONUS GALIXIP FOR   000 PTS
+* 7                                 CONVOY CHARGER 
+* 8                                 - SCORE ADVANCE TABLE -
+* 9                                 MISSION: DESTROY ALIENS
+* A                                 WE ARE THE GALAXIANS
+* B                                 30       60  PTS 
+* C                                 40       80  PTS
+* D                                 50      100  PTS
+* E                                 60      300  PTS
+* F                                 NAMCO logo
+* 10                                FREE PLAY
+
 PRINT_TEXT:
-	rts
+	lea	TEXTPTRS(pc),a0
+	add.w	d0,d0
+	move.w	d0,-(a7)
+	add.w	d0,d0
+	and.w	#0x7F,d0   | mask in bits 0..6. Now A = a value in range of 0..127
+	move.l	(a0,d0.w),a0	| HL now points to an entry in the TEXTPTRS lookup table.
+	move.w	(a0)+,d0		| DE = *HL. Now DE holds character RAM address to print text at
+							| Now HL = pointer to character RAM, DE = pointer to text to print
+	move.w	#-0x20,d5         | offset to add to HL after every character write. (-32 in decimal)
+	move.w	(a7)+,d2	
+	*2309: 38 0E         jr   c,0x2319  *TODO ???? erase??
+	*bmi.b	l_2323		| if minus flag is set, then we want to scroll text onto screen - goto 0x2323
+0:
+	move.b	(a0)+,d1     | read character to be drawn   
+	sub.b	#0x30,d1
+	cmp.b	#0xF,d1		| is this the string terminator, #0x3F?
+	bne.b	1f
+	rts					| yes, so exit routine
+1:
+	jbsr	osd_w_bg_videoram
+	add.w	d5,d0		| Add offset to screen address so that next character is drawn at correct location.   
+	bra.b	0b			| and continue
+
+* I'll stick my neck out and guess this code is to erase text that was drawn previously.
+*2319: 1A            ld   a,(de)
+*231A: FE 3F         cp   0x3F
+*231C: C8            ret  z
+*231D: 36 40         ld   (hl),0x40
+*231F: 13            inc  de
+*2320: 09            add  hl,bc
+*2321: 18 F6         jr   0x2319
+
+*
+* Set text up for scrolling. Invoked by 0x230B within PRINT_TEXT
+*
+* HL = pointer to character RAM
+* DE = pointer to text string to render
+*
+
+l_2323:
+
+* 22 B5 40      ld   (0x40B5),hl          | store pointer to character RAM in COLUMN_SCROLL_CHAR_RAM_PTR
+*2326: EB            ex   de,hl               | now HL = pointer to text string, DE = pointer to character RAM 
+*2327: 22 B3 40      ld   (0x40B3),hl          | store pointer to next char to scroll on in COLUMN_SCROLL_NEXT_CHAR_PTR
+*232A: 7B            ld   a,e                 | get low byte of character RAM address into A
+*232B: E6 1F         and  0x1F                 | mask in bits 0..4. Effectively A = A mod #0x20 (32 decimal). A now represents a column index from 0-31.
+*232D: 47            ld   b,a                 | save column index in B.
+** compute offset into OBJRAM_BACK_BUF
+*232E: 87            add  a,a                 | A=A*2. This is because attribute RAM requires 2 bytes per column. 
+*232F: C6 20         add  a,0x20               | add 0x20 (32 decimal) as OBJRAM_BACK_BUF starts at 0x4020
+*2331: 6F            ld   l,a                 | 
+*2332: 26 40         ld   h,0x40               | now HL = a pointer to scroll attribute value in OBJRAM_BACK_BUF 
+*2334: 22 B1 40      ld   (0x40B1),hl          | set COLUMN_SCROLL_ATTR_BACKBUF_PTR
+*2337: E5            push hl                  | save pointer to scroll offset attribute on the stack
+*
+*2338: CB 3B         srl  e
+*233A: CB 3B         srl  e
+*233C: 7A            ld   a,d                
+*233D: E6 03         and  0x03
+*233F: 0F            rrca
+*2340: 0F            rrca
+*2341: B3            or   e
+*2342: E6 F8         and  0xF8
+*2344: 4F            ld   c,a                 | C = scroll offset to write to OBJRAM_BACK_BUF 
+*
+** we're going to clear this line ready for scrolling text on.
+*2345: 21 00 50      ld   hl,0x5000            | HL = start of character RAM
+*2348: 78            ld   a,b                 | restore column index from B (see @0x232D)
+*2349: 85            add  a,l                 
+*234A: 6F            ld   l,a                 | Add column index to L. Now HL = pointer to column to clear
+*234B: 11 20 00      ld   de,0x0020            | offset to add to HL. 0x20 (32 decimal) characters per row
+*234E: 43            ld   b,e                 | B = count of how many characters need to be cleared by DJNZ loop
+*234F: 36 10         ld   (hl),0x10            | write empty space character
+*2351: 19            add  hl,de               | add offset to HL. Now HL points to same column next row down
+*2352: 10 FB         djnz 0x234F
+*2354: E1            pop  hl                  | restore attribute pointer from the stack
+*2355: 71            ld   (hl),c              | write initial scroll offset to OBJRAM_BACK_BUF
+*2356: 3E 01         ld   a,0x01
+*2358: 32 B0 40      ld   (0x40B0),a           | set IS_COLUMN_SCROLLING flag
+*235B: C9            ret
+
+TEXTPTRS:                                     
+	dc.l	TXT_GAME_OVER
+	dc.l	TXT_PUSH_START_BUTTON  
+	dc.l	TXT_PLAYER_ONE 
+	dc.l	TXT_PLAYER_TWO 
+	dc.l	TXT_HIGH_SCORE
+	dc.l	TXT_CREDIT
+	dc.l	TXT_BONUS_GALIXIP_FOR___000_PTS  
+	dc.l	TXT_CONVOY_CHARGER 
+	dc.l	TXT___SCORE_ADVANCE_TABLE__
+	dc.l	TXT_MISSION__DESTROY_ALIENS
+	dc.l	TXT_WE_ARE_THE_GALAXIANS
+	dc.l	TXT_30_______60__PTS 
+	dc.l	TXT_40_______80__PTS
+	dc.l	TXT_50______100__PTS
+	dc.l	TXT_60______300__PTS
+	dc.l	TXT_NAMCO_logo
+	dc.l	TXT_FREE_PLAY
+
+
 DISPLAY_BOTTOM_OF_SCREEN:
 	rts
 	
@@ -1175,6 +1361,81 @@ COLOUR_ATTRIBUTE_TABLE_3:
 * Referenced by code @ 0x0D1D
 	.byte	0x00,0x00,0x00,0x00,0x04,0x01,0x04,0x02,0x04,0x01,0x03,0x03,0x02,0x02,0x01,0x02
 
+* address to print followed by text
+	.align	2
+TXT_GAME_OVER:
+	.word	0x5296
+	.ascii	"GAME@@OVER?"
+	.align	2
+TXT_PUSH_START_BUTTON:
+	.word	0x52f1
+	.ascii	"PUSH@START@BUTTON?"
+	.align	2
+TXT_PLAYER_ONE:
+	.word	0x5294
+	.ascii	"PLAYER@ONE?"
+	.align	2
+TXT_PLAYER_TWO:
+	.word	0x5294
+	.ascii	"PLAYER@TWO?"
+	.align	2
+TXT_HIGH_SCORE:
+	.word	0x5280
+	.ascii	"HIGH@SCORE?"
+	.align	2
+TXT_CREDIT:
+	.word	0x537F
+	.ascii	"CREDIT?"
+	.align	2
+TXT_BONUS_GALIXIP_FOR___000_PTS:
+	.word	0x537F
+	.ascii	"BONUS@GALIXIP@FOR@@@000@PTS?"
+	.align	2
+TXT_CONVOY_CHARGER:
+	.word	0x52D1
+	.ascii	"CONVOY@@CHARGER?"
+	.align	2
+TXT___SCORE_ADVANCE_TABLE__:
+	.word	0x534F
+	.ascii	"[@SCORE@ADVANCE@TABLE@[?"
+	.align	2
+TXT_MISSION__DESTROY_ALIENS:
+	.word	0x5369
+	.ascii	"MISSION"
+	.byte	0xd3
+	.ascii	"@DESTROY@ALIENS?"
+	.align	2
+TXT_WE_ARE_THE_GALAXIANS:
+	.word	0x5327
+	.ascii	"WE@ARE@THE@GALAXIANS?"
+	.align	2
+TXT_30_______60__PTS:
+	.word	0x52D9
+	.ascii	"@@30@@@@@@@60@@"
+	.byte	0xD1,0xD2,0xD3,0x3F
+	.align	2
+TXT_40_______80__PTS:
+	.word	0x52D7
+	.ascii	"@@40@@@@@@@80@@"
+	.byte	0xD1,0xD2,0xD3,0x3F
+	.align	2
+TXT_50______100__PTS:
+	.word	0x52D5
+	.ascii	"@@50@@@@@@100@@"
+	.byte	0xD1,0xD2,0xD3,0x3F
+	.align	2
+TXT_60______300__PTS:
+	.word	0X52D3
+	.ascii	"@@60@@@@@@300@@"
+	.byte	0xD1,0xD2,0xD3,0x3F
+	.align	2
+TXT_NAMCO_logo:
+	.word	0x52C7
+	.byte	0xCA,0xCB,0xCC,0xCD,0xCE,0xCF,0x9E,0x9F,0x3F
+	.align	2
+TXT_FREE_PLAY:
+	.word	0x537F
+	.ascii	"FREE@PLAY?"
 	.align	2
 	
 *********
