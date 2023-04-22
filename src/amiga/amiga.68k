@@ -14,6 +14,8 @@ AttnFlags = 128
 AFB_68010 = 0
 NO68020 = 1
 
+SCREEN_ADDRESS = 0x5000
+
 STATE_ACTIVE = 2
 STATE_DO_NOT_UPDATE_SHADOW = 1
 STATE_INACTIVE = 0
@@ -874,39 +876,39 @@ osd_disable_vblank_interrupt:
 	move.w	#0x0030,_custom+intena
 	rts
 		
-* d0=offset (preserved), d1=attribute (preserved)
-* d0 starts at 0x5000
+* d6=screen address (preserved), d0=attribute (preserved)
+* d6 starts at 0x5000
 osd_w_bg_colorram:
     .ifeq OPT_DISABLE_BG_LAYER
-	movem.l	d0-d1/d7/a0-a1,-(a7)
-	sub.w	#0x5000,d0
+	movem.l	d0-d1/d6/d7/a0-a1,-(a7)
+	sub.w	#SCREEN_ADDRESS,d6
 	lea		bg_colorram,a1
-	move.b	d1,(a1,d0.w)	| store attribute in bg table
+	move.b	d0,(a1,d6.w)	| store attribute in bg table
 	lea		bg_videoram,a1
-	move.b	d1,d2
-	move.b	(a1,d0.w),d1	| fetch tile from character grid
+	move.b	d0,d1
+	move.b	(a1,d6.w),d0	| fetch tile from character grid
 	**bsr.b	update_bg_tile
-	movem.l	(a7)+,d0-d1/d7/a0-a1
+	movem.l	(a7)+,d0-d1/d6/d7/a0-a1
    .endif | OPT_DISABLE_BG_LAYER
 	rts
 
-* d0=offset (preserved), d1=tile (preserved)
-* d0 starts at 0x5000
+* d6=screen address (preserved), d0=tile (preserved)
+* d6 starts at 0x5000
 * must preserve A0 and D7 too
 osd_w_bg_videoram:
     .ifeq OPT_DISABLE_BG_LAYER
-	movem.l	d0-d3/a0-a1,-(a7)
-	sub.w	#0x5000,d0
+	movem.l	d0-d3/d6/a0-a1,-(a7)
+	sub.w	#SCREEN_ADDRESS,d6
 	lea		bg_videoram,a1
-	add.w	d0,a1
-	cmp.b	(a1),d1
+	add.w	d6,a1
+	cmp.b	(a1),d0
 	beq.b	0f		| already the proper value
-	move.b	d1,(a1)	| update logical grid
+	move.b	d0,(a1)	| update logical grid
 	lea		bg_colorram,a1
-	move.b	(a1,d0.w),d2	| color & X/Y flip data
+	move.b	(a1,d6.w),d1	| color & X/Y flip data
 	bsr.b		update_bg_tile
 0:
-	movem.l	(a7)+,d0-d3/a0-a1
+	movem.l	(a7)+,d0-d3/d6/a0-a1
     .endif | OPT_DISABLE_BG_LAYER
 	rts
 
@@ -981,16 +983,16 @@ osd_w_bg_videoram:
 	.endr
 	.endm
 	
-* d0: offset
-* d1: tile code
-* d2: attribute
+* d6: screen offset
+* d0: tile code
+* d1: attribute
 update_bg_tile:
 	* compute Y
-	and.w	#0xFF,d1	| mask up to 255
-	move.w	d0,d3
-	lsr.w	#5,d0		| this is X
-	neg.w	d0
-	add.w	#32,d0
+	and.w	#0xFF,d0	| mask up to 255
+	move.w	d6,d3
+	lsr.w	#5,d6		| this is X
+	neg.w	d6
+	add.w	#32,d6
 	and.w	#0x1F,d3	| this is Y
 	* multiply by 240
 	lea		mulNB_BYTES_PER_ROW_table(pc),a0
@@ -999,11 +1001,11 @@ update_bg_tile:
 	move.w	(a0,d3.w),d3
 	lsl.w	#3,d3		| times 8
 	add.w	d3,a1
-	add.w	d0,a1
+	add.w	d6,a1
 	lea		characters,a0
-	add.w	d1,d1
-	add.w	d1,d1
-	move.l	(a0,d1.w),d0
+	add.w	d0,d0
+	add.w	d0,d0
+	move.l	(a0,d0.w),d0
 	beq.b	0f
 	move.l	d0,a0
 	
