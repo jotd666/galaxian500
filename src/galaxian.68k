@@ -255,8 +255,7 @@ IS_GAME_OVER:                        |  $4007         ; Set to 1 when GAME OVER 
 	ds.b	0x01
 TEMP_COUNTER_1:                      |  $4008         ; temporary counter used for delays, such as waiting before transitioning to next stage of a script
 	ds.b	0x01
-TEMP_COUNTER_2:                      |  $4009         ; temporary counter used for delays
-									 |
+TEMP_COUNTER_2:                      |  $4009         ; temporary counter used for delays								 |
 	ds.b	0x01
 SCRIPT_STAGE:                        |  $400A         ; Identifies what stage of the script we are at.  
                                      |                ; 0-based index into script tables located @ $0164, $0400, $0540, $0785
@@ -814,7 +813,7 @@ GENERATE_RANDOM_NUMBER:
 	rts
 
 galaxian_irq:
-
+*TODO
 * update screen in one go - IMPORTANT
 *0079: 21 20 40      ld   hl,0x4020            | pointer to OBJRAM_BACK_BUF buffer held in RAM
 *007C: 11 00 58      ld   de,0x5800            | start of screen attribute RAM
@@ -838,11 +837,11 @@ galaxian_irq:
 
 		subq.b	#1,TIMING_VARIABLE             | decrement value
 
-*00B4: CD EF 18      call 0x18EF               | call CHECK_IF_COIN_INSERTED
-*00B7: CD 31 19      call 0x1931               | call HANDLE_UNPROCESSED_COINS
-*00BD: CD F5 16      call 0x16F5               | call HANDLE_SOUND
-*00C0: CD 98 18      call 0x1898               | call HANDLE_SWARM_SOUND
-*00C3: CD C0 18      call 0x18C0               | call HANDLE_TEXT_SCROLL
+*		jbsr CHECK_IF_COIN_INSERTED               | 
+*jbsr HANDLE_UNPROCESSED_COINS
+*jbsr HANDLE_SOUND
+*jbsr HANDLE_SWARM_SOUND
+*jbsr HANDLE_TEXT_SCROLL
 
 * invoke script [SCRIPT_NUMBER]
 	moveq	#0,d0
@@ -1002,7 +1001,7 @@ SET_ALIEN_PRESENCE_FLAGS:
 DISPLAY_GAME_OVER_AND_REMAINING_CREDIT_1:      
 	move.w	#0x0701,d3            | command: BOTTOM_OF_SCREEN_INFO_COMMAND, parameter: 1 (invokes DISPLAY_AVAILABLE_CREDIT)
 	jbsr	QUEUE_COMMAND		| call QUEUE_COMMAND
-	move.w	#0x0701,d3          | command: PRINT_TEXT_COMMAND, parameter: 0 (index of GAME OVER)
+	move.w	#0x0600,d3          | command: PRINT_TEXT_COMMAND, parameter: 0 (index of GAME OVER)
 	jbsr	QUEUE_COMMAND               | call QUEUE_COMMAND
 	moveq  #1,d0
 	move.b	d0,IS_GAME_OVER           | set IS_GAME_OVER flag
@@ -1012,30 +1011,195 @@ DISPLAY_GAME_OVER_AND_REMAINING_CREDIT_1:
 	clr.b	CURRENT_PLAYER           | set CURRENT_PLAYER to 0 (player one)
 	clr.b	IS_TWO_PLAYER_GAME
 	clr.b	IS_GAME_IN_PLAY
-	move.b	#0x10,TEMP_COUNTER_1 
-	move.b	#0x60,TEMP_COUNTER_2     | set TEMP_COUNTER_1 and TEMP_COUNTER_2 
+	move.b	#0x60,TEMP_COUNTER_1 
+	move.b	#0x10,TEMP_COUNTER_2     | set TEMP_COUNTER_1 and TEMP_COUNTER_2 
 	rts
 
-SET_PUSH_START_BUTTON_COUNTER:
+	
 HIDE_SWARM_AND_PREPARE_TO_CLEAR_SCREEN:
+    lea		ALIEN_SWARM_FLAGS(pc),a0            | load HL with address of 
+    move.w	#0x80-1,d1               | sizeof(ALIEN_SWARM_FLAGS) array
+0:
+	clr.b	(a0)+             | Clear all alien swarm flags 
+	dbf		d1,0b
+	
+    clr.b	TIMING_VARIABLE          
+    clr.b   HAVE_AGGRESSIVE_ALIENS 		| reset HAVE_AGGRESSIVE_ALIENS flag
+	move.w	#0x5002,TEMP_CHAR_RAM_PTR       | address of column 2 in character RAM
+    move.b	#0x20,TEMP_COUNTER_2    
+    addq.b	#1,SCRIPT_STAGE                | advance to next part of script.
+	rts
+	
+*
+* This piece of code clears all of the screen except the HUD (score, credits inserted etc)
+*
+
 CLEAR_SCREEN_BEFORE_WE_ARE_THE_GALAXIANS_INTRO:
+	move.w	TEMP_CHAR_RAM_PTR(pc),d6  | load HL with contents of TEMP_CHAR_RAM_PTR
+     move.w	#0x1C-1,d1               | We want to clear #0x1C (28 characters) on this row 
+     move.b	#0x10,d0               | ordinal for empty character
+0:
+	 jbsr	osd_w_bg_videoram
+	 dbf		D1,0b         | Clear 28 characters from row
+                              | As a row is 32 characters wide, to get to start of next row...
+     add.w	#4,d6              | ... we need to add 4 characters.
+     move.w	d6,TEMP_CHAR_RAM_PTR         | write to TEMP_CHAR_RAM_PTR
+	 subq.b	#1,TEMP_COUNTER_2     | decrement value of counter
+     beq.b	1f                  | if value is not zero then exit 
+	rts
+1:
+	addq.b	#1,SCRIPT_STAGE		| advance to next part of script.
+	move.b	#0x40,TEMP_COUNTER_1
+	move.b	#0x04,TEMP_COUNTER_2	| set TEMP_COUNTER_1 and TEMP_COUNTER_2
+
+	lea		HAS_PLAYER_SPAWNED(pc),a0
+	move.w	#FLAGSHIP_ATTACK_SECONDARY_COUNTER-HAS_PLAYER_SPAWNED,d1
+0:
+	clr.b	(a0)+
+	dbf		d1,0b    | Clear from 0x4200-422F
+	  
+      | reset regen hflip (not done)
+      | reset regen vflip (not done)
+      | reset DISPLAY_IS_COCKTAIL_P2  (not done)
+      move.b	#1,DISABLE_SWARM_ANIMATION           | set  flag
+      lea	COLOUR_ATTRIBUTE_TABLE_3(pc),a0
+      bra	SET_COLOUR_ATTRIBUTES               | jump to SET_COLOUR_ATTRIBUTES
+
+*
+* The alien swarm scrolling in the attract mode has changed scroll values for some columns, 
+* and these scroll values need to be reset before we can print text like "WE ARE THE GALAXIANS" "MISSION: DESTROY ALIENS"
+* in those columns. If we don't reset the scroll values, the text will probably be off-centre and not look good.
+*
+
+HANDLE_ALIEN_SWARM_SCROLL_RESET:
+    moveq	#0,d0                   | reset scroll offset to 0
+    jra     SET_SWARM_SCROLL_OFFSET
+
+*
+* This is used to scroll the alien swarm from side to side.
+*
+* Expects:
+* register A: Scroll offset value
+*
+
+SET_SWARM_SCROLL_OFFSET:
+    lea	OBJRAM_BACK_BUF+8,a0     | pointer to attribute and column scroll data held in OBJRAM_BACK_BUF
+    move.w	#8,d1                | we're doing 9 columns.
+0:
+	move.b	d0,(a0)
+    addq.w	#2,a0        | bump HL to next scroll offset address in OBJRAM_BACK_BUF
+    dbf		d1,0b
+    rts
+
+
+MAKE_SWARM_MOVE_RIGHT:
+	move.b	#1,SWARM_DIRECTION   | Swarm now moves right.
+	rts
+
+MAKE_SWARM_MOVE_LEFT:
+	clr.b	SWARM_DIRECTION   | Swarm now moves left
+	rts
+
+*0988: 2A 0E 42      ld   hl,(0x420E)          | read SWARM_SCROLL_VALUE
+*098B: C3 6F 09      jp   0x096F
+
+
+*
+* Displays the following:
+*
+* WE ARE THE GALAXIANS
+* MISSION: DESTROY ALIENS
+* - SCORE ADVANCE TABLE -
+* CONVOY CHARGER
+
 DISPLAY_WE_ARE_THE_GALAXIANS_INTRO:
+     bsr	HANDLE_ALIEN_SWARM_SCROLL_RESET
+     subq.b	#1,TEMP_COUNTER_1
+     beq.b	0f
+	 rts 
+0:
+     move.b	#0x50,TEMP_COUNTER_1            | reset counter
+     move.w	#0x0600,d3               | Command: PRINT_TEXT
+
+* HL now points to a number between 1 and 4. This identifies a text string we want to print: 
+* 1: CONVOY CHARGER             
+* 2: SCORE ADVANCE TABLE
+* 3: MISSION: DESTROY ALIENS    
+* 4: WE ARE THE GALAXIANS
+	move.b	TEMP_COUNTER_2(pc),d3
+	add.b	#6,d3      | add 6 to it to give us an index for PRINT_TEXT
+    jbsr	QUEUE_COMMAND
+    subq.b	#1,TEMP_COUNTER_2              | bump TEMP_COUNTER_2 to index of next string to print
+    beq.b	1f
+	rts
+1:
+	addq.b	#1,SCRIPT_STAGE     | advance to next stage
+	move.b	#0x20,TEMP_COUNTER_1
+	move.b	#0x04,TEMP_COUNTER_2  | set TEMP_COUNTER_1 and TEMP_COUNTER_2
+
+* hide all sprites 
+	lea		INFLIGHT_ALIENS(pc),a0
+	move.w	#0x3F,d1
+0:
+	clr.l	(a0)+
+	dbf		d1,0b     | Fill the entire INFLIGHT_ALIENS array with zero
+    clr.b	ATTRACT_MODE_SCROLL_ID
+    rts
+
+
 SCROLL_ON_CONVOY_CHARGER_POINTS:
 DISPLAY_NAMCO_LOGO: 
 BLINK_CONVOY_CHARGER_POINTS:
-HIDE_SWARM_AND_PREPARE_TO_CLEAR_SCREEN: 
 CLEAR_WE_ARE_GALAXIANS_SCREEN_AND_DISPLAY_GAME_OVER:
 DISPLAY_GAME_OVER_AND_REMAINING_CREDIT_2:
-WAIT_FOR_TEMP_COUNTER_2_THEN_ADVANCE_TO_NEXT_STAGE: 
 CLEAR_ALIEN_SWARM_AND_SUSPEND_SWARM_ANIMATION:
 CREATE_ATTRACT_MODE_ALIEN_SWARM:
 HANDLE_SPAWN_PLAYER:
 HANDLE_MAIN_GAME_LOGIC:
 HANDLE_PLAYER_ONE_KILLED:
-WAIT_FOR_TEMP_COUNTER_2_THEN_ADVANCE_TO_NEXT_STAGE:
-SET_SCRIPT_STAGE_TO_1:
 		rts
 	
+
+
+SET_SCRIPT_STAGE_TO_1:
+	move.b	#1,SCRIPT_STAGE         | set SCRIPT_STAGE to 1
+	move.b	#3,TEMP_COUNTER_1
+	move.b	#3,TEMP_COUNTER_2
+	rts
+
+*
+* Decrements value in TEMP_COUNTER_2. When counter value hits zero, advance script to next stage.
+* 
+
+WAIT_FOR_TEMP_COUNTER_2_THEN_ADVANCE_TO_NEXT_STAGE:
+	subq.b	#1,TEMP_COUNTER_2        | decrement value of TEMP_COUNTER_2 counter
+	beq.b	0f
+	rts
+0:
+	addq.b	#1,SCRIPT_STAGE		| advance script to next stage
+	rts
+
+
+
+*
+* Decrements value in TEMP_COUNTER_1. When counter value hits zero, reset value of TEMP_COUNTER_1 to 0x3C (60 decimal)
+* and then decrement value of TEMP_COUNTER_2. 
+*
+* When value of TEMP_COUNTER_2 hits zero, advance script to next stage.
+*
+
+WAIT_FOR_TEMP_COUNTERS:
+	subq.b	#1,TEMP_COUNTER_1        | decrement value of TEMP_COUNTER_1 counter
+	beq.b	0f
+	rts
+0:
+	move.b	#0x3C,TEMP_COUNTER_1             | reset counter to 0x3C (50 decimal)
+	bra.b	WAIT_FOR_TEMP_COUNTER_2_THEN_ADVANCE_TO_NEXT_STAGE	| and go check if that counter 2 has counted down to 0 yet 
+
+
+SET_PUSH_START_BUTTON_COUNTER:
+	move.b	#1,PUSH_START_BUTTON_COUNTER
+	bra.b	WAIT_FOR_TEMP_COUNTERS
 	
 * < A1: player score which replaces high score
 UPDATE_HIGH_SCORE:
