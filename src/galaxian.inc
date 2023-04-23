@@ -12,8 +12,7 @@
    
     * score is BCD format
     OPT_START_SCORE=0x0000000
-
-
+	
 ***
 *** end of BUILD OPTIONS
 ***

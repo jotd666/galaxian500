@@ -1,5 +1,6 @@
 * Galaxian, amiga 68k transcode
 
+FAST_INTRO_TEXT = 1
 
 * exports
 
@@ -734,8 +735,12 @@ ENEMY_BULLETS_START:                 |  $4260
 	ds.b	0x45
 ENEMY_BULLETS_END:                   |  $42A5
 
-
-
+	* macro to stop program with a direct error code
+	* when using whdload (amiga)
+	.macro	TODOM	item
+	tst.l	0xFF000000+\item
+	.endm
+	
 * INFLIGHT_ALIENS is an array of type INFLIGHT_ALIEN. 
 * An "Inflight alien" is my term for an alien that has broken off from the main swarm body to attack the player. 
 *
@@ -982,10 +987,13 @@ script_one_jump_table:
 	.long	SET_SCRIPT_STAGE_TO_1
 
 SCRIPT_TWO:
+	TODOM	0x1002
 	rts
 SCRIPT_THREE:
+	TODOM	0x1003
 	rts
 SCRIPT_FOUR:
+	TODOM	0x1004
 	rts
 	
 *TODO
@@ -1011,8 +1019,12 @@ DISPLAY_GAME_OVER_AND_REMAINING_CREDIT_1:
 	clr.b	CURRENT_PLAYER           | set CURRENT_PLAYER to 0 (player one)
 	clr.b	IS_TWO_PLAYER_GAME
 	clr.b	IS_GAME_IN_PLAY
-	move.b	#0x60,TEMP_COUNTER_1 
+	move.b	#0x60,TEMP_COUNTER_1
+	.ifdef	FAST_INTRO_TEXT
+    move.b	#1,TEMP_COUNTER_2
+	.else
 	move.b	#0x10,TEMP_COUNTER_2     | set TEMP_COUNTER_1 and TEMP_COUNTER_2 
+	.endif
 	rts
 
 	
@@ -1026,7 +1038,11 @@ HIDE_SWARM_AND_PREPARE_TO_CLEAR_SCREEN:
     clr.b	TIMING_VARIABLE          
     clr.b   HAVE_AGGRESSIVE_ALIENS 		| reset HAVE_AGGRESSIVE_ALIENS flag
 	move.w	#0x5002,TEMP_CHAR_RAM_PTR       | address of column 2 in character RAM
-    move.b	#0x20,TEMP_COUNTER_2    
+	.ifdef	FAST_INTRO_TEXT
+    move.b	#1,TEMP_COUNTER_2
+	.else
+    move.b	#0x20,TEMP_COUNTER_2
+	.endif
     addq.b	#1,SCRIPT_STAGE                | advance to next part of script.
 	rts
 	
@@ -1146,19 +1162,305 @@ DISPLAY_WE_ARE_THE_GALAXIANS_INTRO:
     clr.b	ATTRACT_MODE_SCROLL_ID
     rts
 
-
 SCROLL_ON_CONVOY_CHARGER_POINTS:
-DISPLAY_NAMCO_LOGO: 
+	jbsr	HANDLE_ALIEN_SWARM_SCROLL_RESET
+	jbsr	HANDLE_INFLIGHT_ALIEN_SPRITE_UPDATE
+	jbsr	HANDLE_INFLIGHT_ALIENS
+	jbsr	HANDLE_DRAW_CONVOY_CHARGER_POINTS
+	subq.b	#1,TEMP_COUNTER_1
+	bne.b	0f
+	move.b	#0xD2,TEMP_COUNTER_1
+0:
+	rts
+
+* get ready to scroll the next alien sprite and associated points values on screen
+	jbsr	INIT_CONVOY_CHARGER_SPRITE
+	addq.b	#1,ATTRACT_MODE_SCROLL_ID     | set id to next thing to scroll on
+	subq.b	#1,TEMP_COUNTER_2			  | dec TEMP_COUNTER_2
+	beq.b	0f
+	rts
+0:
+	move.b	#0xD2,TEMP_COUNTER_2
+	addq.b	#1,SCRIPT_STAGE
+	clr.b	OBJRAM_BACK_BUF+0x38		      | write to scroll offset in OBJRAM_BACK_BUF (0x4058)
+	rts
+
+
+*
+* This important routine is responsible for handling the enemy sprites in the game. 
+* It reads the position, colour and animation frame of each item in the INFLIGHT_ALIENS array and 
+* projects it into the relevant INFLIGHT_ALIEN_SPRITE of OBJRAM_BACK_BUF_SPRITES. 
+*
+* In plain English: the sprite back buffer is filled by this routine :) 
+* 
+* JOTD: removed cocktail mode
+
+HANDLE_INFLIGHT_ALIEN_SPRITE_UPDATE:
+	TODOM	0x200
+*0BC4: DD 21 B0 42   ld   ix,0x42B0            | load IX with address of INFLIGHT_ALIENS
+*0BC8: FD 21 60 40   ld   iy,0x4060            | load IY with address of OBJRAM_BACK_BUF_SPRITES
+*
+** for the first 3 alien sprites, their Y coordinates need to be offset 7 pixels vertically so that the hardware can render them correctly.
+*0BCC: 06 03         ld   b,0x03               | number of sprites to set sprite state for
+*0BCE: 0E 07         ld   c,0x07               | set pixel offset to 7
+*0BD0: CD 20 0C      call 0x0C20               | call SET_SPRITE_STATE               
+*0BD3: 11 20 00      ld   de,0x0020            | sizeof (INFLIGHT_ALIEN)
+*0BD6: DD 19         add  ix,de               | bump IX to point to next alien entry
+*0BD8: 11 04 00      ld   de,0x0004            | sizeof (INFLIGHT_ALIEN_SPRITE)
+*0BDB: FD 19         add  iy,de               | bump IY to point to next sprite entry in OBJRAM_BACK_BUF_SPRITES
+*0BDD: 10 F1         djnz 0x0BD0
+*
+** for the next 5 alien sprites, their Y coordinates need to be offset 8 pixels vertically.
+*0BDF: 06 05         ld   b,0x05               | number of sprites to set sprite state for
+*0BE1: 0C            inc  c                   | adjust pixel offset to be 8
+*0BE2: CD 20 0C      call 0x0C20               | call SET_SPRITE_STATE
+*0BE5: 11 20 00      ld   de,0x0020            | sizeof (INFLIGHT_ALIEN)
+*0BE8: DD 19         add  ix,de               | bump IX to point to next alien entry
+*0BEA: 11 04 00      ld   de,0x0004            | sizeof (INFLIGHT_ALIEN_SPRITE)
+*0BED: FD 19         add  iy,de               | bump IY to point to next sprite entry in OBJRAM_BACK_BUF_SPRITES
+*0BEF: 10 F1         djnz 0x0BE2
+*0BF1: C9            ret
+
+*
+* Extract the colour, position, animation frame information from an INFLIGHT_ALIEN structure
+* and project it into a INFLIGHT_ALIEN_SPRITE.
+*
+* Expects:
+* C = pixel adjustment for Y coordinate
+* IX = pointer to INFLIGHT_ALIEN structure to extract information from
+* IY = pointer to INFLIGHT_ALIEN_SPRITE structure to be filled
+*
+
+SET_SPRITE_STATE:
+	TODOM	0x201
+*0C20: DD CB 00 46   bit  0,(ix+0x00)          | test INFLIGHT_ALIEN.IsActive
+*0C24: CA 98 0C      jp   z,0x0C98             | if alien is not active, goto SET_INACTIVE_OR_DYING_SPRITE_STATE
+*0C27: DD 7E 16      ld   a,(ix+0x16)          | read INFLIGHT_ALIEN.Colour
+*0C2A: FD 77 02      ld   (iy+0x02),a          | write to INFLIGHT_ALIEN_SPRITE.Colour
+*0C2D: DD 7E 03      ld   a,(ix+0x03)          | read INFLIGHT_ALIEN.X
+*0C30: D6 08         sub  0x08
+*0C32: FD 77 03      ld   (iy+0x03),a          | write to INFLIGHT_ALIEN_SPRITE.X
+*0C35: DD 7E 04      ld   a,(ix+0x04)          | read INFLIGHT_ALIEN.Y 
+*0C38: 2F            cpl                      | flip bits  
+*0C39: 91            sub  c                   | subtract pixel adjustment
+*0C3A: FD 77 00      ld   (iy+0x00),a          | write to INFLIGHT_ALIEN_SPRITE.Y 
+*
+** Determine what way the alien is facing and set the sprite XFlip/YFlip/Code properties accordingly
+**
+** Important point to remember: non-flagship aliens are like bats. They hang upside down in the swarm.
+** If you want to see what the sprites look like before being flipped, refer to my sprite grabs @ 
+** http://seanriddle.com/galaxiansprites.html
+*
+*0C3D: DD 7E 05      ld   a,(ix+0x05)          | read INFLIGHT_ALIEN.AnimationFrame
+*0C40: A7            and  a                   | set flags 
+*0C41: F2 58 0C      jp   p,0x0C58
+*
+*0C44: FE FA         cp   0xFA                 | compare to -6 
+*0C46: FA 82 0C      jp   m,0x0C82
+*
+** alien is between an angle of 90 and 180 degrees (as player sees it)
+*0C49: 2F            cpl
+*0C4A: C6 12         add  a,0x12
+*0C4C: F6 40         or   0x40                 | set X-Flip bit for sprite
+*0C4E: DD 86 0F      add  a,(ix+0x0f)          | add in INFLIGHT_ALIEN.AnimFrameStartCode
+*0C51: FD 77 01      ld   (iy+0x01),a          | write to INFLIGHT_ALIEN_SPRITE.Code
+*0C54: FD 34 03      inc  (iy+0x03)            | increment INFLIGHT_ALIEN_SPRITE.X
+*0C57: C9            ret
+*
+*0C58: FE 06         cp   0x06
+*0C5A: F2 6E 0C      jp   p,0x0C6E
+*
+** alien is between an angle of 180 and 270 degrees (as player sees it)
+*0C5D: C6 11         add  a,0x11
+*0C5F: F6 C0         or   0xC0                 | set X-Flip and Y-Flip bits for sprite
+*0C61: DD 86 0F      add  a,(ix+0x0f)          | add in INFLIGHT_ALIEN.AnimFrameStartCode
+*0C64: FD 77 01      ld   (iy+0x01),a          | write to INFLIGHT_ALIEN_SPRITE.Code
+*0C67: FD 34 03      inc  (iy+0x03)            | increment INFLIGHT_ALIEN_SPRITE.X
+*0C6A: FD 34 00      inc  (iy+0x00)            | increment INFLIGHT_ALIEN_SPRITE.Y 
+*0C6D: C9            ret
+*
+*0C6E: FE 0C         cp   0x0C
+*0C70: F2 90 0C      jp   p,0x0C90
+*
+** alien is between an angle of 270-360 degrees (as player sees it)
+*0C73: 2F            cpl
+*0C74: C6 1E         add  a,0x1E
+*0C76: F6 80         or   0x80                  | set Y-Flip bit for sprite
+*0C78: DD 86 0F      add  a,(ix+0x0f)           | add in INFLIGHT_ALIEN.AnimFrameStartCode
+*0C7B: FD 77 01      ld   (iy+0x01),a           | write to INFLIGHT_ALIEN_SPRITE.Code
+*0C7E: FD 34 00      inc  (iy+0x00)             | increment INFLIGHT_ALIEN_SPRITE.Y 
+*0C81: C9            ret
+*
+*0C82: FE F4         cp   0xF4
+*0C84: FA 94 0C      jp   m,0x0C94
+*
+** alien is between an angle of 0-90 degrees (as player sees it)
+*0C87: C6 1D         add  a,0x1D
+*0C89: DD 86 0F      add  a,(ix+0x0f)           | add in INFLIGHT_ALIEN.AnimFrameStartCode
+*0C8C: FD 77 01      ld   (iy+0x01),a           | write to INFLIGHT_ALIEN_SPRITE.Code
+*0C8F: C9            ret
+*
+*0C90: D6 18         sub  0x18
+*0C92: 18 AC         jr   0x0C40
+*
+*0C94: C6 18         add  a,0x18
+*0C96: 18 A8         jr   0x0C40
+
+DISPLAY_NAMCO_LOGO:
+	jbsr	HANDLE_ALIEN_SWARM_SCROLL_RESET
+	jbsr	HANDLE_INFLIGHT_ALIEN_SPRITE_UPDATE
+	jbsr	HANDLE_INFLIGHT_ALIENS
+	jbsr	HANDLE_DRAW_CONVOY_CHARGER_POINTS
+
+* wait until TEMP_COUNTER_2 reaches 0
+	subq.b	#1,TEMP_COUNTER_2
+	beq.b	0f
+	rts
+0:
+	addq.b	#1,SCRIPT_STAGE		| advance to next stage
+	clr.b	OBJRAM_BACK_BUF+0x38		      | write to scroll offset in OBJRAM_BACK_BUF (0x4058)
+	move.b	#0x11,TEMP_COUNTER_2
+	move.b	#0x40,TEMP_COUNTER_1
+	addq.b	#1,ATTRACT_MODE_SCROLL_ID
+	move.w	#0x060F,d3            | command: PRINT_TEXT, parameter: #0x0F (Displays NAMCO logo)
+	jra		QUEUE_COMMAND               
+
+
+*
+*
+*
+*
+*
+
 BLINK_CONVOY_CHARGER_POINTS:
+	jbsr	HANDLE_ALIEN_SWARM_SCROLL_RESET
+	jbsr	HANDLE_INFLIGHT_ALIEN_SPRITE_UPDATE
+	jbsr	HANDLE_INFLIGHT_ALIENS
+	jbsr	HANDLE_DRAW_CONVOY_CHARGER_POINTS
+	jra		WAIT_FOR_TEMP_COUNTERS
+
 CLEAR_WE_ARE_GALAXIANS_SCREEN_AND_DISPLAY_GAME_OVER:
+	TODOM	8
 DISPLAY_GAME_OVER_AND_REMAINING_CREDIT_2:
+	TODOM	9
 CLEAR_ALIEN_SWARM_AND_SUSPEND_SWARM_ANIMATION:
+	TODOM	10
 CREATE_ATTRACT_MODE_ALIEN_SWARM:
+	TODOM	11
 HANDLE_SPAWN_PLAYER:
+	TODOM	12
 HANDLE_MAIN_GAME_LOGIC:
+	TODOM	13
 HANDLE_PLAYER_ONE_KILLED:
-		rts
+	TODOM	14
+
+*
+* In the demo mode, this erases all of the points values underneath the text "CHARGER"
+*
+* in D1: number of rows
+
+CLEAR_DEMO_CONVOY_CHARGER_POINTS:
+     move.w	#0x5193,d6            | address in character RAM
+     move.w	#-32,d3            | offset to add to character RAM address  (-32 decimal.)
+	 and.w	#0xFF,d1
+	 subq.w	#1,d1
+0:
+     move.b	#3,d2               | 3 characters to erase
+     move.b	#0x10,d0               | ordinal of empty character
+1:
+     jbsr	osd_w_bg_videoram           | write empty character to screen       
+     add.w	d3,d6               | add offset. HL now points to character a row above, same column               
+     subq.b	#1,d2               | decrement count of characters to erase
+     bne.b	1b            | if not done goto 0x03CA
+     add.w	#0x62,d6
+     dbf	d1,0b
+     rts
+
+
+*
+* Handles the drawing and blinking of the CONVOY CHARGER points values in the demo.
+*
+
+HANDLE_DRAW_CONVOY_CHARGER_POINTS:
+	tst.b	ATTRACT_MODE_SCROLL_ID
+	bne.b	0f
+	rts					| if its zero, not time to scroll anything in yet, return
+0:
+	subq.b	#1,d0		| JOTD: if its one, seems that it's the same!
+	bne.b	1f
+	rts
+1:
+	move.b	d0,d1
+	move.b	TIMING_VARIABLE(pc),d0
+	move.b	d0,d2				 | save it in C 
+	and.w	#0x3F,d0                 | mask in bits 0..5. Now A is a value from 0..63 decimal.
+	bne.b	2f
+	jbsr	CLEAR_DEMO_CONVOY_CHARGER_POINTS 	| if bits 0..5 are not set, call CLEAR_DEMO_CONVOY_CHARGER_POINTS
+2:
+	cmp.b	#0x20,d0
+	bne.b	3f		| If A is not exactly 0x20 exit
+	rts
+3:
+
+* When we get here, we need to compute what flagship scores we are going to draw. 
+* We basically take the value in TIMING_VARIABLE, AND the value by 3 to give an index value in range of 0..3, then
+* multiply the index by 3 to give an offset into the flagship score table @0x039A.  
+* The end result is cycling flagship values.
+
+	roxl.b	#2,d2		| TIMING_VARIABLE saved in d2
+	and.w	#3,d2		| now d2 is a value from 0..3. d2 is now an index into table @0x039A 
+	move.w	d2,d0
+	add.w	d2,d2
+	add.w	d0,d2		| multiply d2 by 3
+	lea		flagship_table_039A,a0
+	move.w	#0x5193,d3      | address in character RAM
+	jbsr	DRAW_3_CHARACTERS
+	subq.b	#1,d1
+	bne.b	4f
+	rts
+4:
+	subq.b	#1,d1
+	and.w	#0xFF,d1
+* The alien scores are static and don't cycle, so we just draw them straight from the table 
+	lea	alien_table_03A6(pc),a0				| pointer to Alien score table
+5:
+	jbsr	DRAW_3_CHARACTERS
+	dbf		d1,5b
+	rts
+
+
+*
+* This routine is responsible for positioning alien sprites off screen ready to be scrolled onto the CONVOY CHARGER points table.
+* Once the positioning is done, the sprite is "handed over" to the routine @ 0x109B.
+*
+* Expects: HL(a0) points to TEMP_COUNTER_2
+*
+* The value in TEMP_COUNTER_2 specifies what type of alien we are scrolling on:
+*
+* 4: Flagship
+* 3: Red alien
+* 2: Purple alien
+* 1: Blue alien
+*
+
+INIT_CONVOY_CHARGER_SPRITE:
+	moveq	#0,d0
+	move.b	TEMP_COUNTER_2(pc),d0     | read type of alien to scroll on
+	subq.b	#1,d0		| convert A into a 0-based index 
+	move.b	d0,d1
 	
+	lsr.w	#5,d0		| multiply A by 32 (which is sizeof(INFLIGHT_ALIEN))
+	lea		INFLIGHT_ALIENS(pc),a0	  | HL = address of INFLIGHT_ALIENS[3]
+	add.w	d0,a0					   | Add offset to HL. HL now points to INFLIGHT_ALIEN record we're using to scroll sprite on with
+	move.b	#1,(a0)+            | set INFLIGHT_ALIEN.IsActive to 1 
+	clr.b	(a0)+				| reset INFLIGHT_ALIEN.IsDying 
+	move.b	#0xD,(a0)+			| set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_CONVOY_CHARGER_SET_COLOUR_POS_ANIM
+	addq.w	#1,a0
+	clr.b	(a0)+               | set INFLIGHT_ALIEN.Y to position offscreen
+	move.b	#0xC,(a0)+		        | set INFLIGHT_ALIEN.AnimationFrame
+	addq.w	#1,a0
+	move.b	d1,(a0)				     | set INFLIGHT_ALIEN.IndexInSwarm 
+	rts
 
 
 SET_SCRIPT_STAGE_TO_1:
@@ -1179,6 +1481,27 @@ WAIT_FOR_TEMP_COUNTER_2_THEN_ADVANCE_TO_NEXT_STAGE:
 	addq.b	#1,SCRIPT_STAGE		| advance script to next stage
 	rts
 
+*
+* Draw 3 characters in the same *column*.
+* Because the Galaxian monitor is turned on its side, the characters look like they are on the same row.
+* 
+* Expects:
+* A0 to point to 3 bytes defining the characters to draw 
+* D3 to point to character RAM to draw to
+*
+
+DRAW_3_CHARACTERS:
+    move.b	#3,d2               | number of characters to draw
+	move.w	d3,d6
+0:    
+	move.b	(a0)+,d0           | read character to draw  
+    bsr		osd_w_bg_videoram  | write to character RAM
+    sub.w	#0x20,d6           | subtract #0x20 (32 decimal) from it. Now DE points to character in same column, row above 
+    subq.b	#1,d2              | decrement counter of characters to draw. 
+    bne.b	0b                 | if counter !=0, more characters are to be drawn, goto 0x03B1
+    add.w	#0x62,d6           | Add #0x62 (98 decimal) to DE. Now DE is back on row we started drawing from.
+	move.w	d6,d3
+    rts
 
 
 *
@@ -1211,9 +1534,140 @@ UPDATE_HIGH_SCORE:
 		dbf		d2,0b
 		subq.w	#1,a1
 l_21F8: move.w	#0x5241,d6            | character RAM address where HIGH SCORE will be drawn
-		bra.b	PLOT_SCORE_CHARACTERS
+		jbra	PLOT_SCORE_CHARACTERS
+
+*
+* This routine is responsible for processing all 8 elements in the INFLIGHT_ALIENS array. 
+*
+
+HANDLE_INFLIGHT_ALIENS:
+	lea		INFLIGHT_ALIENS(pc),a2           | load IX with address of 
+    move.w	#0x20,d2                         | sizeof(INFLIGHT_ALIEN)
+	move.w	#8-1,d1							| 1 misc + 7 attacking aliens to process
+0:
+	movem.l	d1/d2,-(a7)
+	jbsr	HANDLE_INFLIGHT_ALIEN_STAGE_OF_LIFE
+	movem.l	(a7)+,d1/d2
+	add.w	d2,a2		        | bump IX to point to next INFLIGHT_ALIEN structure
+	dbf		d1,0b               | do while b!=0
+	rts
+
+*
+* Like humans, inflight aliens go through stages of life. They leave home, attack humans, maybe do a loop the loop,
+* then (maybe) return home. Just like we do!
+* 
+* This routine is used to invoke actions appropriate for the alien's stage of life.
+*
+* Expects:
+* IX = pointer to INFLIGHT_ALIEN structure.
+*
+
+HANDLE_INFLIGHT_ALIEN_STAGE_OF_LIFE:
+	tst.b	(IsDying,a2)          | test INFLIGHT_ALIEN.IsDying flag
+	jne		HANDLE_INFLIGHT_ALIEN_DYING    | if alien is dying, goto 
+	tst.b	(IsActive,a2)          | test INFLIGHT_ALIEN.IsActive flag 
+	bne.b	0f		| exit if not active
+	rts
+0:
+* We need to determine what stage of life the inflight alien is at, then call the appropriate function to
+* tell it how to behave. 
+	moveq	#0,d0
+	move.b	(StageOfLife,a2),d0 	| read INFLIGHT_ALIEN.StageOfLife
+	add.w	d0,d0
+	add.w	d0,d0
+	lea		table_0CE6(pc),a0
+	move.l	(a0,d0.w),a0
+	jmp		(a0)
+
+table_0CE6: 
+      .long		INFLIGHT_ALIEN_PACKS_BAGS
+      .long		INFLIGHT_ALIEN_FLIES_IN_ARC
+      .long		INFLIGHT_ALIEN_READY_TO_ATTACK
+      .long		INFLIGHT_ALIEN_ATTACKING_PLAYER
+      .long		INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN
+      .long		INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN
+      .long		INFLIGHT_ALIEN_RETURNING_TO_SWARM
+      .long		INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN 
+      .long		INFLIGHT_ALIEN_FULL_SPEED_CHARGE 
+      .long		INFLIGHT_ALIEN_ATTACKING_PLAYER_AGGRESSIVELY
+      .long		INFLIGHT_ALIEN_LOOP_THE_LOOP
+      .long		INFLIGHT_ALIEN_COMPLETE_LOOP
+      .long		INFLIGHT_ALIEN_UNKNOWN_1091
+      .long		INFLIGHT_ALIEN_CONVOY_CHARGER_SET_COLOUR_POS_ANIM
+      .long		INFLIGHT_ALIEN_CONVOY_CHARGER_START_SCROLL  
+      .long		INFLIGHT_ALIEN_CONVOY_CHARGER_DO_SCROLL
 
 
+*
+* Called when the alien is dying.
+*
+
+HANDLE_INFLIGHT_ALIEN_DYING:
+	moveq	#0,d0
+	move.b	(StageOfLife,a2),d0 	| read INFLIGHT_ALIEN.StageOfLife
+	add.w	d0,d0
+	add.w	d0,d0
+	lea		table_10E8(pc),a0
+	move.l	(a0,d0.w),a0
+	jmp		(a0)
+
+table_10E8:
+    .long	INFLIGHT_ALIEN_DYING_SETUP_ANIM_AND_SOUND    
+    .long	INFLIGHT_ALIEN_DYING_DISPLAY_EXPLOSION
+    .long	INFLIGHT_ALIEN_DYING_FINALLY_BUYS_FARM
+    .long	JUST_RTS
+
+JUST_RTS:
+	rts
+	
+INFLIGHT_ALIEN_PACKS_BAGS:
+	TODOM	0x100
+INFLIGHT_ALIEN_FLIES_IN_ARC:	
+	TODOM	0x101
+INFLIGHT_ALIEN_READY_TO_ATTACK:	
+	TODOM	0x102
+INFLIGHT_ALIEN_ATTACKING_PLAYER:	
+	TODOM	0x103
+INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN:
+	TODOM	0x104
+INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN:	
+	TODOM	0x104
+INFLIGHT_ALIEN_RETURNING_TO_SWARM:
+	TODOM	0x104
+INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN:
+	TODOM	0x104
+INFLIGHT_ALIEN_FULL_SPEED_CHARGE:
+	TODOM	0x104
+INFLIGHT_ALIEN_ATTACKING_PLAYER_AGGRESSIVELY:
+	TODOM	0x104
+INFLIGHT_ALIEN_LOOP_THE_LOOP:
+	TODOM	0x104
+INFLIGHT_ALIEN_COMPLETE_LOOP:	
+	TODOM	0x104
+INFLIGHT_ALIEN_UNKNOWN_1091:
+	TODOM	0x104
+INFLIGHT_ALIEN_CONVOY_CHARGER_SET_COLOUR_POS_ANIM:
+	TODOM	0x104
+INFLIGHT_ALIEN_CONVOY_CHARGER_START_SCROLL:
+	TODOM	0x104
+INFLIGHT_ALIEN_CONVOY_CHARGER_DO_SCROLL:
+	TODOM	0x104
+INFLIGHT_ALIEN_DYING_SETUP_ANIM_AND_SOUND:    	
+	TODOM	0x104
+INFLIGHT_ALIEN_DYING_DISPLAY_EXPLOSION:
+	TODOM	0x104
+INFLIGHT_ALIEN_DYING_FINALLY_BUYS_FARM:
+	TODOM	0x104
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
 *
 * Value in register A       What it represents
 * =====================================================
@@ -1239,7 +1693,7 @@ DISPLAY_SCORE_COMMAND:
 
 DISPLAY_HIGH_SCORE:
 	lea		HI_SCORE+2(pc),a0            | pointer to last 2 BCD digits of HI_SCORE
-	bra.b	l_21F8
+	jra		l_21F8
 
 * This displays player scores and high scores
 DISPLAY_ALL_SCORES:
@@ -2148,6 +2602,23 @@ TXT_NAMCO_logo:
 TXT_FREE_PLAY:
 	.word	0x537F
 	.ascii	"FREE@PLAY?"
+
+* The tables @0x039A and 0x03A6 represent the points values displayed beneath the SCORE ADVANCE TABLE.
+* These values are NOT BCD! They are ordinals for characters to be POKEd directly to character RAM.
+
+* This table is for the Flagship
+flagship_table_039A: 
+	.byte	0x01,0x05,0x00            | 150 
+	.byte	0x02,0x00,0x00            | 200
+	.byte	0x03,0x00,0x00            | 300
+	.byte	0x08,0x00,0x00            | 800
+
+* This table is for the normal aliens
+* Note: 10 is a space (empty) character
+alien_table_03A6: 
+	.byte	0x01,0x00,0x00            | 100   
+	.byte	0x10,0x08,0x00            |  80   
+	.byte	0x10,0x06,0x00            |  60    
 	.align	2
 
 bcd_table:
