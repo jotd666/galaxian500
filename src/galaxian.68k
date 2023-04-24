@@ -972,7 +972,7 @@ script_one_jump_table:
 	.long	CLEAR_SCREEN_BEFORE_WE_ARE_THE_GALAXIANS_INTRO
 	.long	DISPLAY_WE_ARE_THE_GALAXIANS_INTRO
 	.long	SCROLL_ON_CONVOY_CHARGER_POINTS
-	.long	DISPLAY_NAMCO_LOGO 
+	.long	DISPLAY_NAMCO_LOGO
 	.long	BLINK_CONVOY_CHARGER_POINTS
 	.long	HIDE_SWARM_AND_PREPARE_TO_CLEAR_SCREEN 
 	.long	CLEAR_WE_ARE_GALAXIANS_SCREEN_AND_DISPLAY_GAME_OVER
@@ -1166,12 +1166,13 @@ SCROLL_ON_CONVOY_CHARGER_POINTS:
 	jbsr	HANDLE_ALIEN_SWARM_SCROLL_RESET
 	jbsr	HANDLE_INFLIGHT_ALIEN_SPRITE_UPDATE
 	jbsr	HANDLE_INFLIGHT_ALIENS
+
 	jbsr	HANDLE_DRAW_CONVOY_CHARGER_POINTS
 	subq.b	#1,TEMP_COUNTER_1
-	bne.b	0f
-	move.b	#0xD2,TEMP_COUNTER_1
-0:
+	beq.b	0f
 	rts
+0:
+	move.b	#0xD2,TEMP_COUNTER_1
 
 * get ready to scroll the next alien sprite and associated points values on screen
 	jbsr	INIT_CONVOY_CHARGER_SPRITE
@@ -1350,6 +1351,7 @@ DISPLAY_NAMCO_LOGO:
 	move.b	#0x11,TEMP_COUNTER_2
 	move.b	#0x40,TEMP_COUNTER_1
 	addq.b	#1,ATTRACT_MODE_SCROLL_ID
+	bsr		osd_break
 	move.w	#0x060F,d3            | command: PRINT_TEXT, parameter: #0x0F (Displays NAMCO logo)
 	jra		QUEUE_COMMAND               
 
@@ -1654,25 +1656,14 @@ INFLIGHT_ALIEN_FLIES_IN_ARC:
 	TODOM	0x101
 INFLIGHT_ALIEN_READY_TO_ATTACK:	
 	TODOM	0x102
-INFLIGHT_ALIEN_ATTACKING_PLAYER:	
-	TODOM	0x103
-INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN:
-	TODOM	0x104
-INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN:	
-	TODOM	0x104
-INFLIGHT_ALIEN_RETURNING_TO_SWARM:
-	TODOM	0x104
+
 INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN:
-	TODOM	0x104
+	TODOM	0x106
 INFLIGHT_ALIEN_FULL_SPEED_CHARGE:
-	TODOM	0x104
-INFLIGHT_ALIEN_ATTACKING_PLAYER_AGGRESSIVELY:
-	TODOM	0x104
+	TODOM	0x107
 INFLIGHT_ALIEN_LOOP_THE_LOOP:
 	TODOM	0x104
 INFLIGHT_ALIEN_COMPLETE_LOOP:	
-	TODOM	0x104
-INFLIGHT_ALIEN_UNKNOWN_1091:
 	TODOM	0x104
 INFLIGHT_ALIEN_CONVOY_CHARGER_SET_COLOUR_POS_ANIM:
 	TODOM	0x104
@@ -1688,13 +1679,579 @@ INFLIGHT_ALIEN_DYING_FINALLY_BUYS_FARM:
 	TODOM	0x104
 
 	
+*
+* This is probably the most important routine for the INFLIGHT_ALIEN. 
+*
+* It is responsible for making an INFLIGHT_ALIEN fly down the screen, dropping bombs when it can.
+*
+* Expects:
+* IX = pointer to INFLIGHT_ALIEN structure
+*
+
+INFLIGHT_ALIEN_ATTACKING_PLAYER:
+0E2B: DD 34 03      inc  (ix+0x03)            | increment INFLIGHT_ALIEN.X 
+0E2E: CD 6B 11      call 0x116B               | call UPDATE_INFLIGHT_ALIEN_YADD
+0E31: DD 7E 09      ld   a,(ix+0x09)          | load A with INFLIGHT_ALIEN.PivotYValue
+0E34: DD 86 19      add  a,(ix+0x19)          | add in INFLIGHT_ALIEN.PivotYValueAdd to produce a Y coordinate                                                   
+0E37: DD 77 04      ld   (ix+0x04),a          | write to INFLIGHT_ALIEN.Y 
+0E3A: C6 07         add  a,0x07
+0E3C: FE 0E         cp   0x0E
+0E3E: 38 24         jr   c,0x0E64             | if the alien has gone off the side of the screen, return to swarm
+0E40: DD 7E 03      ld   a,(ix+0x03)          | load A with INFLIGHT_ALIEN.X
+0E43: C6 48         add  a,0x48
+0E45: 38 20         jr   c,0x0E67             | if the alien is nearing the bottom of the screen, speed it up!
+0E47: 3A 00 42      ld   a,(0x4200)           | read HAS_PLAYER_SPAWNED
+0E4A: 0F            rrca                     | move flag into carry
+0E4B: D0            ret  nc                  | return if player has not spawned
+0E4C: CD B0 11      call 0x11B0               | call CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME
+
+* alien won't shoot at you if a flagship has been hit
+0E4F: 3A 2B 42      ld   a,(0x422B)           | read IS_FLAGSHIP_HIT
+0E52: 0F            rrca                     | move flag into carry
+0E53: D8            ret  c                   | return if flagship was hit
+
+* Can this alien start shooting at you?
+*
+* code from 0x0E54-0E63 is akin to:
+*
+* byte yToCheck = INFLIGHT_ALIEN.X|
+* for (byte l=0| l<INFLIGHT_ALIEN_SHOOT_RANGE_MUL|l++)
+* {
+*     if (yToCheck == INFLIGHT_ALIEN_SHOOT_EXACT_X)
+*        goto TRY SPAWN_ENEMY_BULLET|
+*     else
+*        yToCheck+=0x19|
+* }
+*
+	jra		l_0E54			| avoids code duplication
+
+
+* If only one of these INCs are called (see 0x0E45), INFLIGHT_ALIEN.StageOfLife will be set to INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN.
+* If both these INCs are called (see 0x0E3E), set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN. 
+0E64: DD 34 02      inc  (ix+0x02)      
+0E67: DD 34 02      inc  (ix+0x02)
+0E6A: C9            ret
+
 	
+
+*
+* When an alien is close to the horizontal plane where the player resides, it speeds up to zoom by (or into) the player.
+*
+* Expects:
+* IX = pointer to INFLIGHT_ALIEN structure
+*
+
+INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN:
+	move.b	TIMING_VARIABLE(pc),d0
+	and.b	#1,d0							| ..now A is either 0 or 1.
+	addq.b	#1,d0		                    | ..now A is either 1 or 2. 
+	add.b	(inf_alien_X,a2),d0
+	move.b	d0,(inf_alien_X,a2)		        | Add either 1 or 2 pixels to INFLIGHT_ALIEN.X
+	subq.b	#6,d0
+	cmp.b	#3,d0                            | has alien gone off the bottom of the screen?
+	jcs		0f
+	jbsr		UPDATE_INFLIGHT_ALIEN_YADD
+	move.b	(PivotYValueAdd,a2),d0           | read INFLIGHT_ALIEN.PivotYValueAdd
+											 | set flags - we are interested if its a minus value
+	bmi.b	1f								| if the PivotYValueAdd is a negative value, goto 0x0E90
+	add.b	(a2,PivotYValue),d0             | add INFLIGHT_ALIEN.PivotYValue
+	bcs.b	0f                              | carry flag set if alien has gone off side of screen,  goto 0x0E95
+2:
+	move.b	d0,(inf_alien_Y,a2)			            | set INFLIGHT_ALIEN.Y 
+	rts
+1:
+	add.b	(a2,PivotYValue),d0             | add INFLIGHT_ALIEN.PivotYValue
+	bcs.b	2b
 	
-	
-	
-	
-	
-	
+* alien's went off the bottom or the side of the screen. 
+0:
+	addq.b	#1,(StageOfLife,a2)       | now call INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN stage of life.
+	rts
+
+
+*
+* An inflight alien has flown past the player and left the bottom of the visible screen. 
+* 
+*
+* If the alien is not a flagship, it will always return to the top of the screen.
+* Then, its behaviour is determined by flag state:
+* 
+*    If the HAS_PLAYER_SPAWNED flag is clear, the alien will rejoin the swarm. 
+*
+*    If both of the HAVE_AGGRESSIVE_ALIENS and HAVE_NO_BLUE_OR_PURPLE_ALIENS flags are clear, 
+*    the alien will rejoin the swarm.
+*
+*    Otherwise, if the criteria above is not satisfied, the alien will keep attacking the player.  
+*    
+*        
+* If the alien is a flagship, then the rules described @ 0x0EDA (INFLIGHT_ALIEN_FLAGSHIP_REACHED_BOTTOM_OF_SCREEN) apply. 
+*
+* Expects:
+* IX = pointer to INFLIGHT_ALIEN structure
+*
+
+INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN:
+	move.b	#0x08,(inf_alien_Y,a2)          | set INFLIGHT_ALIEN.X to position at very top of screen
+	addq.b	#1,(SortieCount,a2)             | increment INFLIGHT_ALIEN.SortieCount
+	clr.b	(AnimationFrame,a2)             | clear INFLIGHT_ALIEN.AnimationFrame
+
+* what type of alien are we dealing with?
+	move.b	(IndexInSwarm,a2),d0			  | read INFLIGHT_ALIEN.IndexInSwarm  
+	and.b	#0x70,d0                          | remove the column number from the index, keep the row
+	cmp.b 	#0x70,d0						  | is this alien a flagship?
+	jeq	INFLIGHT_ALIEN_FLAGSHIP_REACHED_BOTTOM_OF_SCREEN  | yes, goto INFLIGHT_ALIEN_FLAGSHIP_REACHED_BOTTOM_OF_SCREEN
+
+l_0EAD:
+*if the player has not spawned, the alien will return to the swarm.
+	tst.b	HAS_PLAYER_SPAWNED
+	jeq		0f	| if player has not spawned yet, goto 0x0ED6 - aliens return to swarm
+
+*  if HAVE_AGGRESSIVE_ALIENS OR HAVE_NO_BLUE_OR_PURPLE_ALIENS flags are set, the alien will keep attacking (see 0x0EBF).
+*  otherwise the alien returns to the swarm (see 0x0ED3 and 0x0F07)
+	tst.b	HAVE_AGGRESSIVE_ALIENS
+	jne		1f					| if aliens are aggressive, make alien reappear at top of screen, keep attacking 
+	tst.b	HAVE_NO_BLUE_OR_PURPLE_ALIENS		| read HAVE_NO_BLUE_OR_PURPLE_ALIENS
+	jeq		0f             | if we do have any blue or purple aliens, goto 0x0ED6 - aliens return to swarm
+
+* alien reappears at top of screen and will keep attacking - it will not return to swarm. 
+* add some unpredictability to where it reappears, so that player can't wait for it and shoot it easily
+1:
+	move.b	(inf_alien_Y,a2),d0              | read INFLIGHT_ALIEN.Y 
+	lsr.b	#1,d0							 | divide by 2 (don't worry about carry, it was cleared by AND above)
+	move.b	d0,d2
+	jbsr	GENERATE_RANDOM_NUMBER
+	and.b	#0x1F,d0                 | ensure random number is between 0..31 decimal
+	add.b	d2,d0
+	add.b	#0x20,d0
+	move.b	d0,(inf_alien_Y,a2)        | set INFLIGHT_ALIEN.Y
+	move.b	#0x28,(TempCounter1,a2)    | set INFLIGHT_ALIEN.TempCounter1 for INFLIGHT_ALIEN_UNKNOWN_OF3C to use.
+
+* if both of these incs are called, the stage of life will be set to INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN. 
+* if only the inc @ 0x0ED6 is invoked (see 0x0EB1), then the stage of life will be set to INFLIGHT_ALIEN_RETURNING_TO_SWARM.
+	addq.b	#1,(StageOfLife,a2)		| increment INFLIGHT_ALIEN.StageOfLife
+0:
+	addq.b	#1,(StageOfLife,a2)		| increment INFLIGHT_ALIEN.StageOfLife
+	rts
+
+*
+* A flagship has gone off screen.
+*
+* If the flagship had an escort, it will return to the top of the screen to fight again.
+* If the flagship had no escort, it will flee the level. 
+* A maximum of 2 fleeing flagships can be carried over to the next level.
+*
+* Expects:
+* IX = pointer to INFLIGHT_ALIEN structure
+*
+
+INFLIGHT_ALIEN_FLAGSHIP_REACHED_BOTTOM_OF_SCREEN:
+	tst.b	FLAGSHIP_ESCORT_COUNT        | test if flagship actually had any escort!
+	jne	INFLIGHT_ALIEN_COUNT_FLAGSHIP_ESCORTS  | if flagship has escort, goto INFLIGHT_ALIEN_COUNT_FLAGSHIP_ESCORTS
+
+* This flagship has no escort. It has escaped the level. 
+* Deactivate the INFLIGHT_ALIEN record, and check if this flagship can be carried over to the next wave.
+	clr.b	(IsActive,a2)			       | reset INFLIGHT_ALIEN.IsActive
+	move.b	FLAGSHIP_SURVIVOR_COUNT(pc),d0
+	addq.b	#1,d0                  | add another one to the survivor count!
+	cmp.b	#3,d0				   | have we got 3 surviving flagships?
+	bcs.b	0f                     | if we have less than 3, that's OK, goto 0x0EEE
+
+* We seem to have 3 flagships but only 2 flagships are allowed to be carried over...
+	move.b	#2,d0				  | clamp surviving flagship count to 2.
+0:
+	move.b	d0,FLAGSHIP_SURVIVOR_COUNT
+	rts
+
+
+* count how many aliens were escorting the flagship. 
+INFLIGHT_ALIEN_COUNT_FLAGSHIP_ESCORTS:
+	moveq	#0,d0
+	tst.b	(inflight_alien_size,a2)          | test IsActive flag of first escort  
+	beq.b	0f 
+	addq.b	#1,d0		| increment escort count
+0:
+	tst.b	(inflight_alien_size*2,a2)          | test IsActive flag of second escort  
+	beq.b	1f 
+	addq.b	#1,d0		| increment escort count
+1:
+	move.b	d0,FLAGSHIP_ESCORT_COUNT
+	jra	l_0EAD         | make flagship reappear at top of screen
+
+
+
+*
+* An alien has either flown off the side or the bottom of the screen, and is returning to the swarm.
+* 
+* Expects:
+* IX = pointer to INFLIGHT_ALIEN structure           
+*
+
+INFLIGHT_ALIEN_RETURNING_TO_SWARM:
+     ld   b,(ix+0x03)          | keep copy of INFLIGHT_ALIEN.X in B as SET_INFLIGHT_ALIEN_START_POSITION changes it 
+     inc  b                   
+     jbsr	SET_INFLIGHT_ALIEN_START_POSITION               | to determine where alien needs to go  
+
+* INFLIGHT_ALIEN.Y  and INFLIGHT_ALIEN.X have been changed by SET_INFLIGHT_ALIEN_START_POSITION
+0F0E: DD 7E 03      ld   a,(ix+0x03)          | A = destination INFLIGHT_ALIEN.X
+0F11: DD 70 03      ld   (ix+0x03),b          | restore INFLIGHT_ALIEN.X back to what it was before
+0F14: 90            sub  b                   | OK, how far away is this alien from where it wants to be?
+0F15: 28 14         jr   z,0x0F2B             | distance is zero, it's got where it wants to be, goto INFLIGHT_ALIEN_BACK_IN_SWARM
+0F17: FE 19         cp   0x19                 | 25 pixels away?
+0F19: D0            ret  nc                  | if distance is more than 0x19 (25 decimal), not near enough to destination, so exit
+0F1A: E6 01         and  0x01                 | is distance an odd number?
+0F1C: C0            ret  nz                  | yes, so exit
+
+* Alien is less than 25 pixels away from its destination back in the swarm.
+* We now need to determine what way to rotate the sprite so that it returns to the swarm upside-down, bat-style. 
+0F1D: DD CB 06 46   bit  0,(ix+0x06)          | read INFLIGHT_ALIEN.ArcClockwise
+0F21: 20 04         jr   nz,0x0F27             
+
+0F23: DD 34 05      inc  (ix+0x05)            | update INFLIGHT_ALIEN.AnimationFrame to rotate the alien right
+0F26: C9            rts
+
+0F27: DD 35 05      dec  (ix+0x05)            | update INFLIGHT_ALIEN.AnimationFrame to rotate the alien left
+0F2A: C9            rts
+
+* alien has returned to swarm. Remove sprite and substitute sprite with characters.
+INFLIGHT_ALIEN_BACK_IN_SWARM:
+0F2B: DD 36 00 00   ld   (ix+0x00),0x00        | set INFLIGHT_ALIEN.IsActive to 0 - will hide sprite (see 0x0C98)
+0F2F: 26 41         ld   h,0x41               | MSB of ALIEN_SWARM_FLAGS address 
+0F31: DD 6E 07      ld   l,(ix+0x07)          | Now HL = pointer to address in ALIEN_SWARM_FLAGS where alien belongs
+0F34: 16 00         ld   d,0x00               | command: DRAW_ALIEN_COMMAND
+0F36: 36 01         ld   (hl),0x01            | mark flag in ALIEN_SWARM_FLAGS as "occupied". Our alien's back in the swarm!
+0F38: 5D            ld   e,l                 | E = index of alien in swarm
+0F39: C3 F2 08      jp   0x08F2               | jump to QUEUE COMMAND. Alien will be drawn in its place in the swarm.
+
+
+*
+* Called when aliens are aggressive and refuse to return to the swarm.
+*
+* This routine makes the alien fly from the top of the screen for [TempCounter1] pixels vertically.
+* During this time it won't shoot, but it will gravitate towards the player's horizontal position (as the player sees it).
+* 
+* The trigger for this stage of life is when:
+*     HAVE_AGGRESSIVE_ALIENS is set OR 
+*     HAVE_NO_BLUE_OR_PURPLE_ALIENS flag is set 
+* 
+*
+
+INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN:
+0F3C: DD 34 03      inc  (ix+0x03)            | increment INFLIGHT_ALIEN.X
+
+* 
+0F3F: 3A 02 42      ld   a,(0x4202)           | read PLAYER_Y      
+0F42: DD 96 04      sub  (ix+0x04)            | subtract INFLIGHT_ALIEN.Y 
+
+0F45: ED 44         neg                      
+0F47: 17            rla                      | A = A * 2
+0F48: 5F            ld   e,a
+0F49: 9F            sbc  a,a                 | A= 0 - Carry flag
+0F4A: 57            ld   d,a
+0F4B: CB 13         rl   e
+0F4D: CB 12         rl   d                   | DE = DE * 2
+0F4F: DD 66 04      ld   h,(ix+0x04)
+0F52: DD 6E 09      ld   l,(ix+0x09)          | INFLIGHT_ALIEN.PivotYValue
+0F55: A7            and  a                   | Clear carry flag because..
+0F56: ED 52         sbc  hl,de               | ..there's no sub hl,de instruction in Z80 and we dont want a carry
+0F58: DD 74 04      ld   (ix+0x04),h          | update INFLIGHT_ALIEN.Y 
+0F5B: DD 75 09      ld   (ix+0x09),l          | update INFLIGHT_ALIEN.PivotYValue
+0F5E: DD 35 10      dec  (ix+0x10)            | counter was set @ 0x0ECF
+0F61: C0            ret  nz
+
+0F62: DD 34 02      inc  (ix+0x02)            | set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_FULL_SPEED_CHARGE
+0F65: C9            rts
+
+
+
+*
+* The inflight alien is now going to fly at full speed and zigzag to make it harder to shoot. 
+* It won't drop bombs, but it will gravitate towards the player.
+*
+* When the alien gets to the vertical (as the player sees it) centre of the screen, the alien will loop
+* the loop if there's enough space to do so. 
+*
+* After the loop is complete, the alien will start shooting.
+*
+
+INFLIGHT_ALIEN_FULL_SPEED_CHARGE:
+0F66: DD 34 03      inc  (ix+0x03)            | increment INFLIGHT_ALIEN.X
+
+* first check the X coordinate to see if the alien is in the centre 
+0F69: DD 7E 03      ld   a,(ix+0x03)          | read INFLIGHT_ALIEN.X 
+0F6C: D6 60         sub  0x60                                         
+0F6E: FE 40         cp   0x40
+0F70: 30 09         jr   nc,0x0F7B            | if INFLIGHT_ALIEN.X-0x60 >= 0x40, we're not centre horizontally   
+
+* next thing we need to do is check if we have enough space for a loop.
+0F72: DD 7E 04      ld   a,(ix+0x04)          | read INFLIGHT_ALIEN.Y 
+0F75: D6 60         sub  0x60
+0F77: FE 40         cp   0x40
+0F79: 38 0C         jr   c,0x0F87             | yes, we have space, make alien loop the loop
+
+* otherwise, make the alien veer erratically. 
+0F7B: CD DD 0D      call 0x0DDD               | call INFLIGHT_ALIEN_DEFINE_FLIGHTPATH
+0F7E: DD 36 18 03   ld   (ix+0x18),0x03        | set INFLIGHT_ALIEN.Speed to maximum!
+0F82: DD 36 10 64   ld   (ix+0x10),0x64        | set INFLIGHT_ALIEN.TempCounter1
+0F86: C9            rts
+                     
+ 
+0F87: DD 34 02      inc  (ix+0x02)
+0F8A: DD 34 02      inc  (ix+0x02)            | set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_LOOP_THE_LOOP 
+0F8D: DD 36 10 03   ld   (ix+0x10),0x03        | set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame
+0F91: DD 36 11 0C   ld   (ix+0x11),0x0C        | set INFLIGHT_ALIEN.TempCounter2 to number of animation frames in total
+0F95: DD 36 05 00   ld   (ix+0x05),0x00        | set INFLIGHT_ALIEN.AnimationFrame
+0F99: DD 36 13 00   ld   (ix+0x13),0x00        | set INFLIGHT_ALIEN.ArcTableLsb 
+0F9D: 3A 02 42      ld   a,(0x4202)           | read PLAYER_Y 
+0FA0: DD 96 04      sub  (ix+0x04)            | subtract INFLIGHT_ALIEN.Y 
+0FA3: 38 05         jr   c,0x0FAA             | if player to right of alien, make alien loop the loop clockwise
+
+* alien will perform an anti-clockwise loop
+0FA5: DD 36 06 00   ld   (ix+0x06),0x00        | reset INFLIGHT_ALIEN.ArcClockwise
+0FA9: C9            rts
+
+0FAA: DD 36 06 01   ld   (ix+0x06),0x01        | set INFLIGHT_ALIEN.ArcClockwise 
+0FAE: C9            rts
+
+
+
+*
+* You've killed a lot of the alien's friends. It's going to keep coming after you until one of you dies.
+*
+*
+*
+
+INFLIGHT_ALIEN_ATTACKING_PLAYER_AGGRESSIVELY:
+	addq.b	#1,(inf_alien_X,a2)          | increment INFLIGHT_ALIEN.X
+	jbsr	UPDATE_INFLIGHT_ALIEN_YADD
+	move.b	(SortieCount,a2),d0           | read INFLIGHT_ALIEN.SortieCount           
+	cmp.b	#4,d0						  | has the alien made it past the player 4 times?
+	beq.b	4f							  | yes, exactly 4 times, *maybe* make alien closer to player                                                                 
+	bcc.b	5f							| more than 4 times, make aliens hug player closer 
+l_0FBE:
+	move.b	(PivotYValue,a2),d0         | INFLIGHT_ALIEN.PivotYValue
+	add.b	(PivotYValueAdd,a2),d0      | Add INFLIGHT_ALIEN.PivotYValueAdd 
+	move.b	d0,(inf_alien_Y,a2)         | set INFLIGHT_ALIEN.Y 
+* has alien wandered off left or right side of screen as player sees it?
+	add.b	#7,d0
+	cmp.b	#0xE,d0
+	bcs.b	1f                          | alien has gone off side of screen, goto 0x0FF6
+
+* is alien near bottom of the screen?
+      move.b	(inf_alien_X,a2),d0          | read INFLIGHT_ALIEN.X
+      add.b	#0x40,d0               | 
+      bcs.b	2f             | if adding 0x40 pixels to X gives a result >255, then alien is near bottom of screen, goto 0x0FFB
+      subq.b	#1,(TempCounter1,a2)
+      beq.b	3f
+	  tst.b	HAS_PLAYER_SPAWNED
+      bne.b	11f
+      rts                  | return if player has not spawned
+11:
+      jbsr	CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME
+      tst.b	IS_FLAGSHIP_HIT
+      beq.b	l_0E54
+      rts                   | return if flagship has been hit
+l_0E54:
+* OK, can this alien start firing at you? Exact duplicate of code @0x0E54, look there for docs on how algorithm works. 
+* Can this alien start shooting at you?
+*
+* code from 0x0E54-0E63 is akin to:
+*
+* byte yToCheck = INFLIGHT_ALIEN.X;
+* for (byte l=0; l<INFLIGHT_ALIEN_SHOOT_RANGE_MUL;l++)
+* {
+*     if (yToCheck == INFLIGHT_ALIEN_SHOOT_EXACT_X)
+*        goto TRY SPAWN_ENEMY_BULLET;
+*     else
+*        yToCheck+=0x19;
+* }
+*
+
+	move.b	INFLIGHT_ALIEN_SHOOT_EXACT_X(pc),d5
+	move.b	INFLIGHT_ALIEN_SHOOT_RANGE_MUL(pc),d6
+	move.b	(inf_alien_X,a2),d0
+10:
+	cmp.b	d5,d0		| compare A to INFLIGHT_ALIEN_SHOOT_EXACT_X 
+	jeq	TRY_SPAWN_ENEMY_BULLET	| if equal, jump to TRY_SPAWN_ENEMY_BULLET
+	add.b	#0x19,d0				| add 0x19 (25 decimal) to A
+	subq.b	#1,d6		| and try again...
+	bne.b	10b
+	rts
+1:
+	move.b	#0x05,(StageOfLife,a2)        | set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN
+    rts
+2:
+	move.b	#0x04,(StageOfLife,a2)        | set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN
+    rts
+3:
+	subq.b	#1,(StageOfLife,a2)
+	rts
+4:
+* If we get here, the alien has survived exactly 4 continuous sorties.     
+	btst	#0,TIMING_VARIABLE      | is the number odd?
+	jeq		l_0FBE             | no, the number's even, it's business as usual, goto 0x0FBE
+5:
+* If we get here, the alien is going to "hug" the player a little bit closer than he might like.
+* Note: This routine is *always* called if the alien survives 5 continuous sorties or more. 
+	move.b	PLAYER_Y(pc),d0		| read PLAYER_Y 
+	sub.b  (a2,PivotYValue),d0  | subtract INFLIGHT_ALIEN.PivotYValue
+	bcs.b	6f					|   if a carry occurred, alien is, as player sees it, to left of player ship
+
+* Make the alien's pivot Y coordinate a bit closer to the player...
+	addq.b	#1,(PivotYValue,a2)            | Update INFLIGHT_ALIEN.PivotYValue
+	jra		l_0FBE
+6:
+	subq.b	#1,(PivotYValue,a2)            | Update INFLIGHT_ALIEN.PivotYValue
+	jra		l_0FBE
+
+
+
+*
+* Aggressive aliens sometimes do a 360 degree loop to taunt the player.
+*
+* This routine rotates the alien 270 degrees. The remaining 90 degrees is done by the INFLIGHT_ALIEN_FLIES_IN_ARC routine. 
+*
+* Expects:  
+* IX = pointer to INFLIGHT_ALIEN structure
+*
+
+INFLIGHT_ALIEN_LOOP_THE_LOOP:
+101F: DD 6E 13      ld   l,(ix+0x13)          | load L with INFLIGHT_ALIEN.ArcTableLsb
+1022: 26 1E         ld   h,0x1E               | MSB of INFLIGHT_ALIEN_ARC_TABLE                 
+
+* Now HL is a pointer to an entry in the INFLIGHT_ALIEN_ARC_TABLE (see docs @ 0x1E00)
+1024: DD 7E 03      ld   a,(ix+0x03)          | load INFLIGHT_ALIEN.X          
+1027: 96            sub  (hl)                | subtract X component from table  
+1028: DD 77 03      ld   (ix+0x03),a
+
+102B: 2C            inc  l
+
+102C: DD CB 06 46   bit  0,(ix+0x06)          | is this alien going to do a clockwise loop?
+1030: 20 2E         jr   nz,0x1060            | yes, goto INFLIGHT_ALIEN_LOOPING_CLOCKWISE
+
+* Alien is performing a counter-clockwise loop-the-loop maneuvre
+1032: DD 7E 04      ld   a,(ix+0x04)          | read INFLIGHT_ALIEN.Y
+1035: 96            sub  (hl)                | subtract Y component from INFLIGHT_ALIEN_ARC_TABLE
+1036: DD 77 04      ld   (ix+0x04),a          | set INFLIGHT_ALIEN.Y 
+1039: 2C            inc  l                   | bump HL to point to next X,Y pair in INFLIGHT_ALIEN_ARC_TABLE
+103A: DD 75 13      ld   (ix+0x13),l          | set INFLIGHT_ALIEN.ArcTableLsb
+103D: DD 35 10      dec  (ix+0x10)            | decrement INFLIGHT_ALIEN.TempCounter1 
+1040: C0            ret  nz
+
+* When INFLIGHT_ALIEN.TempCounter1 counts down to zero, its time to change the animation frame
+1041: DD 36 10 04   ld   (ix+0x10),0x04        | reset INFLIGHT_ALIEN.TempCounter1 
+1045: DD 35 05      dec  (ix+0x05)            | change sprite frame to appear to rotate LEFT
+
+* INFLIGHT_ALIEN.TempCounter2 is used to count down number of animation frames left
+1048: DD 35 11      dec  (ix+0x11)            | decrement INFLIGHT_ALIEN.TempCounter2
+104B: C0            ret  nz                  | return if we haven't done 
+
+* we've done 270 degrees rotation, hand off the remaining 90 to the INFLIGHT_ALIEN_FLIES_IN_ARC 
+104C: DD 34 02      inc  (ix+0x02)            | bump INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_COMPLETE_LOOP
+104F: DD 36 10 03   ld   (ix+0x10),0x03        | set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame
+1053: DD 36 11 0C   ld   (ix+0x11),0x0C        | set INFLIGHT_ALIEN.TempCounter2 to number of animation frames
+1057: DD 36 05 0C   ld   (ix+0x05),0x0C        | set INFLIGHT_ALIEN.AnimationFrame
+105B: DD 36 13 00   ld   (ix+0x13),0x00        | set INFLIGHT_ALIEN.ArcTableLsb
+105F: C9            ret
+
+
+* Alien is performing a clockwise loop-the-loop maneuvre
+INFLIGHT_ALIEN_LOOPING_CLOCKWISE:
+1060: DD 7E 04      ld   a,(ix+0x04)          | read INFLIGHT_ALIEN.Y
+1063: 86            add  a,(hl)              | add Y component from INFLIGHT_ALIEN_ARC_TABLE
+1064: DD 77 04      ld   (ix+0x04),a          | set INFLIGHT_ALIEN.Y
+1067: 2C            inc  l                   | bump HL to point to next X,Y pair in INFLIGHT_ALIEN_ARC_TABLE
+1068: DD 75 13      ld   (ix+0x13),l          | set INFLIGHT_ALIEN.ArcTableLsb
+106B: DD 35 10      dec  (ix+0x10)
+106E: C0            ret  nz
+
+* When INFLIGHT_ALIEN.TempCounter1 counts down to zero, its time to change the animation frame
+106F: DD 36 10 04   ld   (ix+0x10),0x04        reset INFLIGHT_ALIEN.TempCounter1 
+1073: DD 34 05      inc  (ix+0x05)            | change sprite frame to appear to rotate RIGHT
+1076: DD 35 11      dec  (ix+0x11)
+1079: C0            ret  nz
+
+* we've done 270 degrees rotation, hand off the remaining 90 to the INFLIGHT_ALIEN_FLIES_IN_ARC
+107A: DD 34 02      inc  (ix+0x02)            | bump INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_COMPLETE_LOOP
+107D: DD 36 10 03   ld   (ix+0x10),0x03        | set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame
+1081: DD 36 11 0C   ld   (ix+0x11),0x0C        | set INFLIGHT_ALIEN.TempCounter2 to number of animation frames
+1085: DD 36 05 F4   ld   (ix+0x05),0xF4        | set INFLIGHT_ALIEN.AnimationFrame
+1089: DD 36 13 00   ld   (ix+0x13),0x00        | set INFLIGHT_ALIEN.ArcTableLsb
+108D: C9            ret
+
+
+INFLIGHT_ALIEN_COMPLETE_LOOP:
+108E: C3 71 0D      jp   0x0D71               | jump to INFLIGHT_ALIEN_FLIES_IN_ARC
+
+
+INFLIGHT_ALIEN_UNKNOWN_1091:
+1091: DD 34 03      inc  (ix+0x03)            | update INFLIGHT_ALIEN.X
+1094: DD 36 02 08   ld   (ix+0x02),0x08        | set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_FULL_SPEED_CHARGE
+1098: C3 7B 0F      jp   0x0F7B               
+
+*
+* To monitor the input parameters type the following into the MAME debugger:
+* bp 117E,1,{printf "IX=%04X:   H=%01X L=%01X D=%01X E=%01X", IX,H,L,D,E| g}
+*
+
+UPDATE_INFLIGHT_ALIEN_YADD:
+	move.b	(Speed,a2),d0   | read INFLIGHT_ALIEN.Speed
+    and.b  #0x03,d0
+	addq.b	#1,d0         | now A is between 1 and 4.
+	move.b	d0,d1
+
+    move.b	(PivotYValueAdd,a2),d5          | read INFLIGHT_ALIEN.PivotYValueAdd in h
+    move.b	(PivotYValueAdd+1,a2),d6		| in l
+    move.b	(PivotYValueAdd+2,a2),d3
+    move.b	(PivotYValueAdd+3,a2),d4
+10:
+	move.b	d6,d0  
+
+* Part 1 - do H
+	move.b	d5,d2                 | preserve H in C
+	add.b	d0,d0
+	bcc.b	0f
+
+    subq.b	#1,d5
+0:
+    add.b	d0,d3
+	move.b	d0,d3
+    clr		d0
+    addx.b	d5,d0
+
+* I *think* this is to ensure that the signed byte in H never loses its sign.
+* If it's positive it'll stay positive. If it's negative, it'll stay negative.
+    cmp.b	#0x80,d0
+	bne.b	1f
+	move.b	d2,d0
+1:
+    move.b	d0,d5
+
+* Part 2 - now do L
+	move.b	d6,d2        | preserve L in C
+	neg.b	d0
+    add.b	d0,d0
+	bcc.b	2f
+
+    subq.b	#1,d6
+2:
+	add.b	d0,d4
+	clr		d0
+	addx.b	d6,d0
+    cmp.b	#0x80,d0
+	bne.b	3f
+	move.b	d2,d0
+3:
+	move.b	d0,d6     | restore L from C
+    dbf		D1,10b
+
+    move.b	d5,(PivotYValueAdd,a2)          | stpre INFLIGHT_ALIEN.PivotYValueAdd
+    move.b	d6,(PivotYValueAdd+1,a2)
+    move.b	d3,(PivotYValueAdd+2,a2)
+    move.b	d4,(PivotYValueAdd+3,a2)
+
+	rts
+
+
 	
 *
 * Value in register A       What it represents
