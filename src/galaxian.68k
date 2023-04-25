@@ -817,6 +817,37 @@ GENERATE_RANDOM_NUMBER:
 	move.b	d0,RAND_NUMBER
 	rts
 
+*
+* Used by the aliens to determine what way to face when flying down, and what delta enemy bullets take
+*
+* (I have no idea how it works, just transcoded it as is)
+*
+* Expects:
+* A = distance
+* D = X coordinate
+*
+
+CALCULATE_TANGENT:
+	move.w	d4,-(a7)
+	moveq	#0,d2
+	moveq.w	#8-1,d1	| do it 8 ties
+0:
+	cmp.b	d3,d0
+	bcs.b	1f
+	sub.b	d3,d0
+1:
+	* inverts carry (JOTD: clumsy & slow, but works)
+	* z80 ccf instruction
+	clr.b	d4
+	roxl.b	#1,d4	| get carry in bit 0
+	bchg	#0,d4	| change bit
+	roxr.b	#1,d4	| put carry back
+	roxl.b	#1,d2
+	roxr.b	#1,d3
+	dbf		d1,0b
+	move.w	(a7)+,d4
+	rts
+
 galaxian_irq:
 *TODO
 * update screen in one go - IMPORTANT
@@ -841,7 +872,7 @@ galaxian_irq:
 *00A8: 32 10 40      ld   (0x4010),a           | and write to PORT_STATE_6000 holder
 
 		subq.b	#1,TIMING_VARIABLE             | decrement value
-
+*TODO
 *		jbsr CHECK_IF_COIN_INSERTED               | 
 *jbsr HANDLE_UNPROCESSED_COINS
 *jbsr HANDLE_SOUND
@@ -917,23 +948,23 @@ SCRIPT_ZERO:
 *0131: 32 AC 40      ld   BONUS_GALIXIP_FOR,a           | write BONUS GALIXIP @ value  
 
 * Set screen attribute colours then display "1UP" and "HIGH SCORE" 
-			jbsr	SET_COLOUR_ATTRIBUTES_TABLE_1 | call SET_COLOUR_ATTRIBUTES_TABLE_1
-			move.b	#1,d0
-			move.w	#0x5340,d6
-			jbsr	osd_w_bg_videoram		| poke "1" to character RAM
-			move.b	#0x25,d0
-			move.w	#0x5320,d6		          
-			jbsr	osd_w_bg_videoram		| poke "U" to character RAM
-			move.b	#0x20,d0
-			move.w	#0x5300,d6		          
-			jbsr	osd_w_bg_videoram		| poke "P" to character RAM - text "1UP" now drawn
-			move.w	#0x0604,d3		      | command: PRINT_TEXT_COMMAND, parameter: 4 (index of "HIGH SCORE")
-			jbsr	QUEUE_COMMAND
-			move.w	#0x0503,d3              | command: DISPLAY_SCORE_COMMAND , parameter: 3 (Displays player scores and high score)
-			jra		QUEUE_COMMAND
+		jbsr	SET_COLOUR_ATTRIBUTES_TABLE_1 | call SET_COLOUR_ATTRIBUTES_TABLE_1
+		move.b	#1,d0
+		move.w	#0x5340,d6
+		jbsr	osd_w_bg_videoram		| poke "1" to character RAM
+		move.b	#0x25,d0
+		move.w	#0x5320,d6		          
+		jbsr	osd_w_bg_videoram		| poke "U" to character RAM
+		move.b	#0x20,d0
+		move.w	#0x5300,d6		          
+		jbsr	osd_w_bg_videoram		| poke "P" to character RAM - text "1UP" now drawn
+		move.w	#0x0604,d3		      | command: PRINT_TEXT_COMMAND, parameter: 4 (index of "HIGH SCORE")
+		jbsr	QUEUE_COMMAND
+		move.w	#0x0503,d3              | command: DISPLAY_SCORE_COMMAND , parameter: 3 (Displays player scores and high score)
+		jra		QUEUE_COMMAND
   
 * Values for BONUS GALIXIP. 7 = 7000, 10 = 10000, 12 =12000, 20 = 20000
-**0152: 
+table_0152: 
 	.byte	0x07,0x10,0x12,0x20 
 
 *
@@ -996,11 +1027,86 @@ SCRIPT_FOUR:
 	TODOM	0x1004
 	rts
 	
-*TODO
+
+* This routine does two things:
+*
+* 1. Stops the swarm from moving if the player bullet gets too close to an alien in the swarm 
+* 2. Sets the scroll registers for the columns containing the swarm
+* 
+* Before I investigated this code, I never noticed the swarm stops - now I can't not notice it.
+* If you want the aliens to just not care about their own safety, type the following into the debugger: maincpu.mw@0x093C=0 
+*
+
 HANDLE_SWARM_MOVEMENT:
-	rts
-SET_ALIEN_PRESENCE_FLAGS:
-	rts
+090D: 21 08 42      ld   hl,0x4208            | point HL to HAS_PLAYER_BULLET_BEEN_FIRED flag
+0910: CB 46         bit  0,(hl)              | test bit 0. 
+0912: 28 2A         jr   z,0x093E             | If player hasn't fired, goto 0x093E 
+0914: 2C            inc  l                   | point HL to PLAYER_BULLET_X
+0915: 7E            ld   a,(hl)              | read X coordinate of bullet
+0916: D6 22         sub  0x22
+0918: FE 50         cp   0x50                 | compare to 0x50 (80 decimal)
+091A: 30 22         jr   nc,0x093E            | if greater than 0x50, goto 0x093E
+
+091C: 2C            inc  l                   | point HL to PLAYER_BULLET_Y
+091D: 3A 0E 42      ld   a,(0x420E)           | read SWARM_SCROLL_VALUE
+0920: 96            sub  (hl)                | subtract from value in PLAYER_BULLET_Y
+0921: ED 44         neg                      | A = 256-A   
+0923: 47            ld   b,a
+0924: C6 02         add  a,0x02
+0926: E6 0F         and  0x0F
+0928: FE 03         cp   0x03
+092A: 30 12         jr   nc,0x093E            | if A >= #0x03 goto 0x093E
+
+092C: 78            ld   a,b
+092D: 0F            rrca
+092E: 0F            rrca
+092F: 0F            rrca
+0930: 0F            rrca
+0931: E6 0F         and  0x0F                 | now A identifies the column of the swarm the player bullet is in
+0933: 5F            ld   e,a
+0934: 16 00         ld   d,0x00
+0936: 21 F0 41      ld   hl,0x41F0            | load HL with address of ALIEN_IN_COLUMN_FLAGS
+0939: 19            add  hl,de              
+093A: CB 46         bit  0,(hl)              | are there any aliens in this column?
+093C: 20 4A         jr   nz,0x0988            | yes, make the swarm stand still!
+
+* move the swarm, and make it change direction once its hit a screen edge 
+093E: 2A 0E 42      ld   hl,(0x420E)          | read SWARM_SCROLL_VALUE
+0941: ED 5B 10 42   ld   de,(0x4210)          | read SWARM_SCROLL_MAX_EXTENTS
+0945: 3A 0D 42      ld   a,(0x420D)           | read SWARM_DIRECTION
+0948: A7            and  a                   | test if its zero
+0949: 20 12         jr   nz,0x095D            | if not zero, swarm is moving right, goto 0x095D
+
+* swarm is moving left
+094B: CB 7C         bit  7,h                 
+094D: 20 04         jr   nz,0x0953
+094F: 7D            ld   a,l
+0950: BB            cp   e
+0951: 30 2A         jr   nc,0x097D            | jp to MAKE_SWARM_MOVE_RIGHT
+0953: 3A 5F 42      ld   a,(0x425F)           | read TIMING_VARIABLE
+0956: E6 03         and  0x03                 | mask in bits 0 & 1
+0958: C0            ret  nz                  | if either bit is set, return
+0959: 23            inc  hl                  | increment scroll value. Swarm will move left (but in reality, a pixel down).
+095A: C3 6C 09      jp   0x096C
+
+* swarm is moving right
+095D: CB 7C         bit  7,h                 | test bit 7
+095F: 28 04         jr   z,0x0965
+0961: 7D            ld   a,l
+0962: BA            cp   d
+0963: 38 1E         jr   c,0x0983             | jp to MAKE_SWARM_MOVE_LEFT
+0965: 3A 5F 42      ld   a,(0x425F)           | read TIMING_VARIABLE
+0968: E6 03         and  0x03                 | mask in bits 0 & 1
+096A: C0            ret  nz                  | if either bit is set, return. 
+096B: 2B            dec  hl                  | decrement scroll value. Swarm will move right (in reality, a pixel up).
+
+
+* if you want the swarm to be static, or tinker with the scroll, fill 0x096C to 0x096E with NOP instructions. 
+096C: 22 0E 42      ld   (0x420E),hl          | set SWARM_SCROLL_VALUE 
+096F: 7D            ld   a,l                 
+0970: ED 44         neg                      | A = 256-A
+
+
 
 *
 * Enables starfield, displays GAME OVER and the amount of credit remaining.
@@ -1118,6 +1224,436 @@ MAKE_SWARM_MOVE_LEFT:
 
 *0988: 2A 0E 42      ld   hl,(0x420E)          | read SWARM_SCROLL_VALUE
 *098B: C3 6F 09      jp   0x096F
+
+
+*
+* This routine sets the following flags:  
+*
+* ALIEN_IN_COLUMN_FLAGS
+* HAVE_ALIENS_IN_6TH_ROW
+* HAVE_ALIENS_IN_5TH_ROW
+* HAVE_ALIENS_IN_4TH_ROW
+* HAVE_ALIENS_IN_3RD_ROW
+* HAVE_ALIENS_IN_2ND_ROW
+* HAVE_ALIENS_IN_TOP_ROW
+* HAVE_NO_BLUE_OR_PURPLE_ALIENS
+* HAVE_NO_ALIENS_IN_SWARM 
+* HAVE_NO_INFLIGHT_ALIENS
+* HAVE_NO_INFLIGHT_OR_DYING_ALIENS
+* 
+* It also sets the values for SWARM_SCROLL_MAX_EXTENTS. 
+
+SET_ALIEN_PRESENCE_FLAGS:     // TENTATIVE NAME - If anyone can think of anything better, give me a shout
+098E: AF            xor  a
+098F: 11 E8 41      ld   de,0x41E8     
+0992: 12            ld   (de),a              | clear 0x41E8
+0993: 1C            inc  e                    
+0994: 12            ld   (de),a              | clear 0x41E9
+0995: 1C            inc  e                   | DE now = 0x41EA (address of HAVE_ALIENS_IN_IN_ROW_FLAGS)
+
+* This part of the code determines if there are any aliens on a given row.
+* It will set the corresponding flag in the HAVE_ALIENS_IN_ROW_FLAGS array.
+* it works from the bottom row of aliens to the top.
+0996: 0E 06         ld   c,0x06               | there are 6 rows of aliens. Used as a row counter.
+0998: 21 23 41      ld   hl,0x4123            | pointer to bottom right alien in ALIEN_SWARM_FLAGS
+
+099B: 06 0A         ld   b,0x0A               | There's 0x0A (10 decimal) aliens max per row
+099D: AF            xor  a                   | clear A. 
+099E: B6            or   (hl)                | If an alien is present, A will now be set to 1.
+099F: 2C            inc  l                   | move to next flag
+09A0: 10 FC         djnz 0x099E               | repeat tests until B == 0.
+
+09A2: 12            ld   (de),a              | store alien presence flag in HAVE_ALIENS_IN_[]_ROW flag
+09A3: 1C            inc  e                   | bump DE to point to next HAVE_ALIENS_IN_[]_ROW flag
+09A4: 7D            ld   a,l          
+09A5: C6 06         add  a,0x06
+09A7: 6F            ld   l,a                 | Add 6 to HL. Now HL points to flags for row of aliens above previous    
+09A8: 0D            dec  c                   | decrement row counter
+09A9: C2 9B 09      jp   nz,0x099B            | if not all rows of aliens have been processed, goto 0x099B
+
+* when we get here, DE points to 0x41F0, which is the start of the ALIEN_IN_COLUMN_FLAGS array.
+09AC: AF            xor  a
+09AD: 12            ld   (de),a              | clear first entry of ALIEN_IN_COLUMN_FLAGS. 
+09AE: 1C            inc  e
+09AF: 12            ld   (de),a              | clear second entry of ALIEN_IN_COLUMN_FLAGS.
+09B0: 1C            inc  e
+09B1: 12            ld   (de),a              | clear second entry of ALIEN_IN_COLUMN_FLAGS.
+09B2: 1C            inc  e
+
+09B3: 21 23 41      ld   hl,0x4123            | pointer to bottom right alien in ALIEN_SWARM_FLAGS 
+09B6: 0E 0A         ld   c,0x0A               | There's 0x0A (10 decimal) columns of aliens 
+
+* Working from the rightmost column of aliens to the left, check each column for presence of aliens and
+* set/clear respective flag in ALIEN_IN_COLUMN_FLAGS array accordingly. 
+09B8: D5            push de
+09B9: 11 10 00      ld   de,0x0010            | offset to add to HL to point to alien in row above, same column.
+09BC: 06 06         ld   b,0x06               | 6 rows of aliens. Used as a row counter.
+09BE: AF            xor  a
+09BF: B6            or   (hl)                | If an alien is present, A will now be set to 1.
+09C0: 19            add  hl,de               | Point HL to alien in row above, same column.
+09C1: 10 FC         djnz 0x09BF               | Repeat until all 6 rows of aliens have been scanned
+09C3: D1            pop  de
+09C4: 12            ld   (de),a              | set/clear flag in ALIEN_IN_COLUMN_FLAGS
+09C5: 1C            inc  e                   | bump DE to point to next entry in ALIEN_IN_COLUMN_FLAGS
+
+* we've scanned all the aliens in a column. 
+* We now want to scan the next column of aliens to the immediate *left* of the column we just scanned. 
+09C6: 7D            ld   a,l
+09C7: D6 5F         sub  0x5F
+09C9: 6F            ld   l,a                 | now HL points to bottom alien in next column of aliens to check  
+09CA: 0D            dec  c                   | decrement counter for number of columns left to process            
+09CB: C2 B8 09      jp   nz,0x09B8            | if we've not done all the columns, goto 0x09B8
+
+* the following code works out how far to the left the swarm can move. Or should I say, how far the swarm can be scrolled down.
+* TODO: I'll come back to this code later, but at the moment there's bigger fish to fry with this game, so I'll just leave bare bones here.
+09CE: 21 FC 41      ld   hl,0x41FC            | load HL with a pointer to flag for the leftmost column of aliens in ALIEN_IN_COLUMN_FLAGS
+09D1: 06 0A         ld   b,0x0A               | There's 0x0A (10 decimal) columns of aliens 
+09D3: 1E 22         ld   e,0x22
+09D5: CB 46         bit  0,(hl)              | Test the flag. Is there an alien in the column?
+09D7: 20 09         jr   nz,0x09E2            | yes, goto 0x09E2
+09D9: 2D            dec  l                   | bump HL to point to flag for column to left
+09DA: 7B            ld   a,e
+09DB: C6 10         add  a,0x10
+09DD: 5F            ld   e,a
+09DE: 10 F5         djnz 0x09D5
+
+* now work out how far to the right the swarm can move. 
+09E0: 1E 22         ld   e,0x22
+09E2: 21 F3 41      ld   hl,0x41F3            | load HL with a pointer to flag for the rightmost column of aliens in ALIEN_IN_COLUMN_FLAGS
+09E5: 06 0A         ld   b,0x0A               | There's 0x0A (10 decimal) columns of aliens
+09E7: 16 E0         ld   d,0xE0
+09E9: CB 46         bit  0,(hl)              | Test the flag. Is there an alien in the column?
+09EB: 20 09         jr   nz,0x09F6            | yes, goto 0x09F6
+09ED: 2C            inc  l
+09EE: 7A            ld   a,d
+09EF: D6 10         sub  0x10
+09F1: 57            ld   d,a
+09F2: 10 F5         djnz 0x09E9
+09F4: 16 E0         ld   d,0xE0
+09F6: ED 53 10 42   ld   (0x4210),de          | set SWARM_SCROLL_MAX_EXTENTS
+
+* Check if any of the bottom 4 rows of aliens (blue & purple) have any aliens in them. *Aliens from those rows that are in flight don't count*
+09FA: 21 EA 41      ld   hl,0x41EA            | load HL with pointer to HAVE_ALIENS_IN_6TH_ROW
+09FD: 0E 01         ld   c,0x01
+09FF: 06 04         ld   b,0x04               | we want to do 4 rows of aliens
+0A01: AF            xor  a
+0A02: B6            or   (hl)                | test if there's an alien present on the row
+0A03: 2C            inc  l                   | bump HL to point to flag for row above 
+0A04: 10 FC         djnz 0x0A02               | repeat until b==0
+0A06: A9            xor  c                   | 
+0A07: 32 21 42      ld   (0x4221),a           | set HAVE_NO_BLUE_OR_PURPLE_ALIENS flag
+
+* HL = pointer to HAVE_ALIENS_IN_2ND_ROW
+0A0A: A9            xor  c                   | if A was 1, set it to 0, and vice versa
+0A0B: B6            or   (hl)                | if any aliens in red row set A to 1  *Red aliens in flight don't count*
+0A0C: 2C            inc  l                   | bump HL to point to HAVE_ALIENS_IN_TOP_ROW
+0A0D: B6            or   (hl)                | if any aliens in flagship row set A to 1   *Flagships that are in flight don't count*
+0A0E: A9            xor  c                   | if A was 1, set it to 0, and vice versa
+0A0F: 32 20 42      ld   (0x4220),a           | set/reset HAVE_NO_ALIENS_IN_SWARM flag.
+
+* Check if we have any aliens "in-flight" attacking the player.
+* We skip the first entry in the INFLIGHT_ALIENS array because the first entry is reserved for misc use (see docs above INFLIGHT_ALIEN struct)
+* and should not be treated as a "real" flying alien.
+0A12: 21 D0 42      ld   hl,0x42D0            | pointer to INFLIGHT_ALIENS_START+sizeof(INFLIGHT_ALIEN). Effectively skipping first INFLIGHT_ALIEN. 
+0A15: 11 20 00      ld   de,0x0020            | sizeof(INFLIGHT_ALIEN)
+0A18: 06 07         ld   b,0x07               | 7 aliens to process in the list
+0A1A: AF            xor  a                   | clear A
+0A1B: B6            or   (hl)                | Set A to 1 if alien is active
+0A1C: 19            add  hl,de               | bump HL to point to next INFLIGHT_ALIEN structure in the array
+0A1D: 10 FC         djnz 0x0A1B               | repeat until B==0
+0A1F: A9            xor  c                   | if no aliens are in flight, A will be set to 1.  Else A is set 0. 
+0A20: 32 26 42      ld   (0x4226),a           | set/reset HAVE_NO_INFLIGHT_ALIENS flag 
+
+* Check if we have any aliens "in-flight" or dying 
+0A23: A9            xor  c                   | 
+0A24: 21 B1 42      ld   hl,0x42B1            | pointer to first IsDying flag of INFLIGHT_ALIENS array.
+0A27: 06 08         ld   b,0x08               | test all 8 slots
+0A29: B6            or   (hl)                | if INFLIGHT_ALIEN.IsDying is set to 1, set A to 1.
+0A2A: 19            add  hl,de               | bump HL to point to next INFLIGHT_ALIEN structure in the array
+0A2B: 10 FC         djnz 0x0A29               | repeat until B==0
+0A2D: A9            xor  c                   | 
+0A2E: 32 25 42      ld   (0x4225),a           | set/reset HAVE_NO_INFLIGHT_OR_DYING_ALIENS
+0A31: C9            rts
+
+
+
+
+HANDLE_PLAYER_SHOOT:
+0A32: 3A 00 42      ld   a,(0x4200)           | read HAS_PLAYER_SPAWNED flag
+0A35: 0F            rrca                     | move bit 0 into carry
+0A36: D0            rts  nc                  | if player has not spawned, return
+0A37: 3A 08 42      ld   a,(0x4208)           | read HAS_PLAYER_BULLET_BEEN_FIRED flag
+0A3A: 0F            rrca                     | move bit 0 into carry
+0A3B: D8            rts  c                   | if carry is set, missile has already been fired, can't shoot again.
+0A3C: 3A 06 40      ld   a,(0x4006)           | read IS_GAME_IN_PLAY flag
+0A3F: 0F            rrca                     | move bit 0 into carry
+0A40: 30 26         jr   nc,0x0A68            | if no carry, game is not in play, so this is demo mode, goto 0x0A68
+0A42: 3A 18 40      ld   a,(0x4018)           | read DISPLAY_IS_COCKTAIL_P2 flag
+0A45: 0F            rrca                     | move bit 0 into carry
+0A46: 38 15         jr   c,0x0A5D             | if we're player 2 and we're playing on a cocktail machine, goto 0x0A5D 
+0A48: 3A 13 40      ld   a,(0x4013)           | read PREV_PORT_STATE_6000 
+0A4B: 2F            cpl
+0A4C: 47            ld   b,a
+0A4D: 3A 10 40      ld   a,(0x4010)           | read PORT_STATE_6000
+0A50: A0            and  b
+0A51: E6 10         and  0x10                 | test state of SHOOT button
+0A53: C8            rts  z                   | return if not held down
+0A54: 3E 01         ld   a,0x01
+0A56: 32 08 42      ld   (0x4208),a           | set HAS_PLAYER_BULLET_BEEN_FIRED flag
+0A59: 32 CC 41      ld   (0x41CC),a           | set PLAY_PLAYER_SHOOT_SOUND flag 
+0A5C: C9            rts
+
+* We come here if it's player 2's turn and the game is in cocktail mode.
+0A5D: 3A 14 40      ld   a,(0x4014)           | read PREV_PORT_STATE_6800
+0A60: 2F            cpl
+0A61: 47            ld   b,a
+0A62: 3A 11 40      ld   a,(0x4011)           | read PORT_STATE_6800
+0A65: C3 50 0A      jp   0x0A50               | go check if shoot button for player 2's controls is held down.
+
+
+* We're in demo mode. We need to simulate the player firing at the aliens.
+0A68: 3A 5F 42      ld   a,(0x425F)           | read TIMING_VARIABLE
+0A6B: E6 1F         and  0x1F                 | mask in bits 0..5
+0A6D: C0            rts  nz                  | if result is not zero, then return
+0A6E: 3E 01         ld   a,0x01
+0A70: 32 08 42      ld   (0x4208),a           | set HAS_PLAYER_BULLET_BEEN_FIRED flag
+0A73: C9            rts
+
+
+
+*
+* Move enemy bullets and position enemy bullet sprites
+*
+*
+*
+
+HANDLE_ENEMY_BULLETS:
+0A74: DD 21 60 42   ld   ix,0x4260            | load IX with address of ENEMY_BULLETS_START
+0A78: 3A 5F 42      ld   a,(0x425F)           | read TIMING_VARIABLE
+0A7B: 0F            rrca                     | move bit 0 into carry
+0A7C: 38 0B         jr   c,0x0A89             | if TIMING_VARIABLE is an odd number, goto 0x0A89
+0A7E: DD 34 01      inc  (ix+0x01)            | Increment ENEMY_BULLET.X by 2.. 
+0A81: DD 34 01      inc  (ix+0x01)            | 
+
+0A84: 11 05 00      ld   de,0x0005            | sizeof(ENEMY_BULLET)
+0A87: DD 19         add  ix,de
+0A89: FD 21 81 40   ld   iy,0x4081            | pointer to OBJRAM_BACK_BUF_BULLETS
+0A8D: 06 07         ld   b,0x07               | number of bullets
+
+* main bullet loop
+0A8F: DD CB 00 46   bit  0,(ix+0x00)          | test ENEMY_BULLET.IsActive flag
+0A93: 28 27         jr   z,0x0ABC             | if enemy bullet is not active, goto 0x0ABC
+0A95: DD 7E 01      ld   a,(ix+0x01)          | read ENEMY_BULLET.X 
+0A98: C6 02         add  a,0x02               | bullet will move 2 pixels
+0A9A: DD 77 01      ld   (ix+0x01),a          | update ENEMY_BULLET.X
+0A9D: C6 04         add  a,0x04               | tentatively add 4 to the X coordinate. If a carry occurs, enemy bullet is at bottom of screen 
+0A9F: 38 1B         jr   c,0x0ABC             | enemy bullet is at bottom of screen so needs to be deactivated, goto 0x0ABC
+
+* split ENEMY_BULLET.YDelta into its sign and delta, then add to YH and YL respectively. 
+0AA1: DD 6E 02      ld   l,(ix+0x02)          | read ENEMY_BULLET.YL
+0AA4: DD 66 03      ld   h,(ix+0x03)          | read ENEMY_BULLET.YH
+0AA7: DD 5E 04      ld   e,(ix+0x04)          | read ENEMY_BULLET.YDelta 
+0AAA: CB 13         rl   e                   | move bit 7 of E (sign bit) into carry. Shift YDelta bits left into bits 1..7.                  
+0AAC: 9F            sbc  a,a                 | A = 0 - carry
+0AAD: 57            ld   d,a                 | if bit 7 of E was set, D will be 0xFF, else 0.
+0AAE: 19            add  hl,de               
+0AAF: DD 75 02      ld   (ix+0x02),l          | set ENEMY_BULLET.YL
+0AB2: DD 74 03      ld   (ix+0x03),h          | set ENEMY_BULLET.YH
+0AB5: 7C            ld   a,h                 | get ENEMY_BULLET.YH coordinate into A
+0AB6: C6 10         add  a,0x10               | add #0x10 (16 decimal) . 
+0AB8: FE 20         cp   0x20                 | compare to 0x20 (32 decimal)
+0ABA: 30 0A         jr   nc,0x0AC6            | if >= 32 decimal, bullet is still onscrene, goto 0x0AC6
+
+* bullet is offscreen, deactivate it
+0ABC: AF            xor  a
+0ABD: DD 77 00      ld   (ix+0x00),a          | set ENEMY_BULLET.IsActive flag (disables bullet)
+0AC0: DD 77 01      ld   (ix+0x01),a          | set ENEMY_BULLET.X to 0 
+0AC3: DD 77 03      ld   (ix+0x03),a          | set ENEMY_BULLET.YH to 0
+
+* we now need to position the actual enemy bullet sprites.
+0AC6: 3A 18 40      ld   a,(0x4018)           | read DISPLAY_IS_COCKTAIL_P2
+0AC9: 0F            rrca                     | move flag into carry
+0ACA: 38 29         jr   c,0x0AF5             | if carry is set, it's a cocktail setup and player 2's turn, goto 0x0AF5
+
+0ACC: DD 7E 01      ld   a,(ix+0x01)          | read ENEMY_BULLET.X 
+0ACF: 2F            cpl                      | A = (255 - A) 
+0AD0: 3D            dec  a                   | A = A-1
+0AD1: FD 77 02      ld   (iy+0x02),a          | write to OBJRAM_BACK_BUF_BULLETS sprite state
+
+* looks to me like there's a hardware "feature" where the Y coordinate of alien bullets 5-7 needs adjusted by 1 so the sprite is positioned correctly.
+* if anyone can tell me why, drop me a line. Thanks!
+0AD4: DD 7E 03      ld   a,(ix+0x03)          | read ENEMY_BULLET.YH 
+0AD7: 2F            cpl                      | A = (255 - A) 
+0AD8: 4F            ld   c,a
+0AD9: 78            ld   a,b                 | get index of enemy bullet we are processing into A
+0ADA: FE 05         cp   0x05                 | are we processing bullet #5 or more?
+0ADC: 38 01         jr   c,0x0ADF             | no, goto 0x0ADF
+0ADE: 0C            inc  c                   | adjust Y coordinate
+0ADF: FD 71 00      ld   (iy+0x00),c          | write to OBJRAM_BACK_BUF_BULLETS sprite Y coordinate
+
+0AE2: 11 05 00      ld   de,0x0005            | sizeof(ENEMY_BULLET)
+0AE5: DD 19         add  ix,de               | bump IX to point to next ENEMY_BULLET in ENEMY_BULLETS array
+0AE7: DD 34 01      inc  (ix+0x01)            | increment ENEMY_BULLET.X
+0AEA: DD 34 01      inc  (ix+0x01)            | twice, to make it move 2 pixels
+
+0AED: DD 19         add  ix,de               | bump IX to point to next ENEMY_BULLET in ENEMY_BULLETS array
+0AEF: 1D            dec  e                   | DE is now 4  
+0AF0: FD 19         add  iy,de               | bump IY to point to state of next sprite in OBJRAM_BACK_BUF_BULLETS
+0AF2: 10 9B         djnz 0x0A8F               | repeat until B ==0
+0AF4: C9            rts
+
+* called if we have a cocktail display and it's player 2's turn. 
+0AF5: DD 7E 01      ld   a,(ix+0x01)
+0AF8: D6 04         sub  0x04
+0AFA: FD 77 02      ld   (iy+0x02),a
+0AFD: DD 7E 03      ld   a,(ix+0x03)
+0B00: 2F            cpl
+0B01: 4F            ld   c,a
+0B02: 78            ld   a,b
+0B03: FE 05         cp   0x05
+0B05: 38 D8         jr   c,0x0ADF
+0B07: 0D            dec  c
+0B08: C3 DF 0A      jp   0x0ADF
+
+
+
+*
+* Check if the player's bullet has hit any aliens in the swarm.
+* If so, delete the shot alien from the swarm, kick off a dying animation, and update player score with relevant points value. 
+*
+
+HANDLE_SWARM_ALIEN_TO_PLAYER_BULLET_COLLISION_DETECTION:
+0B0B: 21 08 42      ld   hl,0x4208            | pointer to HAS_PLAYER_BULLET_BEEN_FIRED  
+0B0E: CB 46         bit  0,(hl)              | test bit 0. If it's set, player is shooting.
+0B10: C8            rts  z                   | if zero flag is set, that means player is not shooting. Return.
+0B11: 23            inc  hl                  | bump HL to point to PLAYER_BULLET_X
+0B12: 7E            ld   a,(hl)              | read value of PLAYER_BULLET_X
+0B13: FE 68         cp   0x68                 | 
+0B15: D0            rts  nc                  | if X coordinate >= #0x68 (104 decimal) then bullet is not near swarm yet, so exit
+0B16: D6 1E         sub  0x1E                 | if X coordinate < #0x1E (30 decimal) then bullet has passed the swarm, this subtraction will cause a carry.. 
+0B18: D8            rts  c                   | .. so exit.
+
+* OK, we have to check if an alien has been hit
+0B19: 06 06         ld   b,0x06               | number of rows of aliens
+0B1B: D6 07         sub  0x07
+0B1D: D8            rts  c
+0B1E: D6 05         sub  0x05
+0B20: 38 03         jr   c,0x0B25             
+0B22: 10 F7         djnz 0x0B1B
+0B24: C9            rts
+
+* B =  row index from 1 to 6. Identifies which row of aliens to check for player bullet collisions. 
+* 1 = blue row of aliens closest to player| 6 = flagship row
+0B25: 23            inc  hl                  | bump HL to point to PLAYER_BULLET_Y
+0B26: 3A 0E 42      ld   a,(0x420E)           | read SWARM_SCROLL_VALUE
+0B29: 96            sub  (hl)
+0B2A: ED 44         neg.b   d0
+0B2C: 4F            ld   c,a
+0B2D: E6 0F         and  0x0F                 | mask in low nibble
+0B2F: D6 02         sub  0x02
+0B31: FE 0B         cp   0x0B
+0B33: D0            rts  nc
+0B34: 04            inc  b
+0B35: 79            ld   a,c
+0B36: E6 F0         and  0xF0                 | mask in high nibble
+0B38: 80            add  a,b
+0B39: 0F            rrca
+0B3A: 0F            rrca
+0B3B: 0F            rrca
+0B3C: 0F            rrca
+0B3D: 5F            ld   e,a                
+0B3E: 16 00         ld   d,0x00               | DE is now an offset into the ALIEN_SWARM_FLAGS table
+0B40: 21 00 41      ld   hl,0x4100            | load HL with address of ALIEN_SWARM_FLAGS
+0B43: 19            add  hl,de               | add offset to HL. Now HL points to a flag which determines if an alien is present
+0B44: CB 46         bit  0,(hl)              | test flag. If bit 0 is set, our bullet has hit an alien. 
+0B46: C8            rts  z                   | bit 0 is not set, we haven't shot an alien, so exit
+0B47: 72            ld   (hl),d              | We've hit an alien! Clear flag to indicate alien is dead.
+0B48: 16 01         ld   d,0x01               | command id for DELETE_ALIEN_COMMAND
+0B4A: 5D            ld   e,l                 | parameter: index of alien to delete from swarm
+0B4B: CD F2 08      call 0x08F2               | call QUEUE_COMMAND 
+0B4E: 7A            ld   a,d
+0B4F: 32 0B 42      ld   (0x420B),a           | set IS_PLAYER_BULLET_DONE flag to 1, so player can shoot again
+
+* we'll use the misc entry in the INFLIGHT_ALIENS array to display our explosion as a sprite
+0B52: 32 B1 42      ld   (0x42B1),a           | set INFLIGHT_ALIEN.IsDying to 1
+0B55: AF            xor  a
+0B56: 32 B2 42      ld   (0x42B2),a           | set INFLIGHT_ALIEN.StageOfLife to 0
+0B59: 2A 09 42      ld   hl,(0x4209)          | read PLAYER_BULLET_X and PLAYER_BULLET_Y  in one go
+0B5C: 22 B3 42      ld   (0x42B3),hl          | set INFLIGHT_ALIEN.X and INFLIGHT_ALIEN.Y  to bullet coordinates
+0B5F: 16 03         ld   d,0x03               | command id for UPDATE_PLAYER_SCORE_COMMAND (see 0x08f2)
+0B61: 7B            ld   a,e                 | read index of alien that was just killed
+0B62: FE 50         cp   0x50                 | was the alien killed in the bottom 3 ranks? (Blue aliens, most common type)
+0B64: 38 0C         jr   c,0x0B72             | if index is < 0x50 (128 decimal) then yes, its a blue alien, goto 0x0B72
+
+* only get here if you've shot a higher-ranking alien
+0B66: E6 70         and  0x70                 | Mask out the column number of the killed alien from the index. 
+* Now A is 0x50 (purple alien row),0x60 (red row),0x70 (flagship row)
+0B68: 0F            rrca
+0B69: 0F            rrca
+0B6A: 0F            rrca
+0B6B: 0F            rrca                     | Divide A by 16 decimal. 
+0B6C: D6 04         sub  0x04                 | Subtract 4 to compute parameter for UPDATE_PLAYER_SCORE_COMMAND  
+0B6E: 5F            ld   e,a                 | set parameter for UPDATE_PLAYER_SCORE_COMMAND 
+0B6F: C3 F2 08      jp   0x08F2               | jump to QUEUE COMMAND. Player score will be updated.
+
+* You've just shot a lowly blue alien. 
+0B72: 1E 00         ld   e,0x00               | parameter for UPDATE_PLAYER_SCORE_COMMAND - adds 30 points to player score
+0B74: C3 F2 08      jp   0x08F2               | jump to QUEUE COMMAND. Player score will be updated.
+
+
+*
+* Iterate through list of active enemy bullets and test if they have hit the player.
+* 
+
+HANDLE_PLAYER_TO_ENEMY_BULLET_COLLISION_DETECTION:
+0B77: 3A 00 42      ld   a,(0x4200)           | read HAS_PLAYER_SPAWNED flag
+0B7A: 0F            rrca                     | move bit 0 into carry
+0B7B: D0            rts  nc                  | if carry is not set, then player has not spawned. Return.
+0B7C: DD 21 60 42   ld   ix,0x4260            | point IX to ENEMY_BULLETS_START
+0B80: 11 05 00      ld   de,0x0005            | sizeof(ENEMY_BULLET) struct
+0B83: 06 0E         ld   b,0x0E               | length of ENEMY_BULLETS array 
+0B85: CD 8D 0B      call 0x0B8D               | call TEST_IF_ENEMY_BULLET_HIT_PLAYER
+0B88: DD 19         add  ix,de
+0B8A: 10 F9         djnz 0x0B85
+0B8C: C9            rts
+
+
+*
+* Check if an enemy bullet hit the player's ship.
+*
+* Expects: 
+* E = 5
+* IX  = pointer to ENEMY_BULLET structure
+*
+
+TEST_IF_ENEMY_BULLET_HIT_PLAYER:
+0B8D: DD CB 00 46   bit  0,(ix+0x00)          | read ENEMY_BULLET.IsActive
+0B91: C8            rts  z                   | return if bullet is not active
+
+0B92: DD 7E 01      ld   a,(ix+0x01)          | read ENEMY_BULLET.X coordinate 
+0B95: C6 1F         add  a,0x1F               | player ship is 32 pixels high.. 
+0B97: 93            sub  e                   | subtract 5
+0B98: 38 10         jr   c,0x0BAA
+0B9A: D6 09         sub  0x09
+0B9C: D0            rts  nc
+0B9D: 3A 02 42      ld   a,(0x4202)           | read PLAYER_Y 
+0BA0: DD 96 03      sub  (ix+0x03)            | subtract ENEMY_BULLET.Y coordinate
+0BA3: 83            add  a,e                 | add 5
+0BA4: FE 0B         cp   0x0B
+0BA6: D0            rts  nc
+0BA7: C3 B4 0B      jp   0x0BB4               | bullet has hit player
+0BAA: 3A 02 42      ld   a,(0x4202)           | read PLAYER_Y
+0BAD: DD 96 03      sub  (ix+0x03)            | subtract ENEMY_BULLET.Y coordinate
+0BB0: C6 02         add  a,0x02
+0BB2: BB            cp   e
+0BB3: D0            rts  nc
+
+* Player's been hit.. deactivate enemy bullet and set hit flag.
+0BB4: DD 36 00 00   ld   (ix+0x00),0x00        | clear ENEMY_BULLET.IsActive flag. 
+0BB8: 3E 01         ld   a,0x01
+0BBA: 32 04 42      ld   (0x4204),a           | set IS_PLAYER_HIT flag. Player will explode.          
+0BBD: C9            rts
+
 
 
 *
@@ -1654,17 +2190,7 @@ INFLIGHT_ALIEN_PACKS_BAGS:
 	TODOM	0x100
 INFLIGHT_ALIEN_FLIES_IN_ARC:	
 	TODOM	0x101
-INFLIGHT_ALIEN_READY_TO_ATTACK:	
-	TODOM	0x102
 
-INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN:
-	TODOM	0x106
-INFLIGHT_ALIEN_FULL_SPEED_CHARGE:
-	TODOM	0x107
-INFLIGHT_ALIEN_LOOP_THE_LOOP:
-	TODOM	0x104
-INFLIGHT_ALIEN_COMPLETE_LOOP:	
-	TODOM	0x104
 INFLIGHT_ALIEN_CONVOY_CHARGER_SET_COLOUR_POS_ANIM:
 	TODOM	0x104
 INFLIGHT_ALIEN_CONVOY_CHARGER_START_SCROLL:
@@ -1679,6 +2205,84 @@ INFLIGHT_ALIEN_DYING_FINALLY_BUYS_FARM:
 	TODOM	0x104
 
 	
+
+*
+* An alien that has just completed an arc animation (see docs @ 0x0D71 and 0x101F) is now ready to attack the player. 
+*
+* Expects:
+* IX = pointer to INFLIGHT_ALIEN that will attack
+*
+
+INFLIGHT_ALIEN_READY_TO_ATTACK:
+	addq.b	#1,(inf_alien_X,a2)				  | increment INFLIGHT_ALIEN.X
+	move.b	(IndexInSwarm,a2),d0			 | read INFLIGHT_ALIEN.IndexInSwarm
+	and.b	#0x70,d0                          | keep the row, remove the column
+	cmp.b	#0x60,d0                          | is this a red alien?
+	jbeq	l_0E20							   | yes, goto 0x0E20
+
+INFLIGHT_ALIEN_DEFINE_FLIGHTPATH:
+	move.b	PLAYER_Y(pc),d1		| read PLAYER_Y 
+	move.b	(inf_alien_Y,a2),d0 | read INFLIGHT_ALIEN.Y 
+	sub.b	d1,d0               | A = INFLIGHT_ALIEN.Y  - PLAYER_Y
+	jcs		l_0E0F             | if alien is to right of player, goto 0x0E0F
+
+* alien is to left of player
+* A = signed number representing distance in pixels between alien Y and player Y. 
+	asr.b	#1,d0	 				| divide distance by 2     
+	add.b	#0x10,d0               | add 0x10 (16 decimal) to product
+* clamp A between 0x30 and 0x70
+	cmp.b   #0x30,d0                 | compare to 48 (decimal)
+	jcc		0f            | if A>=48 goto 0x0DF0
+	move.b   #0x30,d0
+0:
+	cmp.b   #0x70,d0                 | compare to 112 (decimal)  NB: 112 is half the screen height in pixels
+	jcs		l_0DF6
+	move.b	#0x70,d0
+
+* PivotYValue is a Y coordinate to pivot around. You could think of it like the "origin" Y coordinate. 
+* PivotYValueAdd is a delta (offset) to add to PivotYValue to produce the correct Y coordinate of the alien.
+*
+* PivotYValueAdd will increment if the player is to the left of the alien when it leaves the swarm,
+* or decrement if the player is to the right. 
+
+l_0DF6:
+	move.b	d0,(PivotYValueAdd,a2)          | set INFLIGHT_ALIEN.PivotYValueAdd
+	sub.b	(inf_alien_Y,a2),d0            | subtract INFLIGHT_ALIEN.Y 
+	neg.b	d0
+	move.b	d0,(a2,PivotYValue)          | set INFLIGHT_ALIEN.PivotYValue. Now PivotYValue + PivotYValueAdd = INFLIGHT_ALIEN.Y
+	clr.b	(0x1a,a2)
+	clr.b	(0x1b,a2)			| ???? unknown stuff, but probably useful!!
+	clr.b	(0x1c,a2)
+
+	addq.b	#1,(StageOfLife,a2)    | set stage of life to INFLIGHT_ALIEN_ATTACKING_PLAYER or INFLIGHT_ALIEN_ATTACKING_PLAYER_AGGRESSIVELY
+	rts
+
+* alien is to right of player
+* A = signed number representing distance in pixels between alien and player.
+	
+l_0E0F:
+	asr.b	#1,d0              | perform a shift right, with sign bit preserved
+    sub  #0x10,d0
+* clamp A between -48 and -112 decimal
+	cmp.b   #0xD0,d0                  | compare to -48 (decimal)
+	bcs.b	0f
+	move.b	#0xD0,d0
+0:           
+	cmp.b   #0x90,d0                  | compare to -112 (decimal)  NB: 112 is half the screen height in pixels
+	bcc.b	l_0DF6
+	move.b	#0x90,d0		| clamp to 0x90 (-16)
+	jra		l_0DF6
+
+
+l_0E20:
+	tst.b	INFLIGHT_ALIENS+inflight_alien_size+IsActive      | address of INFLIGHT_ALIENS[1].IsActive
+	jeq		INFLIGHT_ALIEN_DEFINE_FLIGHTPATH                  | if not set then we are not part of a convoy, goto INFLIGHT_ALIEN_DEFINE_FLIGHTPATH
+
+* make the alien accompany the flagship as part of a convoy. The PivotYValueAdd of the alien is the same as the flagship,
+* so it will fly the same path.
+	move.b	INFLIGHT_ALIENS+inflight_alien_size+PivotYValueAdd(pc),d0	| read flagship INFLIGHT_ALIENS[1].PivotYValueAdd  
+	jra		l_0DF6
+
 *
 * This is probably the most important routine for the INFLIGHT_ALIEN. 
 *
@@ -1689,27 +2293,27 @@ INFLIGHT_ALIEN_DYING_FINALLY_BUYS_FARM:
 *
 
 INFLIGHT_ALIEN_ATTACKING_PLAYER:
-0E2B: DD 34 03      inc  (ix+0x03)            | increment INFLIGHT_ALIEN.X 
-0E2E: CD 6B 11      call 0x116B               | call UPDATE_INFLIGHT_ALIEN_YADD
-0E31: DD 7E 09      ld   a,(ix+0x09)          | load A with INFLIGHT_ALIEN.PivotYValue
-0E34: DD 86 19      add  a,(ix+0x19)          | add in INFLIGHT_ALIEN.PivotYValueAdd to produce a Y coordinate                                                   
-0E37: DD 77 04      ld   (ix+0x04),a          | write to INFLIGHT_ALIEN.Y 
-0E3A: C6 07         add  a,0x07
-0E3C: FE 0E         cp   0x0E
-0E3E: 38 24         jr   c,0x0E64             | if the alien has gone off the side of the screen, return to swarm
-0E40: DD 7E 03      ld   a,(ix+0x03)          | load A with INFLIGHT_ALIEN.X
-0E43: C6 48         add  a,0x48
-0E45: 38 20         jr   c,0x0E67             | if the alien is nearing the bottom of the screen, speed it up!
-0E47: 3A 00 42      ld   a,(0x4200)           | read HAS_PLAYER_SPAWNED
-0E4A: 0F            rrca                     | move flag into carry
-0E4B: D0            ret  nc                  | return if player has not spawned
-0E4C: CD B0 11      call 0x11B0               | call CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME
-
+	addq.b	#1,(inf_alien_X,a2)       | increment INFLIGHT_ALIEN.X 
+	jbsr	UPDATE_INFLIGHT_ALIEN_YADD
+	move.b	(PivotYValue,a2),d0         | load A with INFLIGHT_ALIEN.PivotYValue
+	add.b	(PivotYValueAdd,a2),d0      | add in INFLIGHT_ALIEN.PivotYValueAdd to produce a Y coordinate      
+	move.b	d0,(inf_alien_Y,a2)         | write to INFLIGHT_ALIEN.Y 
+	addq.b	#7,d0
+	cmp.b	#14,d0
+	bcs.b	2f                          | if the alien has gone off the side of the screen, return to swarm
+	move.b	(inf_alien_X,a2),d0			| load A with INFLIGHT_ALIEN.X
+	add.b	#0x48,d0
+	bcs.b	3f                          | if the alien is nearing the bottom of the screen, speed it up!
+	tst.b	HAS_PLAYER_SPAWNED
+	bne.b	0f
+	rts		| return if player has not spawned
+0:
+	jbsr	CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME
 * alien won't shoot at you if a flagship has been hit
-0E4F: 3A 2B 42      ld   a,(0x422B)           | read IS_FLAGSHIP_HIT
-0E52: 0F            rrca                     | move flag into carry
-0E53: D8            ret  c                   | return if flagship was hit
-
+	tst.b	IS_FLAGSHIP_HIT
+	beq.b	1f		    | return if flagship was hit
+	rts
+1:
 * Can this alien start shooting at you?
 *
 * code from 0x0E54-0E63 is akin to:
@@ -1728,11 +2332,11 @@ INFLIGHT_ALIEN_ATTACKING_PLAYER:
 
 * If only one of these INCs are called (see 0x0E45), INFLIGHT_ALIEN.StageOfLife will be set to INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN.
 * If both these INCs are called (see 0x0E3E), set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN. 
-0E64: DD 34 02      inc  (ix+0x02)      
-0E67: DD 34 02      inc  (ix+0x02)
-0E6A: C9            ret
-
-	
+2:
+	addq.b	#1,(StageOfLife,a2)
+3:   
+	addq.b	#1,(StageOfLife,a2)
+	rts
 
 *
 * When an alien is close to the horizontal plane where the player resides, it speeds up to zoom by (or into) the player.
@@ -1887,41 +2491,43 @@ INFLIGHT_ALIEN_COUNT_FLAGSHIP_ESCORTS:
 *
 
 INFLIGHT_ALIEN_RETURNING_TO_SWARM:
-     ld   b,(ix+0x03)          | keep copy of INFLIGHT_ALIEN.X in B as SET_INFLIGHT_ALIEN_START_POSITION changes it 
-     inc  b                   
-     jbsr	SET_INFLIGHT_ALIEN_START_POSITION               | to determine where alien needs to go  
+	move.b	(inf_alien_X,a2),d1     | keep copy of INFLIGHT_ALIEN.X in B as SET_INFLIGHT_ALIEN_START_POSITION changes it 
+    addq.b	#1,d1
+    jbsr	SET_INFLIGHT_ALIEN_START_POSITION               | to determine where alien needs to go  
 
 * INFLIGHT_ALIEN.Y  and INFLIGHT_ALIEN.X have been changed by SET_INFLIGHT_ALIEN_START_POSITION
-0F0E: DD 7E 03      ld   a,(ix+0x03)          | A = destination INFLIGHT_ALIEN.X
-0F11: DD 70 03      ld   (ix+0x03),b          | restore INFLIGHT_ALIEN.X back to what it was before
-0F14: 90            sub  b                   | OK, how far away is this alien from where it wants to be?
-0F15: 28 14         jr   z,0x0F2B             | distance is zero, it's got where it wants to be, goto INFLIGHT_ALIEN_BACK_IN_SWARM
-0F17: FE 19         cp   0x19                 | 25 pixels away?
-0F19: D0            ret  nc                  | if distance is more than 0x19 (25 decimal), not near enough to destination, so exit
-0F1A: E6 01         and  0x01                 | is distance an odd number?
-0F1C: C0            ret  nz                  | yes, so exit
-
+	move.b	(inf_alien_X,a2),d0             | A = destination INFLIGHT_ALIEN.X
+	move.b	d1,(inf_alien_X,a2)				| restore INFLIGHT_ALIEN.X back to what it was before
+	sub.b	d1,d0                           | OK, how far away is this alien from where it wants to be?
+	jbeq	INFLIGHT_ALIEN_BACK_IN_SWARM    | distance is zero, it's got where it wants to be, goto INFLIGHT_ALIEN_BACK_IN_SWARM
+	cmp.b	#0x19,d0                 | 25 pixels away?
+	bcs.b	0f
+	rts		     | if distance is more than 0x19 (25 decimal), not near enough to destination, so exit
+0:
+	btst	#0,d0            | is distance an odd number?
+	beq.b	1f
+	rts						    | yes, so exit
+1:
 * Alien is less than 25 pixels away from its destination back in the swarm.
 * We now need to determine what way to rotate the sprite so that it returns to the swarm upside-down, bat-style. 
-0F1D: DD CB 06 46   bit  0,(ix+0x06)          | read INFLIGHT_ALIEN.ArcClockwise
-0F21: 20 04         jr   nz,0x0F27             
-
-0F23: DD 34 05      inc  (ix+0x05)            | update INFLIGHT_ALIEN.AnimationFrame to rotate the alien right
-0F26: C9            rts
-
-0F27: DD 35 05      dec  (ix+0x05)            | update INFLIGHT_ALIEN.AnimationFrame to rotate the alien left
-0F2A: C9            rts
-
+	tst.b	(ArcClockwise,a2)       | read INFLIGHT_ALIEN.ArcClockwise
+	bne.b	2f
+	addq.b	#1,(AnimationFrame,a2)    | update INFLIGHT_ALIEN.AnimationFrame to rotate the alien right
+	rts
+2:
+	subq.b	#1,(AnimationFrame,a2)    | update INFLIGHT_ALIEN.AnimationFrame to rotate the alien left
+	rts
+	
 * alien has returned to swarm. Remove sprite and substitute sprite with characters.
 INFLIGHT_ALIEN_BACK_IN_SWARM:
-0F2B: DD 36 00 00   ld   (ix+0x00),0x00        | set INFLIGHT_ALIEN.IsActive to 0 - will hide sprite (see 0x0C98)
-0F2F: 26 41         ld   h,0x41               | MSB of ALIEN_SWARM_FLAGS address 
-0F31: DD 6E 07      ld   l,(ix+0x07)          | Now HL = pointer to address in ALIEN_SWARM_FLAGS where alien belongs
-0F34: 16 00         ld   d,0x00               | command: DRAW_ALIEN_COMMAND
-0F36: 36 01         ld   (hl),0x01            | mark flag in ALIEN_SWARM_FLAGS as "occupied". Our alien's back in the swarm!
-0F38: 5D            ld   e,l                 | E = index of alien in swarm
-0F39: C3 F2 08      jp   0x08F2               | jump to QUEUE COMMAND. Alien will be drawn in its place in the swarm.
-
+	clr.b	(IsActive,a2)                     | set INFLIGHT_ALIEN.IsActive to 0 - will hide sprite (see 0x0C98)
+	lea		ALIEN_SWARM_FLAGS(pc),a3          | MSB of ALIEN_SWARM_FLAGS address 
+	moveq	#0,d6
+	move.b	(IndexInSwarm,a2),d6                                              | Now a3+d6 = pointer to address in ALIEN_SWARM_FLAGS where alien belongs
+	moveq	#0,d3							  | command: DRAW_ALIEN_COMMAND
+	move.b	#1,(a3,d6.w)                      | mark flag in ALIEN_SWARM_FLAGS as "occupied". Our alien's back in the swarm!
+	move.b	d6,d3							  | E = index of alien in swarm
+	jra		QUEUE_COMMAND                     | jump to QUEUE COMMAND. Alien will be drawn in its place in the swarm.
 
 *
 * Called when aliens are aggressive and refuse to return to the swarm.
@@ -1936,31 +2542,30 @@ INFLIGHT_ALIEN_BACK_IN_SWARM:
 *
 
 INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN:
-0F3C: DD 34 03      inc  (ix+0x03)            | increment INFLIGHT_ALIEN.X
-
-* 
-0F3F: 3A 02 42      ld   a,(0x4202)           | read PLAYER_Y      
-0F42: DD 96 04      sub  (ix+0x04)            | subtract INFLIGHT_ALIEN.Y 
-
-0F45: ED 44         neg                      
-0F47: 17            rla                      | A = A * 2
-0F48: 5F            ld   e,a
-0F49: 9F            sbc  a,a                 | A= 0 - Carry flag
-0F4A: 57            ld   d,a
-0F4B: CB 13         rl   e
-0F4D: CB 12         rl   d                   | DE = DE * 2
-0F4F: DD 66 04      ld   h,(ix+0x04)
-0F52: DD 6E 09      ld   l,(ix+0x09)          | INFLIGHT_ALIEN.PivotYValue
-0F55: A7            and  a                   | Clear carry flag because..
-0F56: ED 52         sbc  hl,de               | ..there's no sub hl,de instruction in Z80 and we dont want a carry
-0F58: DD 74 04      ld   (ix+0x04),h          | update INFLIGHT_ALIEN.Y 
-0F5B: DD 75 09      ld   (ix+0x09),l          | update INFLIGHT_ALIEN.PivotYValue
-0F5E: DD 35 10      dec  (ix+0x10)            | counter was set @ 0x0ECF
-0F61: C0            ret  nz
-
-0F62: DD 34 02      inc  (ix+0x02)            | set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_FULL_SPEED_CHARGE
-0F65: C9            rts
-
+	addq.b	#1,(inf_alien_X,a2)		| increment INFLIGHT_ALIEN.X
+	move.b	PLAYER_Y(pc),d0			  | read PLAYER_Y     
+	sub.b	(inf_alien_Y,a2),d0		  | subtract INFLIGHT_ALIEN.Y 
+	neg.b	d0
+	add.b	d0,d0                     | A = A * 2
+	move.b	d0,d4
+	subx.b	d0,d0					 | A= 0 - Carry flag
+	move.b	d0,d3
+	lsl.w	#8,d3
+	move.b	d4,d3
+	add.w	d3,d3                    | DE = DE * 2
+	move.b	(inf_alien_Y,a2),d4
+	lsl.w	#8,d4
+	move.b	(PivotYValue,a2),d4
+	sub.w	d3,d4
+	move.b	d4,(PivotYValue,a2)    | update INFLIGHT_ALIEN.Y 
+	lsr.w	#8,d4                  
+	move.b	d4,(inf_alien_X,a2)    | update INFLIGHT_ALIEN.PivotYValue
+	subq.b	#1,(TempCounter1,a2)   | counter was set @ 0x0ECF
+	beq.b	0f
+	rts
+0:
+	addq.b	#1,(StageOfLife,a2)				| set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_FULL_SPEED_CHARGE
+	rts
 
 
 *
@@ -1974,44 +2579,41 @@ INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN:
 *
 
 INFLIGHT_ALIEN_FULL_SPEED_CHARGE:
-0F66: DD 34 03      inc  (ix+0x03)            | increment INFLIGHT_ALIEN.X
+	addq.b	#1,(inf_alien_X,a2)		| increment INFLIGHT_ALIEN.X
 
-* first check the X coordinate to see if the alien is in the centre 
-0F69: DD 7E 03      ld   a,(ix+0x03)          | read INFLIGHT_ALIEN.X 
-0F6C: D6 60         sub  0x60                                         
-0F6E: FE 40         cp   0x40
-0F70: 30 09         jr   nc,0x0F7B            | if INFLIGHT_ALIEN.X-0x60 >= 0x40, we're not centre horizontally   
+* first check the X coordinate to see if the alien is in the centre
+	move.b	(inf_alien_X,a2),d0         | read INFLIGHT_ALIEN.X 
+	sub.b  #0x60,d0                       
+	cmp.b   #0x40,d0
+	bcc.b	l_0F7B           | if INFLIGHT_ALIEN.X-0x60 >= 0x40, we're not centre horizontally   
 
 * next thing we need to do is check if we have enough space for a loop.
-0F72: DD 7E 04      ld   a,(ix+0x04)          | read INFLIGHT_ALIEN.Y 
-0F75: D6 60         sub  0x60
-0F77: FE 40         cp   0x40
-0F79: 38 0C         jr   c,0x0F87             | yes, we have space, make alien loop the loop
-
+	move.b	(inf_alien_Y,a2),d0          | read INFLIGHT_ALIEN.Y 
+	sub.b  #0x60,d0                       
+	cmp.b   #0x40,d0
+	bcs.b	1f                 | yes, we have space, make alien loop the loop
+l_0F7B:
 * otherwise, make the alien veer erratically. 
-0F7B: CD DD 0D      call 0x0DDD               | call INFLIGHT_ALIEN_DEFINE_FLIGHTPATH
-0F7E: DD 36 18 03   ld   (ix+0x18),0x03        | set INFLIGHT_ALIEN.Speed to maximum!
-0F82: DD 36 10 64   ld   (ix+0x10),0x64        | set INFLIGHT_ALIEN.TempCounter1
-0F86: C9            rts
-                     
- 
-0F87: DD 34 02      inc  (ix+0x02)
-0F8A: DD 34 02      inc  (ix+0x02)            | set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_LOOP_THE_LOOP 
-0F8D: DD 36 10 03   ld   (ix+0x10),0x03        | set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame
-0F91: DD 36 11 0C   ld   (ix+0x11),0x0C        | set INFLIGHT_ALIEN.TempCounter2 to number of animation frames in total
-0F95: DD 36 05 00   ld   (ix+0x05),0x00        | set INFLIGHT_ALIEN.AnimationFrame
-0F99: DD 36 13 00   ld   (ix+0x13),0x00        | set INFLIGHT_ALIEN.ArcTableLsb 
-0F9D: 3A 02 42      ld   a,(0x4202)           | read PLAYER_Y 
-0FA0: DD 96 04      sub  (ix+0x04)            | subtract INFLIGHT_ALIEN.Y 
-0FA3: 38 05         jr   c,0x0FAA             | if player to right of alien, make alien loop the loop clockwise
+	jbsr	INFLIGHT_ALIEN_DEFINE_FLIGHTPATH
+	move.b	#3,(Speed,a2)                     | set INFLIGHT_ALIEN.Speed to maximum!
+	move.b	#0x64,(TempCounter1,a2)            | set INFLIGHT_ALIEN.TempCounter1
+	rts   
+1:
+	addq.b	#2,(StageOfLife,a2)                | set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_LOOP_THE_LOOP 
+	move.b	#3,(TempCounter1,a2)               | set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame
+	move.b	#0xc,(TempCounter2,a2)             | set INFLIGHT_ALIEN.TempCounter2 to number of animation frames in total
+	clr.b	(AnimationFrame,a2)                | set INFLIGHT_ALIEN.AnimationFrame
+	clr.b	(ArcTableLsb,a2)				  | set INFLIGHT_ALIEN.ArcTableLsb 
+	move.b	PLAYER_Y(pc),d0					| read PLAYER_Y 
+	sub.b   (inf_alien_Y,a2),d0             | subtract INFLIGHT_ALIEN.Y 
+	bcs.b	2f								| if player to right of alien, make alien loop the loop clockwise
 
 * alien will perform an anti-clockwise loop
-0FA5: DD 36 06 00   ld   (ix+0x06),0x00        | reset INFLIGHT_ALIEN.ArcClockwise
-0FA9: C9            rts
-
-0FAA: DD 36 06 01   ld   (ix+0x06),0x01        | set INFLIGHT_ALIEN.ArcClockwise 
-0FAE: C9            rts
-
+	clr.b	(ArcClockwise,a2)      | reset INFLIGHT_ALIEN.ArcClockwise
+	rts
+2:
+	move.b	#1,(ArcClockwise,a2)      | set INFLIGHT_ALIEN.ArcClockwise
+	rts
 
 
 *
@@ -2104,7 +2706,6 @@ l_0E54:
 	jra		l_0FBE
 
 
-
 *
 * Aggressive aliens sometimes do a 360 degree loop to taunt the player.
 *
@@ -2115,78 +2716,85 @@ l_0E54:
 *
 
 INFLIGHT_ALIEN_LOOP_THE_LOOP:
-101F: DD 6E 13      ld   l,(ix+0x13)          | load L with INFLIGHT_ALIEN.ArcTableLsb
-1022: 26 1E         ld   h,0x1E               | MSB of INFLIGHT_ALIEN_ARC_TABLE                 
+	moveq	#0,d6
+	move.b	(ArcTableLsb,a2),d6
+	lea		INFLIGHT_ALIEN_ARC_TABLE(pc),a3
+	add.w	d6,a3
+* Now a3 is a pointer to an entry in the INFLIGHT_ALIEN_ARC_TABLE (see docs @ 0x1E00)
+	move.b	(inf_alien_X,a2),d0
+	sub.b	(a3)+,d0
+	move.b	d0,(inf_alien_X,a2)     | subtract X component from table  
 
-* Now HL is a pointer to an entry in the INFLIGHT_ALIEN_ARC_TABLE (see docs @ 0x1E00)
-1024: DD 7E 03      ld   a,(ix+0x03)          | load INFLIGHT_ALIEN.X          
-1027: 96            sub  (hl)                | subtract X component from table  
-1028: DD 77 03      ld   (ix+0x03),a
-
-102B: 2C            inc  l
-
-102C: DD CB 06 46   bit  0,(ix+0x06)          | is this alien going to do a clockwise loop?
-1030: 20 2E         jr   nz,0x1060            | yes, goto INFLIGHT_ALIEN_LOOPING_CLOCKWISE
+	tst.b	(ArcClockwise,a2)         | is this alien going to do a clockwise loop?
+	jne		INFLIGHT_ALIEN_LOOPING_CLOCKWISE
 
 * Alien is performing a counter-clockwise loop-the-loop maneuvre
-1032: DD 7E 04      ld   a,(ix+0x04)          | read INFLIGHT_ALIEN.Y
-1035: 96            sub  (hl)                | subtract Y component from INFLIGHT_ALIEN_ARC_TABLE
-1036: DD 77 04      ld   (ix+0x04),a          | set INFLIGHT_ALIEN.Y 
-1039: 2C            inc  l                   | bump HL to point to next X,Y pair in INFLIGHT_ALIEN_ARC_TABLE
-103A: DD 75 13      ld   (ix+0x13),l          | set INFLIGHT_ALIEN.ArcTableLsb
-103D: DD 35 10      dec  (ix+0x10)            | decrement INFLIGHT_ALIEN.TempCounter1 
-1040: C0            ret  nz
+	move.b	(inf_alien_Y,a2),d0			   | read INFLIGHT_ALIEN.Y
+	sub.b	(a3),d0					      | subtract Y component from INFLIGHT_ALIEN_ARC_TABLE
+	move.b	d0,(inf_alien_Y,a2)            | set INFLIGHT_ALIEN.Y 
+* now update to next X,Y pair in INFLIGHT_ALIEN_ARC_TABLE
+	addq.b	#2,d6
+	move.b	d6,(ArcTableLsb,a2)             | set INFLIGHT_ALIEN.ArcTableLsb
+	subq.b	#1,(TempCounter1,a2)            | decrement INFLIGHT_ALIEN.TempCounter1 
+	beq.b	0f
+	rts
+0:
 
 * When INFLIGHT_ALIEN.TempCounter1 counts down to zero, its time to change the animation frame
-1041: DD 36 10 04   ld   (ix+0x10),0x04        | reset INFLIGHT_ALIEN.TempCounter1 
-1045: DD 35 05      dec  (ix+0x05)            | change sprite frame to appear to rotate LEFT
+	move.b	#4,(TempCounter1,a2)    | reset INFLIGHT_ALIEN.TempCounter1 
+	subq.b	#1,(AnimationFrame,a2)            | change sprite frame to appear to rotate LEFT
 
 * INFLIGHT_ALIEN.TempCounter2 is used to count down number of animation frames left
-1048: DD 35 11      dec  (ix+0x11)            | decrement INFLIGHT_ALIEN.TempCounter2
-104B: C0            ret  nz                  | return if we haven't done 
-
+	subq.b	#1,(TempCounter2,a2)            | decrement INFLIGHT_ALIEN.TempCounter2
+	beq.b	2f                  | return if we haven't done 
+	rts
+2:
 * we've done 270 degrees rotation, hand off the remaining 90 to the INFLIGHT_ALIEN_FLIES_IN_ARC 
-104C: DD 34 02      inc  (ix+0x02)            | bump INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_COMPLETE_LOOP
-104F: DD 36 10 03   ld   (ix+0x10),0x03        | set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame
-1053: DD 36 11 0C   ld   (ix+0x11),0x0C        | set INFLIGHT_ALIEN.TempCounter2 to number of animation frames
-1057: DD 36 05 0C   ld   (ix+0x05),0x0C        | set INFLIGHT_ALIEN.AnimationFrame
-105B: DD 36 13 00   ld   (ix+0x13),0x00        | set INFLIGHT_ALIEN.ArcTableLsb
-105F: C9            ret
+	addq.b	#1,(StageOfLife,a2)   | bump INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_COMPLETE_LOOP
+	move.b	#3,(TempCounter1,a2)        | set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame
+	move.b	#0xC,(TempCounter2,a2)        | set INFLIGHT_ALIEN.TempCounter2 to number of animation frames
+	move.b	#0xC,(AnimationFrame,a2)       | set INFLIGHT_ALIEN.AnimationFrame
+	clr.b	(a2,ArcTableLsb)          | set INFLIGHT_ALIEN.ArcTableLsb
+	rts
 
 
 * Alien is performing a clockwise loop-the-loop maneuvre
 INFLIGHT_ALIEN_LOOPING_CLOCKWISE:
-1060: DD 7E 04      ld   a,(ix+0x04)          | read INFLIGHT_ALIEN.Y
-1063: 86            add  a,(hl)              | add Y component from INFLIGHT_ALIEN_ARC_TABLE
-1064: DD 77 04      ld   (ix+0x04),a          | set INFLIGHT_ALIEN.Y
-1067: 2C            inc  l                   | bump HL to point to next X,Y pair in INFLIGHT_ALIEN_ARC_TABLE
-1068: DD 75 13      ld   (ix+0x13),l          | set INFLIGHT_ALIEN.ArcTableLsb
-106B: DD 35 10      dec  (ix+0x10)
-106E: C0            ret  nz
+	move.b	(inf_alien_Y,a2),d0          | read INFLIGHT_ALIEN.Y
+	add.b	(a3),d0              | add Y component from INFLIGHT_ALIEN_ARC_TABLE
+	move.b	d0,(inf_alien_Y,a2)             | set INFLIGHT_ALIEN.Y
+	                               | bump HL to point to next X,Y pair in INFLIGHT_ALIEN_ARC_TABLE
+	addq.b	#2,d6
+	move.b	d6,(ArcTableLsb,a2)             | set INFLIGHT_ALIEN.ArcTableLsb
+	subq.b	#1,(TempCounter1,a2)            | decrement INFLIGHT_ALIEN.TempCounter1 
+	beq.b	1f
+	rts
+1:
 
 * When INFLIGHT_ALIEN.TempCounter1 counts down to zero, its time to change the animation frame
-106F: DD 36 10 04   ld   (ix+0x10),0x04        reset INFLIGHT_ALIEN.TempCounter1 
-1073: DD 34 05      inc  (ix+0x05)            | change sprite frame to appear to rotate RIGHT
-1076: DD 35 11      dec  (ix+0x11)
-1079: C0            ret  nz
-
+	move.b	#4,(TempCounter1,a2)           |  reset INFLIGHT_ALIEN.TempCounter1 
+	addq.b	#1,(AnimationFrame,a2)         | change sprite frame to appear to rotate RIGHT
+	subq.b	#1,(TempCounter2,a2)
+	beq.b	2f
+	rts
+2:
 * we've done 270 degrees rotation, hand off the remaining 90 to the INFLIGHT_ALIEN_FLIES_IN_ARC
-107A: DD 34 02      inc  (ix+0x02)            | bump INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_COMPLETE_LOOP
-107D: DD 36 10 03   ld   (ix+0x10),0x03        | set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame
-1081: DD 36 11 0C   ld   (ix+0x11),0x0C        | set INFLIGHT_ALIEN.TempCounter2 to number of animation frames
-1085: DD 36 05 F4   ld   (ix+0x05),0xF4        | set INFLIGHT_ALIEN.AnimationFrame
-1089: DD 36 13 00   ld   (ix+0x13),0x00        | set INFLIGHT_ALIEN.ArcTableLsb
-108D: C9            ret
+	addq.b	#1,(StageOfLife,a2)            | bump INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_COMPLETE_LOOP
+	move.b	#3,(TempCounter1,a2)        | set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame
+	move.b	#0xC,(TempCounter2,a2)        | set INFLIGHT_ALIEN.TempCounter2 to number of animation frames
+	move.b	#0xF4,(AnimationFrame,a2)        | set INFLIGHT_ALIEN.AnimationFrame
+	clr.b	(a2,ArcTableLsb)        | set INFLIGHT_ALIEN.ArcTableLsb
+	rts
 
 
 INFLIGHT_ALIEN_COMPLETE_LOOP:
-108E: C3 71 0D      jp   0x0D71               | jump to INFLIGHT_ALIEN_FLIES_IN_ARC
+		jra		INFLIGHT_ALIEN_FLIES_IN_ARC
 
 
 INFLIGHT_ALIEN_UNKNOWN_1091:
-1091: DD 34 03      inc  (ix+0x03)            | update INFLIGHT_ALIEN.X
-1094: DD 36 02 08   ld   (ix+0x02),0x08        | set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_FULL_SPEED_CHARGE
-1098: C3 7B 0F      jp   0x0F7B               
+	addq.b	#1,(inf_alien_X,a2)               | update INFLIGHT_ALIEN.X
+	move.b	#8,(StageOfLife,a2)        | set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_FULL_SPEED_CHARGE
+	jra		l_0F7B               
 
 *
 * To monitor the input parameters type the following into the MAME debugger:
@@ -2250,6 +2858,1234 @@ UPDATE_INFLIGHT_ALIEN_YADD:
     move.b	d4,(PivotYValueAdd+3,a2)
 
 	rts
+
+
+*
+* Calculate the animation frame that makes an attacking alien "look" directly at the player. 
+* 
+* Expects:
+* IX = pointer to INFLIGHT_ALIEN structure with valid X and Y fields.
+*
+* Returns:
+*  INFLIGHT_ALIEN.AnimationFrame is updated
+*
+
+CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME:
+11B0: 3E F0         ld   a,0xF0               |  
+11B2: DD 96 03      sub  (ix+0x03)            | subtract from INFLIGHT_ALIEN.X
+11B5: 57            ld   d,a
+11B6: 3A 02 42      ld   a,(0x4202)           | read PLAYER_Y 
+11B9: DD 96 04      sub  (ix+0x04)            | subtract from INFLIGHT_ALIEN.Y 
+11BC: 38 07         jr   c,0x11C5             
+11BE: CD D0 11      call 0x11D0
+11C1: DD 77 05      ld   (ix+0x05),a          | set INFLIGHT_ALIEN.AnimationFrame          
+11C4: C9            rts
+
+11C5: ED 44         neg.b   d0
+11C7: CD D0 11      call 0x11D0
+11CA: ED 44         neg.b   d0
+11CC: DD 77 05      ld   (ix+0x05),a          | set INFLIGHT_ALIEN.AnimationFrame
+11CF: C9            rts
+
+
+	jbsr	CALCULATE_TANGENT
+11D3: 79            ld   a,c
+11D4: A7            and  a
+11D5: F2 DA 11      jp   p,0x11DA
+11D8: 3E 80         ld   a,0x80
+11DA: 07            rlca
+11DB: 07            rlca
+11DC: 07            rlca
+11DD: E6 07         and  0x07
+11DF: C9            rts
+
+
+*
+* Try to spawn an enemy bullet. 
+*
+* Expects:
+* IX = pointer to INFLIGHT_ALIEN struct
+*
+* Cheat:
+* If you want to stop the aliens from firing, type the following into the MAME debugger:
+* maincpu.mb@11E0 = C9 
+
+TRY_SPAWN_ENEMY_BULLET:
+11E0: 11 05 00      ld   de,0x0005            | sizeof(ENEMY_BULLET)
+11E3: 21 60 42      ld   hl,0x4260            | load HL with address of ENEMY_BULLETS_START
+11E6: 06 0E         ld   b,0x0E               | there are 14 elements in the ENEMY_BULLETS_START array
+11E8: CB 46         bit  0,(hl)              | test if bullet is active
+11EA: 28 04         jr   z,0x11F0             | if its not active, then we can use this slot to spawn an enemy bullet, goto 0x11F0
+11EC: 19            add  hl,de               | otherwise bump HL to point to next enemy bullet in the array
+11ED: 10 F9         djnz 0x11E8               | repeat until B==0
+11EF: C9            rts
+
+
+*
+* Spawn an enemy bullet.
+*
+* Expects:
+* IX = pointer to INFLIGHT_ALIEN structure. Identifies the alien firing the bullet.
+* HL = pointer to ENEMY_BULLET structure. Contains info about the spawned bullet. 
+*
+
+SPAWN_ENEMY_BULLET:
+11F0: 36 01         ld   (hl),0x01            | set ENEMY_BULLET.IsActive to 1 (true)
+11F2: 23            inc  hl                  | bump HL to point to ENEMY_BULLET.X
+11F3: DD 7E 03      ld   a,(ix+0x03)          | read INFLIGHT_ALIEN.X coordinate
+11F6: 77            ld   (hl),a              | set X coordinate of bullet to be same as alien
+11F7: 3E F0         ld   a,0xF0               | load A with -16 (decimal)
+11F9: 96            sub  (hl)                | A = X coordinate of bullet + 16 
+11FA: 57            ld   d,a
+11FB: 23            inc  hl
+11FC: 23            inc  hl                  | bump HL to point to ENEMY_BULLET.YH
+11FD: DD 7E 04      ld   a,(ix+0x04)          | read INFLIGHT_ALIEN.Y  coordinate
+1200: 77            ld   (hl),a              | set Y coordinate of bullet to be same as alien
+1201: 23            inc  hl                  | bump HL to point to ENEMY_BULLET.YDelta
+1202: 3A 02 42      ld   a,(0x4202)           | read PLAYER_Y   
+1205: DD 96 04      sub  (ix+0x04)            | subtract from INFLIGHT_ALIEN.Y  coordinate       
+1208: 38 05         jr   c,0x120F             | 
+120A: CD 18 12      call 0x1218               | call COMPUTE_ENEMY_BULLET_DELTA
+120D: 77            ld   (hl),a              | set ENEMY_BULLET.YDelta 
+120E: C9            rts
+
+
+120F: ED 44         neg.b   d0                      | A = Math.Abs(A)
+1211: CD 18 12      call 0x1218               | call COMPUTE_ENEMY_BULLET_DELTA
+1214: ED 44         neg.b   d0                      | make bullet fly to right 
+1216: 77            ld   (hl),a              | set ENEMY_BULLET.YDelta 
+1217: C9            rts
+
+
+*
+* Unlike the player's bullet, enemy bullets don't always fly in a straight line. 
+*
+
+COMPUTE_ENEMY_BULLET_DELTA:
+1218: CD 48 00      call 0x0048               | call CALCULATE_TANGENT
+121B: CD 3C 00      call 0x003C               | call GENERATE_RANDOM_NUMBER
+121E: E6 1F         and  0x1F                 | clamp number to 0..31 decimal
+1220: 81            add  a,c
+1221: C6 06         add  a,0x06
+1223: F0            rts  p
+1224: 3E 7F         ld   a,0x7F
+1226: C9            rts
+
+
+
+
+HANDLE_INFLIGHT_ALIEN_TO_PLAYER_BULLET_COLLISION_DETECTION:
+1227: 3A 08 42      ld   a,(0x4208)           | read HAS_PLAYER_BULLET_BEEN_FIRED flag
+122A: 0F            rrca                     | move flag into carry
+122B: D0            rts  nc                  | return if player is not shooting
+122C: DD 21 D0 42   ld   ix,0x42D0            | pointer to INFLIGHT_ALIENS_START
+1230: 11 20 00      ld   de,0x0020            | sizeof(INFLIGHT_ALIEN)
+1233: 06 07         ld   b,0x07               | length of INFLIGHT_ALIENS array
+1235: D9            exx
+1236: CD 3F 12      call 0x123F               | call TEST_IF_PLAYER_BULLET_HIT_INFLIGHT_ALIEN   
+1239: D9            exx
+123A: DD 19         add  ix,de               | bump IX to point to next INFLIGHT_ALIEN
+123C: 10 F7         djnz 0x1235
+123E: C9            rts
+
+
+
+
+*
+* Player bullet to attacking alien collision detection.
+*
+* IX = pointer to INFLIGHT_ALIEN structure
+*
+
+TEST_IF_PLAYER_BULLET_HIT_INFLIGHT_ALIEN:
+123F: DD CB 00 46   bit  0,(ix+0x00)          | Test INFLIGHT_ALIEN.IsActive flag
+1243: C8            rts  z                   | return if not set
+1244: 2A 09 42      ld   hl,(0x4209)          | read PLAYER_BULLET_X and PLAYER_BULLET_Y 
+1247: DD 7E 03      ld   a,(ix+0x03)          | read INFLIGHT_ALIEN.X
+124A: 95            sub  l                   | subtract from value of PLAYER_BULLET_X 
+124B: C6 02         add  a,0x02               
+124D: FE 06         cp   0x06
+124F: D0            rts  nc
+1250: DD 7E 04      ld   a,(ix+0x04)          | read INFLIGHT_ALIEN.Y  
+1253: 94            sub  h                   | subtract from value of PLAYER_BULLET_Y 
+1254: C6 05         add  a,0x05
+1256: FE 0C         cp   0x0C
+1258: D0            rts  nc
+
+* if we get here, the player bullet has hit an alien inflight.
+1259: 3E 01         ld   a,0x01
+125B: 32 0B 42      ld   (0x420B),a           | set IS_PLAYER_BULLET_DONE to 1.
+125E: DD 36 00 00   ld   (ix+0x00),0x00        | set INFLIGHT_ALIEN.IsActive to 0.  
+1262: DD 36 01 01   ld   (ix+0x01),0x01        | set INFLIGHT_ALIEN.IsDying to 1.
+1266: DD 36 02 00   ld   (ix+0x02),0x00        | set INFLIGHT_ALIEN.StageOfLife to 0.
+126A: 11 04 03      ld   de,0x0304            | command ID: UPDATE_PLAYER_SCORE_COMMAND, parameter: 4 
+
+* We now need to identify what rank this alien is so we can add its points value to the player score.
+126D: 01 50 03      ld   bc,0x0350            | B= count, C = index into ALIEN_SWARM_FLAGS array to compare against
+1270: DD 7E 07      ld   a,(ix+0x07)          | load a with INFLIGHT_ALIEN.IndexInSwarm to find out what rank this alien is.
+1273: B9            cp   c                   | compare A with 0x50 (80 decimal)  
+1274: DA F2 08      jp   c,0x08F2             | if A<0x50 jump to QUEUE_COMMAND with command ID: UPDATE_PLAYER_SCORE_COMMAND 
+1277: 1C            inc  e                   | increment parameter passed to command - giving a higher score value
+1278: D6 10         sub  0x10                 | subtract 10 (16 decimal) to "go down" a rank
+127A: 10 F7         djnz 0x1273               | repeat until B==0. Only flagships will go to B==0.
+
+* If we get here, we've shot an attacking flagship. 
+* First we activate a timer that prevents aliens from leaving the swarm for a while. This simulates the swarm being "stunned". 
+* We then calculate how many of the flagships escorts have been killed so we can update the player score accordingly. 
+* For max points, a flagship must have 2 escorts and the escorts must be killed before the flagship.
+127C: 21 01 F0      ld   hl,0xF001
+127F: 22 2B 42      ld   (0x422B),hl          | set IS_FLAGSHIP_HIT to 1, and ALIENS_IN_SHOCK_COUNTER to 0xF0 (240 decimal)                    
+1282: 3A 2A 42      ld   a,(0x422A)           | read FLAGSHIP_ESCORT_COUNT 
+1285: FE 02         cp   0x02                 | do we have 2 aliens escorting the flagship?
+1287: CC 92 12      call z,0x1292             | yes, call ASSERT_BOTH_FLAGSHIP_ESCORTS_ARE_ALIVE
+128A: 32 2D 42      ld   (0x422D),a           | set FLAGSHIP_SCORE_FACTOR. If 3, then you get full points for killing the flagship + escort.               
+128D: 83            add  a,e
+128E: 5F            ld   e,a                 | set command parameter
+128F: C3 F2 08      jp   0x08F2               | QUEUE_COMMAND with command ID: UPDATE_PLAYER_SCORE_COMMAND
+
+* We need to test if both the flagship's escorts are alive.
+* If both are dead, then when this function returns, A will be set to 3. 
+ASSERT_BOTH_FLAGSHIP_ESCORTS_ARE_ALIVE:
+1292: DD CB 20 46   bit  0,(ix+0x20)          | test if first escort is alive   
+1296: C0            rts  nz                  | return if alive
+1297: DD CB 40 46   bit  0,(ix+0x40)          | test if second escort is alive   
+129B: C0            rts  nz                  | return if alive
+
+* both escorts have been killed (or the flagship didn't have 2 escorts to start with)
+129C: 3C            inc  a                   | both 
+129D: C9            rts
+
+
+*
+* Iterate through list of inflight aliens and test if they have hit the player.
+*
+
+HANDLE_PLAYER_TO_INFLIGHT_ALIEN_COLLISION_DETECTION:
+129E: 3A 00 42      ld   a,(0x4200)           | read HAS_PLAYER_SPAWNED
+12A1: 0F            rrca                     | move flag into carry
+12A2: D0            rts  nc                  | return if carry not set
+12A3: DD 21 D0 42   ld   ix,0x42D0            | pointer to INFLIGHT_ALIENS[1]
+12A7: 11 20 00      ld   de,0x0020            | sizeof(INFLIGHT_ALIEN)
+12AA: 06 07         ld   b,0x07               | 7 aliens to test collision with
+12AC: D9            exx
+12AD: CD B6 12      call 0x12B6               | call TEST_IF_INFLIGHT_ALIEN_HIT_PLAYER
+12B0: D9            exx
+12B1: DD 19         add  ix,de               | bump IX to point to next INFLIGHT_ALIEN in array
+12B3: 10 F7         djnz 0x12AC               | repeat until B==0
+12B5: C9            rts
+
+
+
+*
+* Check if a flying alien has hit the player's ship.
+*
+* If so:
+* IS_PLAYER_HIT will be set to 1.
+*
+* Expects: 
+* IX = pointer to INFLIGHT_ALIEN structure 
+*
+
+TEST_IF_INFLIGHT_ALIEN_HIT_PLAYER:
+12B6: DD CB 00 46   bit  0,(ix+0x00)          | read INFLIGHT_ALIEN.IsActive flag
+12BA: C8            rts  z                   | exit if alien isn't active
+
+12BB: DD 7E 03      ld   a,(ix+0x03)          | read INFLIGHT_ALIEN.X
+12BE: C6 21         add  a,0x21
+12C0: D6 05         sub  0x05
+12C2: 38 16         jr   c,0x12DA
+12C4: D6 0C         sub  0x0C
+12C6: D0            rts  nc                  | return if >=0x0C
+
+12C7: 3A 02 42      ld   a,(0x4202)           | read PLAYER_Y 
+12CA: DD 96 04      sub  (ix+0x04)            | subtract INFLIGHT_ALIEN.Y 
+12CD: C6 0A         add  a,0x0A
+12CF: FE 15         cp   0x15
+12D1: D0            rts  nc                  | return if >=0x15
+
+* kill player and alien
+12D2: 3E 01         ld   a,0x01
+12D4: 32 04 42      ld   (0x4204),a           | set IS_PLAYER_HIT flag. 
+12D7: C3 5E 12      jp   0x125E               | and we need to kill the alien as well
+
+12DA: 3A 02 42      ld   a,(0x4202)           | read PLAYER_Y 
+12DD: DD 96 04      sub  (ix+0x04)            | subtract INFLIGHT_ALIEN.Y 
+12E0: C6 07         add  a,0x07
+12E2: FE 0F         cp   0x0F
+12E4: D0            rts  nc                  | return if >=0x0f
+
+* kill player and alien
+12E5: 3E 01         ld   a,0x01
+12E7: 32 04 42      ld   (0x4204),a           | set IS_PLAYER_HIT flag. 
+12EA: C3 5E 12      jp   0x125E               | and we need to kill the alien as well
+
+
+
+* 
+*  Handles the player being hit by an INFLIGHT_ALIEN (see 0x12B6) or ENEMY_BULLET (see 0x0B8D).
+* 
+
+HANDLE_PLAYER_HIT:
+12ED: 21 04 42      ld   hl,0x4204            | pointer to IS_PLAYER_HIT flag
+12F0: CB 46         bit  0,(hl)              | test flag to see if player has been hit. 
+12F2: C8            rts  z                   | bit is not set so player not hit, return
+
+* OK, player's hit. 
+12F3: 36 00         ld   (hl),0x00            | clear IS_PLAYER_HIT flag
+12F5: 21 00 01      ld   hl,0x0100             
+12F8: 22 00 42      ld   (0x4200),hl          | Clear HAS_PLAYER_SPAWNED and set IS_PLAYER_DYING flags
+
+* Draw first frame of player exploding
+12FB: 21 0A 04      ld   hl,0x040A
+12FE: 22 05 42      ld   (0x4205),hl          | set PLAYER_EXPLOSION_COUNTER and PLAYER_EXPLOSION_ANIM_FRAME
+1301: 11 05 02      ld   de,0x0205            | command: DISPLAY_PLAYER_COMMAND, parameter: 5 (invokes DRAW_PLAYER_SHIP_EXPLODING)
+1304: CD F2 08      call 0x08F2               | call QUEUE_COMMAND
+
+* reduce level of difficulty
+1307: 3A 1A 42      ld   a,(0x421A)           | read DIFFICULTY_EXTRA_VALUE
+130A: A7            and  a                   | test if its zero
+130B: 28 01         jr   z,0x130E             | if zero, then - wait a second, why is it updating an already zero field? Should be: jr z, 0x1311     
+130D: 3D            dec  a                   | reduce game difficulty slightly
+130E: 32 1A 42      ld   (0x421A),a           | update DIFFICULTY_EXTRA_VALUE
+
+* decrement number of player lives
+1311: 21 1D 42      ld   hl,0x421D            | pointer to address of PLAYER_LIVES
+1314: 35            dec  (hl)                | reduce number of lives
+1315: 7E            ld   a,(hl)              | read number of lives
+1316: FE 06         cp   0x06                 | compare to 6
+1318: 38 02         jr   c,0x131C             | if < 6 then goto 0x131C
+131A: 36 05         ld   (hl),0x05            | otherwise, clamp number of lives max to 5 (is this anti-hack code?)
+131C: 3A 06 40      ld   a,(0x4006)           | read IS_GAME_IN_PLAY
+131F: 0F            rrca                     | move flag into carry
+1320: D0            rts  nc                  | return if game is not in play
+
+* Make player BOOM! sound
+1321: 3E 01         ld   a,0x01
+1323: 32 03 68      ld   (0x6803),a           | make PLAYER HIT noise
+1326: C9            rts
+
+
+
+
+* Draws player explosion, stops player hit sound when done.
+
+HANDLE_PLAYER_DYING:
+1327: 3A 01 42      ld   a,(0x4201)           | read IS_PLAYER_DYING flag
+132A: 0F            rrca                     | move flag into carry. If player is dying carry is set
+132B: D0            rts  nc                  | return if player is not dying. 
+* wait for explosion delay to count to zero
+132C: 21 05 42      ld   hl,0x4205            | point HL to PLAYER_EXPLOSION_COUNTER
+132F: 35            dec  (hl)                | decrement value
+1330: C0            rts  nz                  | if counter hasn't hit 0, then explosion animation can continue, return.
+1331: 36 0A         ld   (hl),0x0A            | otherwise reset PLAYER_EXPLOSION_COUNTER value to its default #0x0A (10 decimal)
+
+* draw explosion animation
+1333: 23            inc  hl                  | bump HL to point to PLAYER_EXPLOSION_ANIM_FRAME     
+1334: 16 02         ld   d,0x02               | command 2: DISPLAY_PLAYER_COMMAND
+1336: 5E            ld   e,(hl)              | read the animation frame value  
+1337: CD F2 08      call 0x08F2               | call QUEUE_COMMAND
+133A: 35            dec  (hl)                | decrement the animation frame value
+133B: C0            rts  nz                  | if its not zero, the player dying animation hasn't finished, so return 
+133C: AF            xor  a                   | Otherwise, the player explosion animation has reached its end, so....
+
+* clear IS_PLAYER_DYING flag when animation done and stop player explosion sound
+133D: 32 01 42      ld   (0x4201),a           | clear IS_PLAYER_DYING flag
+1340: 32 03 68      ld   (0x6803),a           | clear !SOUND  player hit
+1343: C9            rts
+
+
+
+*
+* Try to send a single alien to attack the player.
+*
+* If we have flagships in the swarm, then only purple and blue aliens can be sent to attack by this routine.
+* If we have no flagships in the swarm, then red aliens can also be sent to attack. (See 0x13BD)
+*
+* Flagships and escorts are handled by HANDLE_FLAGSHIP_ATTACK.
+*
+*
+* Cheat (of a sort):
+* if you want to make this game very difficult, type the following into the MAME debugger: 
+* maincpu.mb@1359 = 8
+* maincpu.pb@421A = 7
+* maincpu.pb@421B = 7
+*
+
+HANDLE_SINGLE_ALIEN_ATTACK:
+1344: 3A 28 42      ld   a,(0x4228)           | read CAN_ALIEN_ATTACK flag
+1347: 0F            rrca                     | move flag into carry
+1348: D0            rts  nc                  | return if flag is not set
+1349: AF            xor  a
+134A: 32 28 42      ld   (0x4228),a           | reset flag
+134D: 3A 20 42      ld   a,(0x4220)           | read HAVE_NO_ALIENS_IN_SWARM flag.
+1350: 0F            rrca                     | move flag into carry
+1351: D8            rts  c                   | return if no aliens are in the swarm.
+
+* The difficulty level specifies how many aliens can be attacking the player at one time.
+1352: 2A 1A 42      ld   hl,(0x421A)          | load H with DIFFICULTY_BASE_VALUE and L with DIFFICULTY_EXTRA_VALUE
+1355: 7C            ld   a,h                 | 
+1356: 85            add  a,l                 | add DIFFICULTY_EXTRA_VALUE to DIFFICULTY_BASE_VALUE 
+1357: 1F            rra                      | divide by 2.
+1358: FE 04         cp   0x04                 | is result < 4?
+135A: 38 02         jr   c,0x135E             | yes, goto 0x135E.
+135C: 3E 03         ld   a,0x03               | Clamp maximum number of INFLIGHT_ALIEN slots to scan to 3.
+135E: 3C            inc  a                   | ensure that slots to scan is in range of 1..4
+
+* Scan a specified number of slots (up to 4) in the INFLIGHT_ALIENS array, starting from the *last* slot and working back.
+* Take the first slot that has clear IsActive and IsDying flags.
+* A = number of slots to scan
+135F: 47            ld   b,a                  | save number of slots to scan in B
+1360: 21 91 43      ld   hl,0x4391             | point HL to last INFLIGHT_ALIEN.IsDying flag in INFLIGHT_ALIENS array
+1363: 11 E1 FF      ld   de,0xFFE1             | load DE with -31, which is sizeof(INFLIGHT_ALIEN)-1
+1366: 7E            ld   a,(hl)               | read INFLIGHT_ALIEN.IsDying flag
+1367: 2B            dec  hl                   | bump HL to point to INFLIGHT_ALIEN.IsActive flag  
+1368: B6            or   (hl)                 | combine flags. We want A to be 0, to indicate INFLIGHT_ALIEN slot is not in use. 
+1369: 28 04         jr   z,0x136F              | OK, we have an unused slot, goto 0x136F
+136B: 19            add  hl,de
+136C: 10 F8         djnz 0x1366                | repeat until we've scanned all the slots we're allowed to
+136E: C9            rts
+
+* If we get here, HL points to an unused INFLIGHT_ALIEN record that will be repurposed for our soon-to-be attacking alien. 
+* HL = pointer to unused INFLIGHT_ALIEN structure
+136F: E5            push hl
+1370: DD E1         pop  ix                   | IX = HL
+1372: 3A 15 42      ld   a,(0x4215)            | read ALIENS_ATTACK_FROM_RIGHT_FLANK flag
+1375: DD 77 06      ld   (ix+0x06),a           | update INFLIGHT_ALIEN.ArcClockwise flag
+1378: A7            and  a                    | test if flag is set  
+1379: 20 30         jr   nz,0x13AB             | if flag is set, goto FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_RIGHT
+
+* If we get here, we want an alien to break off from the left flank of the swarm.
+* We now need to find an alien in the swarm able to attack the player. 
+* Find first occupied column of aliens starting from the leftmost column.
+FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_LEFT:
+137B: 21 FC 41      ld   hl,0x41FC             | address of flag for leftmost alien in ALIEN_IN_COLUMN_FLAGS 
+137E: 01 0A 00      ld   bc,0x000A             | 10 aliens maximum on a row         
+1381: 3E 01         ld   a,0x01                | we are scanning for a value of 1, meaning "column occupied"
+1383: ED B9         cpdr                      | scan 0x41FC down to 0x41F3 for value #0x01. 
+1385: C0            rts  nz                   | if we have no aliens in the swarm (all flags are 0) - return
+1386: E0            rts  po                   | if BC has overflowed, return
+
+1387: 1E 3F         ld   e,0x3F
+1389: 2C            inc  l                    | adjust L because CPDR will have decremented it one time too many 
+
+* HL now points to an entry in ALIEN_IN_COLUMN_FLAGS where we have an alien present.
+* If we have flagships in the swarm, then only purple and blue aliens can be sent to attack by this routine.
+* If we have no flagships in the swarm, then any remaining red aliens are also considered. (See 0x13BD)
+TRY_FIND_ALIEN_TO_ATTACK:
+138A: 3A EF 41      ld   a,(0x41EF)            | load a with HAVE_ALIENS_IN_TOP_ROW flag
+138D: 0F            rrca                      | move flag into carry
+138E: 30 2D         jr   nc,0x13BD             | if no flagships in swarm, goto INIT_SCAN_FROM_RED_ALIEN_ROW
+
+* we have flagships, so send a purple or blue alien.
+INIT_SCAN_FROM_PURPLE_ALIEN_ROW:
+1390: 16 04         ld   d,0x04                | number of rows to scan (1 purple + 3 blue)
+1392: 26 41         ld   h,0x41                | MSB of ALIEN_SWARM_FLAGS address 
+1394: 7D            ld   a,l                  
+1395: E6 0F         and  0x0F                  | A = index of column containing alien 
+1397: C6 50         add  a,0x50                | effectively: HL = 0x4150 + (L & 0x0f)       
+1399: 6F            ld   l,a                  | HL now points to slot for purple alien in ALIEN_SWARM_FLAGS
+
+* HL now points to a slot in ALIEN_SWARM_FLAGS. D is a row counter.
+* If the slot is occupied, the occupying alien will be sent to attack the player.
+* If the slot is unoccupied, we'll scan the same column in the rows beneath until we find an occupied slot or we've done D rows.  
+* If we find an alien, we'll send it to attack the player.
+SCAN_SPECIFIC_COLUMN_FOR_D_ROWS:
+139A: 42            ld   b,d                  | set B to number of rows to scan
+139B: CB 46         bit  0,(hl)               | test for presence of alien in ALIEN_SWARM_FLAGS              
+139D: 20 2F         jr   nz,0x13CE             | if there's an alien present, its "volunteered" to attack, goto 0x13CE 
+139F: 7D            ld   a,l                  
+13A0: D6 10         sub  0x10                  | sizeof(row in ALIEN_SWARM_FLAGS)
+13A2: 6F            ld   l,a                  | bump HL to point to alien in row beneath
+13A3: 10 F6         djnz 0x139B                | repeat until B==0
+
+* OK, We've scanned the entire column and not found an alien. This means that ALIEN_IN_COLUMN_FLAGS isn't truthful,
+* and we need to resort to desperate measures. 
+* 
+* ** I've not seen this block of code called, and I think it might be legacy or debug **  
+*
+* Bump HL to point to the purple alien in the column to the right of the one we just scanned. We'll scan that column.  
+13A5: 83            add  a,e                  | add 0x3F to A.  
+13A6: 6F            ld   l,a                  | Now HL points to purple alien slot
+13A7: 0D            dec  c                    | decrement count of columns remaining that we *can* scan
+13A8: 20 F0         jr   nz,0x139A             | if non-zero, repeat the column scan
+13AA: C9            rts
+
+
+* If we get here, we want an alien to break off from the right flank of the swarm.
+* We now need to find an alien in the swarm willing to attack the player. 
+* Find first occupied column of aliens starting from the rightmost column.
+FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_RIGHT:
+13AB: 21 F3 41      ld   hl,0x41F3            | address of flag for rightmost column of aliens 
+13AE: 01 0A 00      ld   bc,0x000A            | 10 aliens maximum on a row  
+13B1: 3E 01         ld   a,0x01               | we are scanning for a value of 1, meaning "column occupied"
+13B3: ED B1         cpir                     | scan 0x41F3 up to 0x41F3 for value #0x01. 
+13B5: C0            rts  nz                  | if we have no aliens in the swarm - return
+13B6: E0            rts  po                  | if BC has overflowed, return
+
+* we've found an occupied column
+13B7: 1E 41         ld   e,0x41
+13B9: 2D            dec  l
+13BA: C3 8A 13      jp   0x138A               | jump to TRY_FIND_ALIEN_TO_ATTACK:
+
+
+* Called when no flagships present in flagship row. This means we can send any alien, including red, into the attack.
+INIT_SCAN_FROM_RED_ALIEN_ROW:
+13BD: 16 05         ld   d,0x05                | number of rows of aliens to scan 
+13BF: 26 41         ld   h,0x41                | MSB of ALIEN_SWARM_FLAGS address 
+13C1: 7D            ld   a,l
+13C2: E6 0F         and  0x0F                  | A = index of column   
+13C4: C6 60         add  a,0x60                | effectively: HL = 0x4150 + (L & 0x0f)
+13C6: 6F            ld   l,a                  | HL now points to slot for red alien in ALIEN_SWARM_FLAGS
+13C7: 7B            ld   a,e
+13C8: C6 10         add  a,0x10
+13CA: 5F            ld   e,a
+13CB: C3 9A 13      jp   0x139A                | jump to SCAN_SPECIFIC_COLUMN_FOR_D_ROWS
+
+
+*
+* Expects:
+* HL = pointer to occupied entry in ALIEN_SWARM_FLAGS
+* IX = pointer to vacant INFLIGHT_ALIEN structure
+*
+
+13CE: 36 00         ld   (hl),0x00
+13D0: DD 75 07      ld   (ix+0x07),l          | set INFLIGHT_ALIEN.IndexInSwarm
+13D3: DD 36 00 01   ld   (ix+0x00),0x01        | set INFLIGHT_ALIEN.IsActive 
+13D7: DD 36 02 00   ld   (ix+0x02),0x00        | set INFLIGHT_ALIEN.StageOfLife
+13DB: 16 01         ld   d,0x01               | command: DELETE_ALIEN_COMMAND
+13DD: 5D            ld   e,l                 | parameter: index of alien in swarm
+13DE: C3 F2 08      jp   0x08F2               | jump to QUEUE COMMAND
+
+
+
+*
+* Sets the flank that aliens, including flagships, will attack from.
+* 
+* If you replace 0x13F3-13F5, 0x13FF-1401, 0x1408-140A with zero (NOP), you can then tinker with the flag in 0x4215 and control 
+* what side the aliens attack from.
+*
+
+SET_ALIEN_ATTACK_FLANK:
+13E1: 2A 0E 42      ld   hl,(0x420E)          | read SWARM_SCROLL_VALUE
+13E4: ED 5B 10 42   ld   de,(0x4210)          | read SWARM_SCROLL_MAX_EXTENTS
+13E8: CB 7C         bit  7,h                 
+13EA: 28 0B         jr   z,0x13F7
+
+13EC: 7D            ld   a,l
+13ED: 92            sub  d
+13EE: FE 1C         cp   0x1C
+13F0: 30 11         jr   nc,0x1403            | if A>0x1C, attack from a random flank
+13F2: AF            xor  a
+13F3: 32 15 42      ld   (0x4215),a           | reset ALIENS_ATTACK_FROM_RIGHT_FLANK flag. Aliens will now attack from left side of swarm.
+13F6: C9            rts
+
+13F7: 7B            ld   a,e
+13F8: 95            sub  l
+13F9: FE 1C         cp   0x1C
+13FB: 30 06         jr   nc,0x1403            | if A>0x1C, attack from a random flank
+13FD: 3E 01         ld   a,0x01
+13FF: 32 15 42      ld   (0x4215),a           | set ALIENS_ATTACK_FROM_RIGHT_FLANK flag. Aliens will now attack from right side of swarm.
+1402: C9            rts
+
+* Attack from left or right flank, chosen at random
+1403: CD 3C 00      call 0x003C               | call GENERATE_RANDOM_NUMBER
+1406: E6 01         and  0x01                 | mask in bit 0, so A is either 0 or 1
+1408: 32 15 42      ld   (0x4215),a           | set/reset ALIENS_ATTACK_FROM_RIGHT_FLANK flag. 
+140B: C9            rts
+
+
+
+
+*
+* This routine checks if a flagship and escort can break from a given flank to attack the player.
+* 
+* The flank is determined by the ALIENS_ATTACK_FROM_RIGHT_FLANK flag (0x4215).
+*
+* If a flagship exists on the specified flank, send the flagship to attack.  
+* If there's red aliens in *close proximity* to the flagship, send a maximum of 2 as an escort.
+*
+* If there are no flagships on the specified flank, try to send a single red alien from the flank instead.
+*
+* Notes:
+* A flagship can attack when:
+*     HAVE_NO_ALIENS_IN_SWARM is set to 0 AND
+*     HAS_PLAYER_SPAWNED is set to 1 AND
+*     The CAN_FLAGSHIP_OR_RED_ALIENS_ATTACK is set to 1 AND
+*     INFLIGHT_ALIENS[1] is available for use
+*
+*
+* Cheat:
+* If you type into the MAME debugger: 
+* maincpu.mb@140C=C9
+*
+* The flagships stop attacking you completely.
+*
+
+HANDLE_FLAGSHIP_ATTACK:
+140C: 3A 20 42      ld   a,(0x4220)           | read HAVE_NO_ALIENS_IN_SWARM flag           
+140F: 0F            rrca                     | move flag into carry
+1410: D8            rts  c                   | return if no aliens in the swarm.
+1411: 3A 00 42      ld   a,(0x4200)           | read HAS_PLAYER_SPAWNED
+1414: 0F            rrca                     | move flag into carry
+1415: D0            rts  nc                  | return if player has not spawned.
+1416: 3A 29 42      ld   a,(0x4229)           | read CAN_FLAGSHIP_OR_RED_ALIENS_ATTACK
+1419: 0F            rrca                     | move flag into carry
+141A: D0            rts  nc                  | return if flag is not set
+141B: AF            xor  a
+141C: 32 29 42      ld   (0x4229),a           | reset CAN_FLAGSHIP_OR_RED_ALIENS_ATTACK flag
+
+* Test if the slot in INFLIGHT_ALIENS reserved for the flagship is in use. If so - do nothing.
+141F: 2A D0 42      ld   hl,(0x42D0)          | read from INFLIGHT_ALIENS[1] which is the 2nd array element
+1422: 7C            ld   a,h                 | Load A with INFLIGHT_ALIEN.IsDying flag
+1423: B5            or   l                   | OR with INFLIGHT_ALIEN.IsActive flag
+1424: 0F            rrca                     | if alien is active or dying, carry will be set
+1425: D8            rts  c                   | return if alien is active or dying - the slot for the flagship is in use.
+
+* from what side should the flagship/red aliens attack from?
+1426: 3A 15 42      ld   a,(0x4215)           | read ALIENS_ATTACK_FROM_RIGHT_FLANK flag
+1429: 4F            ld   c,a                 | C is used to set INFLIGHT_ALIEN.ArcClockwise flag @ 0x1466
+142A: 0F            rrca                     | move flag into carry
+142B: DA BE 14      jp   c,0x14BE             | if attacking from right flank, jump to TRY_FIND_FLAGSHIP_OR_RED_ALIEN_TO_ATTACK_FROM_RIGHT_FLANK
+
+
+TRY_FIND_FLAGSHIP_OR_RED_ALIEN_TO_ATTACK_FROM_LEFT_FLANK:
+142E: 21 79 41      ld   hl,0x4179            | load HL with pointer to leftmost flagship in ALIEN_SWARM_FLAGS
+1431: 06 04         ld   b,0x04               | scan 4 slots max in the ALIEN_SWARM_FLAGS array to find a flagship
+1433: CB 46         bit  0,(hl)              | test if a flagship is present
+1435: 20 3B         jr   nz,0x1472            | if we have found a flagship, goto INIT_FLAGSHIP_ATTACK_FROM_LEFT_FLANK
+1437: 2D            dec  l                   | move to next potential flagship
+1438: 10 F9         djnz 0x1433               | repeat until B==0
+
+* If we can't get a flagship, then we scan the red alien row from left to right to find a red alien to attack.
+143A: 2E 6A         ld   l,0x6A               | load HL with pointer to leftmost red alien in ALIEN_SWARM_FLAGS
+143C: 06 04         ld   b,0x04               | scan first 4 red aliens 
+143E: CB 46         bit  0,(hl)              | test if an alien is present
+1440: 20 04         jr   nz,0x1446            | if we have found a red alien, goto TRY_INIT_INFLIGHT_ALIEN
+1442: 2D            dec  l                   | bump HL to point to slot of sibling alien
+1443: 10 F9         djnz 0x143E               | repeat until B==0
+1445: C9            rts
+
+* 
+* Scan the last 4 entries in the INFLIGHT_ALIENS array for an unused slot. 
+* If all 4 slots at the end of the array are already in use, exit.
+* Otherwise re-use the lastmost free slot for an attacking alien.
+*
+* Expects:
+* HL = pointer to a bit flag in ALIEN_IN_SWARM_FLAGS
+*
+
+TRY_INIT_INFLIGHT_ALIEN:
+1446: DD 21 90 43   ld   ix,0x4390            | address of very last INFLIGHT_ALIEN record in INFLIGHT_ALIENS array 
+144A: 11 E0 FF      ld   de,0xFFE0            | -32 decimal, which is -sizeof(INFLIGHT_ALIEN)
+144D: 06 04         ld   b,0x04               
+144F: DD 7E 00      ld   a,(ix+0x00)          | load A with INFLIGHT_ALIEN.IsActive flag
+1452: DD B6 01      or   (ix+0x01)            | OR A with INFLIGHT_ALIEN.IsDying flag
+1455: 28 05         jr   z,0x145C             | if the slot is not used for an active or dying alien, goto INIT_INFLIGHT_ALIEN
+1457: DD 19         add  ix,de               | subtract sizeof(INFLIGHT_ALIEN) from IX, to bump IX to previous INFLIGHT_ALIEN record
+1459: 10 F4         djnz 0x144F
+145B: C9            rts
+
+*
+* Remove an alien from the swarm, and create an inflight alien in its place.
+* 
+* Expects:
+* C = direction alien will break away from swarm. 0 = left, 1 = right
+* HL = pointer to entry in ALIEN_SWARM_FLAGS 
+* IX = pointer to INFLIGHT_ALIEN struct of alien 
+*
+
+INIT_INFLIGHT_ALIEN:
+145C: 36 00         ld   (hl),0x00            | clear flag in ALIEN_SWARM_FLAGS - effectively removing it from swarm            
+145E: DD 36 00 01   ld   (ix+0x00),0x01        | set INFLIGHT_ALIEN.IsActive
+1462: DD 36 02 00   ld   (ix+0x02),0x00        | reset INFLIGHT_ALIEN.StageOfLife
+1466: DD 71 06      ld   (ix+0x06),c          | set INFLIGHT_ALIEN.ArcClockwise
+1469: DD 75 07      ld   (ix+0x07),l          | set INFLIGHT_ALIEN.IndexInSwarm
+146C: 16 01         ld   d,0x01               | command: DELETE_ALIEN_COMMAND
+146E: 5D            ld   e,l                 | parameter: index of alien to delete from the swarm 
+146F: C3 F2 08      jp   0x08F2               | jump to QUEUE_COMMAND
+
+
+*
+* Given a pointer to a flagship entry in the ALIEN_SWARM_FLAGS array, 
+* scan for red aliens in close proximity to the flagship that can be used as an escort.
+* Initialise INFLIGHT_ALIEN records for the flagship and any escort as well. 
+*
+* Expects:
+* HL = pointer to entry in flagship row of ALIEN_SWARM_FLAGS
+*
+
+INIT_FLAGSHIP_ATTACK_FROM_LEFT_FLANK:
+1472: DD 21 D0 42   ld   ix,0x42D0            | pointer to INFLIGHT_ALIENS_START+sizeof(INFLIGHT_ALIEN)
+1476: CD 5C 14      call 0x145C               | call INIT_INFLIGHT_ALIEN to make flagship take flight and leave the swarm 
+1479: 7D            ld   a,l
+147A: D6 0F         sub  0x0F     
+147C: 6F            ld   l,a                 | bump HL to point at red alien directly below and to right of flagship
+147D: FD 21 F0 42   ld   iy,0x42F0            | pointer to INFLIGHT_ALIENS_START+(sizeof(INFLIGHT_ALIEN) * 2)
+1481: 06 03         ld   b,0x03               | we're scanning 3 entries in red aliens row max             
+1483: 0E 02         ld   c,0x02               | But we only want 2 red aliens as an escort.  
+1485: CB 46         bit  0,(hl)              | test for presence of red alien
+1487: C4 8E 14      call nz,0x148E            | if we have a red alien, try to create an inflight alien  
+148A: 2D            dec  l                   | bump HL to point to slot of sibling alien 
+148B: 10 F8         djnz 0x1485               | repeat until B==0
+148D: C9            rts
+
+* HL = pointer to entry in ALIEN_SWARM_FLAGS
+148E: CD 9B 14      call 0x149B               | call TRY_INIT_ESCORT_INFLIGHT_ALIEN
+1491: 11 20 00      ld   de,0x0020            | sizeof(INFLIGHT_ALIEN)
+1494: FD 19         add  iy,de               | bump IY to point to next member of INFLIGHT_ALIENS array
+1496: 0D            dec  c                   | reduce count of red aliens left to check for use as escort
+1497: C0            rts  nz                  | return if we have all the escort we need
+1498: 06 01         ld   b,0x01
+149A: C9            rts
+
+
+*
+* Try to create an escort for a flagship. 
+*
+* Expects:
+* HL = pointer to red alien in ALIEN_SWARM_FLAGS that could be escort
+* IX = pointer to INFLIGHT_ALIEN structure (used for flagship)
+* IY = pointer to INFLIGHT_ALIEN structure (will be used for escort) 
+*
+* If the INFLIGHT_ALIEN pointed to by IY is not occupied by an active or dying alien, then
+* the record is re-used and marked as active. 
+* Otherwise this routine exits.
+
+TRY_INIT_ESCORT_INFLIGHT_ALIEN:
+149B: FD CB 00 46   bit  0,(iy+0x00)          | test INFLIGHT_ALIEN.IsActive
+149F: C0            rts  nz                  | return if flag is set
+14A0: FD CB 01 46   bit  0,(iy+0x01)          | test INFLIGHT_ALIEN.IsDying
+14A4: C0            rts  nz                  | return if flag is set
+
+* OK, we can use the INFLIGHT_ALIEN slot at IY. Let's remove the alien from the swarm
+* and create 
+14A5: 36 00         ld   (hl),0x00            | clear flag in ALIEN_SWARM_FLAGS
+14A7: FD 36 00 01   ld   (iy+0x00),0x01        | set INFLIGHT_ALIEN.IsActive
+14AB: FD 36 02 00   ld   (iy+0x02),0x00        | reset INFLIGHT_ALIEN.StageOfLife
+14AF: DD 7E 06      ld   a,(ix+0x06)          | read flagship's INFLIGHT_ALIEN.ArcClockwise
+14B2: FD 77 06      ld   (iy+0x06),a          | set escort INFLIGHT_ALIEN.ArcClockwise so it breaks away in formation.
+14B5: FD 75 07      ld   (iy+0x07),l          | set escort INFLIGHT_ALIEN.IndexInSwarm
+14B8: 16 01         ld   d,0x01               | command: DELETE_ALIEN_COMMAND
+14BA: 5D            ld   e,l                 | parameter: index of alien to delete from the swarm
+14BB: C3 F2 08      jp   0x08F2               | jump to QUEUE_COMMAND
+
+
+TRY_FIND_FLAGSHIP_OR_RED_ALIEN_TO_ATTACK_FROM_RIGHT_FLANK:
+14BE: 21 76 41      ld   hl,0x4176            | load HL with pointer to rightmost flagship in ALIEN_SWARM_FLAGS
+14C1: 06 04         ld   b,0x04               | scan max of 4 flagships in array
+14C3: CB 46         bit  0,(hl)              | test if a flagship is present
+14C5: 20 10         jr   nz,0x14D7            | if we have found a flagship, goto INIT_FLAGSHIP_ATTACK_FROM_RIGHT_FLANK
+14C7: 2C            inc  l                   | otherwise try looking for a flagship to immediate left
+14C8: 10 F9         djnz 0x14C3               | repeat until B==0
+
+* If we can't find a single flagship, then we try the red alien row. 
+14CA: 2E 65         ld   l,0x65               | load HL with pointer to rightmost red alien in ALIEN_SWARM_FLAGS array
+14CC: 06 04         ld   b,0x04               | scan max of 4 slots in array 
+14CE: CB 46         bit  0,(hl)              | test if red alien is present
+14D0: C2 46 14      jp   nz,0x1446            | if we have found a red alien, goto 0x1446
+14D3: 2C            inc  l                   | bump HL to point to slot of sibling alien
+14D4: 10 F8         djnz 0x14CE               | repeat until B==0
+14D6: C9            rts
+
+
+* Near duplicate of INIT_FLAGSHIP_ATTACK_FROM_LEFT_FLANK @0x1472, except for the right flank. 
+*
+* Given a pointer to a flagship entry in the ALIEN_SWARM_FLAGS array, 
+* scan for red aliens in close proximity to the flagship that can be used as an escort.
+* Initialise INFLIGHT_ALIEN records for the flagship and any escort as well. 
+*
+* Expects:
+* HL = pointer to flag in ALIEN_SWARM_FLAGS representing flagship
+*
+
+INIT_FLAGSHIP_ATTACK_FROM_RIGHT_FLANK:
+14D7: DD 21 D0 42   ld   ix,0x42D0            | pointer to INFLIGHT_ALIENS_START+sizeof(INFLIGHT_ALIEN) 
+14DB: CD 5C 14      call 0x145C               | Remove an alien from the swarm, and create an inflight alien in its place.
+14DE: 7D            ld   a,l
+14DF: D6 11         sub  0x11                 | bump HL to point at red alien directly below and to right of flagship
+14E1: 6F            ld   l,a                 
+14E2: FD 21 F0 42   ld   iy,0x42F0            | pointer to INFLIGHT_ALIENS_START+(sizeof(INFLIGHT_ALIEN) * 2)
+14E6: 06 03         ld   b,0x03
+14E8: 0E 02         ld   c,0x02
+14EA: CB 46         bit  0,(hl)              | do we have a red alien?
+14EC: C4 8E 14      call nz,0x148E
+14EF: 2C            inc  l
+14F0: 10 F8         djnz 0x14EA
+14F2: C9            rts
+
+
+
+*
+* Increase game difficulty as the level goes on.
+*
+
+HANDLE_LEVEL_DIFFICULTY:
+14F3: 3A 00 42      ld   a,(0x4200)           | read HAS_PLAYER_SPAWNED
+14F6: 0F            rrca                     | move flag into carry
+14F7: D0            rts  nc                  | return if player has not spawned
+14F8: 3A 2B 42      ld   a,(0x422B)           | read IS_FLAGSHIP_HIT
+14FB: 0F            rrca                     | move flag into carry
+14FC: D8            rts  c                   | return if flagship has been hit
+
+* wait until DIFFICULTY_COUNTER_1 counts down to zero.
+14FD: 21 18 42      ld   hl,0x4218            | load HL with address of DIFFICULTY_COUNTER_1
+1500: 35            dec  (hl)                | decrement counter
+1501: C0            rts  nz
+1502: 36 3C         ld   (hl),0x3C            | reset counter
+
+* DIFFICULTY_COUNTER_1 has reached zero and reset. Decrement DIFFICULTY_COUNTER_2.
+1504: 23            inc  hl                  | bump HL to DIFFICULTY_COUNTER_2
+1505: 35            dec  (hl)                | decrement counter
+1506: C0            rts  nz
+1507: 36 14         ld   (hl),0x14            | reset counter 
+
+* DIFFICULTY_COUNTER_2 has reached zero. Now up the difficulty level, if we can.
+1509: 23            inc  hl                  | bump HL to 0x421A (DIFFICULTY_EXTRA_VALUE)
+150A: 7E            ld   a,(hl)              | read DIFFICULTY_EXTRA_VALUE
+150B: FE 07         cp   0x07                 | has it reached its maximum value of 7?
+150D: C8            rts  z                   | return if so
+150E: 30 02         jr   nc,0x1512            | if A >= 7 , goto 0x1512
+
+1510: 34            inc  (hl)                | increment DIFFICULTY_EXTRA_VALUE  
+1511: C9            rts
+
+1512: 36 07         ld   (hl),0x07            | clamp DIFFICULTY_EXTRA_VALUE to 7
+1514: C9            rts
+
+
+*
+* Check if an alien can attack the player.
+* For flagships, see 0x15C3 
+*
+
+CHECK_IF_ALIEN_CAN_ATTACK:
+1515: 3A 00 42      ld   a,(0x4200)           | read HAS_PLAYER_SPAWNED
+1518: 0F            rrca                     | move flag into carry
+1519: D0            rts  nc                  | return if player has not spawned
+151A: 3A 20 42      ld   a,(0x4220)           | read HAVE_NO_ALIENS_IN_SWARM flag
+151D: 0F            rrca                     | move flag into carry
+151E: D8            rts  c                   | return if we don't have any aliens in the swarm
+151F: 3A 2B 42      ld   a,(0x422B)           | read IS_FLAGSHIP_HIT
+1522: 0F            rrca                     | move flag into carry
+1523: D8            rts  c                   | return if the flagship has been hit
+
+* Use DIFFICULTY_EXTRA_VALUE and DIFFICULTY_BASE_VALUE to calculate how many secondary counters in the ALIEN_ATTACK_COUNTERS array
+* we can decrement. The more counters = the higher probability one of them will count down to zero = higher probability an alien attacks.
+1524: 2A 1A 42      ld   hl,(0x421A)          | load H with DIFFICULTY_BASE_VALUE and L with DIFFICULTY_EXTRA_VALUE
+1527: 7C            ld   a,h                 | A = DIFFICULTY_BASE_VALUE value
+1528: FE 02         cp   0x02
+152A: 30 01         jr   nc,0x152D            | if DIFFICULTY_BASE_VALUE >=2, goto 0x152D
+152C: AF            xor  a
+152D: 85            add  a,l                 | Add DIFFICULTY_EXTRA_VALUE to DIFFICULTY_BASE_VALUE 
+152E: E6 0F         and  0x0F                 | Ensure value is between 0 and 15
+1530: 3C            inc  a                   | Add 1 to ensure it's between 1..16 
+1531: 47            ld   b,a                 | B now contains number of counters to decrement
+
+* Decrement ALIEN_ATTACK_MASTER_COUNTER. When it hits zero, we can decrement secondary counters in the ALIEN_ATTACK_MASTER_COUNTERS array.
+1532: 21 4A 42      ld   hl,0x424A            | load HL with address of ALIEN_ATTACK_MASTER_COUNTER
+1535: 11 E3 15      ld   de,0x15E3            | load DE with address of ALIEN_ATTACK_COUNTER_DEFAULT_VALUES
+1538: 35            dec  (hl)                | decrement ALIEN_ATTACK_MASTER_COUNTER 
+1539: 28 05         jr   z,0x1540             | if its hit zero, goto 0x1540 to decrement [B] counters 
+153B: AF            xor  a
+153C: 32 28 42      ld   (0x4228),a           | reset CAN_ALIEN_ATTACK flag. No alien will attack.
+153F: C9            rts
+
+* When we get here, ALIEN_ATTACK_MASTER_COUNTER is zero. 
+* B specifies how many secondary counters in the ALIEN_ATTACK_COUNTERS array we can decrement. (Max value of 16)
+* DE points to a default value to reset the ALIEN_ATTACK_MASTER_COUNTER back to. 
+1540: 0E 00         ld   c,0x00
+1542: 1A            ld   a,(de)              | read default value from table @ 0x15E3      
+1543: 77            ld   (hl),a              | Reset ALIEN_ATTACK_MASTER_COUNTER to its default value
+
+* Decrement B counters in the ALIEN_ATTACK_COUNTERS array. 
+* If any of the counters hit zero, reset the counter to its default value and set the CAN_ALIEN_ATTACK flag to 1.
+1544: 23            inc  hl                  | bump HL to next secondary counter 
+1545: 13            inc  de                  | bump DE to address containing default value to reset secondary counter to when zero 
+1546: 35            dec  (hl)                | decrement secondary counter  
+1547: CC DF 15      call z,0x15DF             | if the secondary counter reaches zero, reset the counter and increment C. Alien will attack!
+154A: 10 F8         djnz 0x1544               | repeat until B==0
+
+* if C is set to a nonzero value then that means that a secondary counter has reached zero. Its time for an alien to attack. 
+154C: 79            ld   a,c
+154D: A7            and  a                   | test if A is zero 
+154E: C8            rts  z                   | exit if so
+154F: 3E 01         ld   a,0x01 
+1551: 32 28 42      ld   (0x4228),a           | set CAN_ALIEN_ATTACK flag. Alien will break off from the swarm
+1554: C9            rts
+
+
+
+*
+* This routine is responsible for determining when flagships can attack.
+*
+*
+
+UPDATE_ATTACK_COUNTERS:
+1555: 3A 00 42      ld   a,(0x4200)           | read HAS_PLAYER_SPAWNED
+1558: 0F            rrca                     | move flag into carry
+1559: D0            rts  nc                  | return if player has not spawned
+155A: 3A EF 41      ld   a,(0x41EF)           | read HAVE_ALIENS_IN_TOP_ROW 
+155D: 0F            rrca                     | move flag into carry
+155E: D0            rts  nc                  | return if we have no flagships
+155F: 3A 2B 42      ld   a,(0x422B)           | read IS_FLAGSHIP_HIT 
+1562: 0F            rrca                     | move flag into carry
+1563: D8            rts  c                   | return if a flagship has been hit
+1564: 3A 06 40      ld   a,(0x4006)           | read IS_GAME_IN_PLAY
+1567: 0F            rrca                     | move flag into carry
+1568: 30 3D         jr   nc,0x15A7            | if game is not in play, goto 0x15A7      
+
+* wait until FLAGSHIP_ATTACK_MASTER_COUNTER_1 counts down to zero.
+156A: 21 45 42      ld   hl,0x4245            | load HL with address of FLAGSHIP_ATTACK_MASTER_COUNTER_1
+156D: 35            dec  (hl)                | decrement counter
+156E: C0            rts  nz                  | exit if counter is not zero
+156F: 36 3C         ld   (hl),0x3C            | reset counter
+
+* if we have no blue or purple aliens, we don't need to bother with the FLAGSHIP_ATTACK_MASTER_COUNTER_2 countdown. 
+1571: 3A 21 42      ld   a,(0x4221)           | read HAVE_NO_BLUE_OR_PURPLE_ALIENS 
+1574: 0F            rrca                     | move flag into carry
+1575: 38 2C         jr   c,0x15A3             | if there's no blue or purple aliens left, goto 0x15A3
+
+* otherwise, wait until FLAGSHIP_ATTACK_MASTER_COUNTER_2 counts down to 0.
+1577: 23            inc  hl                  | bump HL to FLAGSHIP_ATTACK_MASTER_COUNTER_2
+1578: 35            dec  (hl)                | decrement counter
+1579: C0            rts  nz                  | return if its not counteed down to zero.
+157A: 34            inc  (hl)                | set FLAGSHIP_ATTACK_MASTER_COUNTER_2 to 1
+
+* count how many "extra" flagships we have carried over from previous waves (maximum of 2)
+157B: 2A 77 41      ld   hl,(0x4177)          | point to usually empty flagship entry in ALIEN_SWARM_FLAGS. 
+157E: 7C            ld   a,h                 
+157F: 85            add  a,l                 | A now = number of *extra* flagships we have                 
+1580: E6 03         and  0x03                 | ensure that number is between 0..3. (it should be between 0..2 anyway)
+1582: 4F            ld   c,a                 | save count of extra flagships in C
+
+* use difficulty settings and count of extra flagships to compute countdown before flagship attack
+1583: 2A 1A 42      ld   hl,(0x421A)          | load H with DIFFICULTY_BASE_VALUE and L with DIFFICULTY_EXTRA_VALUE
+1586: 7C            ld   a,h
+1587: 85            add  a,l                 | Add DIFFICULTY_BASE_VALUE to DIFFICULTY_EXTRA_VALUE
+1588: C8            rts  z                   | exit if both DIFFICULTY_BASE_VALUE and DIFFICULTY_EXTRA_VALUE are 0
+
+1589: 0F            rrca                     | divide A..                     
+158A: 0F            rrca                     | by 4
+158B: E6 03         and  0x03                 | clamp A to 3 maximum.
+158D: 2F            cpl                      | A = 255-A.
+158E: C6 0A         add  a,0x0A               | ensure that A is between 0x06 and 0x09
+1590: 91            sub  c                   | subtract count of extra flagships
+1591: 32 46 42      ld   (0x4246),a           | set FLAGSHIP_ATTACK_MASTER_COUNTER_2
+
+* set timer for when flagship will definitely attack.
+1594: 07            rlca
+1595: 07            rlca
+1596: 32 2F 42      ld   (0x422F),a           | set FLAGSHIP_ATTACK_SECONDARY_COUNTER
+
+1599: 07            rlca
+159A: 32 4A 42      ld   (0x424A),a           | set ALIEN_ATTACK_MASTER_COUNTER
+
+* enable timer for flagship to attack.
+159D: 3E 01         ld   a,0x01
+159F: 32 2E 42      ld   (0x422E),a           | set ENABLE_FLAGSHIP_ATTACK_SECONDARY_COUNTER
+15A2: C9            rts
+
+15A3: 3E 02         ld   a,0x02
+15A5: 18 ED         jr   0x1594
+
+
+* Called when game is not in play
+15A7: 21 45 42      ld   hl,0x4245            | load HL with address of FLAGSHIP_ATTACK_MASTER_COUNTER_1
+15AA: 35            dec  (hl)               
+15AB: C0            rts  nz
+15AC: 36 3C         ld   (hl),0x3C 
+15AE: 23            inc  hl                  | load HL with address of FLAGSHIP_ATTACK_MASTER_COUNTER_2
+15AF: 35            dec  (hl)
+15B0: C0            rts  nz
+15B1: 36 05         ld   (hl),0x05
+
+15B3: 3E 5A         ld   a,0x5A
+15B5: 32 2F 42      ld   (0x422F),a           | set FLAGSHIP_ATTACK_SECONDARY_COUNTER
+
+15B8: 3E 2D         ld   a,0x2D
+15BA: 32 4A 42      ld   (0x424A),a           | set ALIEN_ATTACK_MASTER_COUNTER
+
+15BD: 3E 01         ld   a,0x01
+15BF: 32 2E 42      ld   (0x422E),a           | set ENABLE_FLAGSHIP_ATTACK_SECONDARY_COUNTER
+15C2: C9            rts
+
+
+*
+* Determines if a flagship can be permitted to attack.
+*
+* If so, CAN_FLAGSHIP_OR_RED_ALIENS_ATTACK is set to 1.
+*
+
+
+CHECK_IF_FLAGSHIP_CAN_ATTACK:
+15C3: 21 2E 42      ld   hl,0x422E            | read ENABLE_FLAGSHIP_ATTACK_SECONDARY_COUNTER
+15C6: CB 46         bit  0,(hl)              | test flag
+15C8: C8            rts  z                   | return if not allowed to count down
+
+* wait until FLAGSHIP_ATTACK_SECONDARY_COUNTER counts down to zero.
+15C9: 23            inc  hl                  | bump HL to FLAGSHIP_ATTACK_SECONDARY_COUNTER
+15CA: 35            dec  (hl)                | decrement counter
+15CB: C0            rts  nz                  | return if counter hasn't reached zero
+
+15CC: 2B            dec  hl                  | bump HL to ENABLE_FLAGSHIP_ATTACK_SECONDARY_COUNTER flag 
+15CD: 36 00         ld   (hl),0x00            | reset flag
+15CF: 3A 00 42      ld   a,(0x4200)           | read HAS_PLAYER_SPAWNED
+15D2: 0F            rrca                     | move flag into carry
+15D3: D0            rts  nc                  | return if player has not spawned
+
+* check if we have any flagship
+15D4: 3A EF 41      ld   a,(0x41EF)           | read HAVE_ALIENS_IN_TOP_ROW flag
+15D7: 0F            rrca                     | move flag bit into carry
+15D8: D0            rts  nc                  | return if no flagships
+
+* yes, we have flagships, set CAN_FLAGSHIP_OR_RED_ALIENS_ATTACK flag
+15D9: 3E 01         ld   a,0x01
+15DB: 32 29 42      ld   (0x4229),a           | set CAN_FLAGSHIP_OR_RED_ALIENS_ATTACK
+15DE: C9            rts
+
+
+* A= *DE|
+* *HL = A|
+* C++
+15DF: 1A            ld   a,(de)
+15E0: 77            ld   (hl),a
+15E1: 0C            inc  c
+15E2: C9            rts
+
+
+* Default values for the corresponding entries in the ALIEN_ATTACK_COUNTERS array.
+* e.g. 0x424A's default value is 5, 0x424B's default value is 0x2F, 0x424C's default is 0x43...
+* When any counter hits zero, it is reset to its default value.
+ALIEN_ATTACK_COUNTER_DEFAULT_VALUES: 
+15E3:  05 2F 43 77 71 6D 67 65 4F 49 43 3D 3B 35 2B 29
+
+
+*
+* This routine calculates how far away from the player inflight aliens can be before they can start shooting at you.
+* 
+* The minimum shooting distance increases as more aliens are killed, making the aliens shoot more often.
+*  
+* See also: 0x0E54
+
+HANDLE_CALC_INFLIGHT_ALIEN_SHOOTING_DISTANCE:
+15F4: 21 E8 41      ld   hl,0x41E8            | load HL with address of HAVE_ALIENS_IN_ROW_FLAGS
+15F7: 06 04         ld   b,0x04               | we're testing potentially 4 pairs of rows.
+15F9: 3A 1B 42      ld   a,(0x421B)           | read DIFFICULTY_BASE_VALUE
+15FC: A7            and  a                   | test if zero
+15FD: 20 16         jr   nz,0x1615            | if non-zero, which it always is, goto 0x1615
+
+* These two lines of code appear never to be called. This must be for an EASY difficulty level we've not seen.
+15FF: 1E 01         ld   e,0x01               | multiplier = 1
+1601: 16 84         ld   d,0x84               | exact X coordinate  
+
+1603: CB 46         bit  0,(hl)              | test for alien presence
+1605: 20 09         jr   nz,0x1610            | if alien is present, goto 0x1610
+
+1607: 23            inc  hl                  | bump HL to flag for next row 
+1608: CB 46         bit  0,(hl)              | test flag 
+160A: 20 04         jr   nz,0x1610            | if flag is set, goto 0x1610
+
+160C: 23            inc  hl                  | bump to next entry in HAVE_ALIENS_IN_ROW_FLAGS
+160D: 1C            inc  e                   | increment multiplier (see 0x0E54 for clarification on how its used)
+160E: 10 F3         djnz 0x1603
+
+1610: ED 53 13 42   ld   (0x4213),de          | set INFLIGHT_ALIEN_SHOOT_EXACT_X to D, INFLIGHT_ALIEN_SHOOT_RANGE_MUL to E
+1614: C9            rts
+
+1615: 1E 02         ld   e,0x02               | multiplier = 2
+1617: 16 9D         ld   d,0x9D               | exact X coordinate 
+1619: 18 E8         jr   0x1603
+
+* TODO: I can't find anything calling this. Is this debug code left over?
+161B: 1E 03         ld   e,0x03
+161D: 16 B6         ld   d,0xB6
+161F: 18 E2         jr   0x1603
+
+
+*
+* LEVEL_COMPLETE is set to 1 by this function when: 
+* HAVE_NO_ALIENS_IN_SWARM is set to 1 AND
+* HAVE_NO_INFLIGHT_OR_DYING_ALIENS is set to 1 AND
+* LEVEL_COMPLETE is clear 
+*
+
+CHECK_IF_LEVEL_IS_COMPLETE:
+1621: 3A 20 42      ld   a,(0x4220)           | read HAVE_NO_ALIENS_IN_SWARM
+1624: 0F            rrca                     | move flag bit into carry
+1625: D0            rts  nc                  | return if flag is not set, meaning that there are aliens left in the swarm
+1626: 3A 25 42      ld   a,(0x4225)           | read HAVE_NO_INFLIGHT_OR_DYING_ALIENS
+1629: 0F            rrca                     | move flag bit into carry
+162A: D0            rts  nc                  | return if flag is not set, meaning that there are aliens attacking, or dying
+162B: 3A 22 42      ld   a,(0x4222)           | read LEVEL_COMPLETE
+162E: 0F            rrca                     | move flag bit into carry
+162F: D8            rts  c                   | return if flag is not set
+1630: 21 01 00      ld   hl,0x0001
+1633: 22 22 42      ld   (0x4222),hl          | set LEVEL_COMPLETE to 1 and NEXT_LEVEL_DELAY_COUNTER to 0.                  
+1636: C9            rts
+
+
+
+HANDLE_LEVEL_COMPLETE:
+1637: 21 22 42      ld   hl,0x4222            | load HL with address of LEVEL_COMPLETE
+163A: CB 46         bit  0,(hl)              | test flag 
+163C: C8            rts  z                   | return if level is not complete
+
+* OK, level is complete. Wait until NEXT_LEVEL_DELAY_COUNTER to reach 0. 
+163D: 23            inc  hl                  | bump HL to point to NEXT_LEVEL_DELAY_COUNTER
+163E: 35            dec  (hl)                | decrement count
+163F: C0            rts  nz                  | return if count is !=0
+
+1640: 2B            dec  hl                  | bump HL to point to LEVEL_COMPLETE again.
+1641: 36 00         ld   (hl),0x00            | clear LEVEL_COMPLETE flag.
+
+1643: 11 1B 05      ld   de,0x051B            | load DE with address of PACKED_DEFAULT_SWARM_DEFINITION
+1646: CD 46 06      call 0x0646               | call UNPACK_ALIEN_SWARM 
+1649: AF            xor  a
+164A: 32 1A 42      ld   (0x421A),a           | reset DIFFICULTY_EXTRA_VALUE
+164D: 32 5F 42      ld   (0x425F),a           | reset TIMING_VARIABLE
+1650: 21 01 00      ld   hl,0x0001
+1653: 22 0E 42      ld   (0x420E),hl          | set SWARM_SCROLL_VALUE
+
+* increase game difficulty level, if we can.
+1656: 2A 1B 42      ld   hl,(0x421B)          | load H with PLAYER_LEVEL and L with DIFFICULTY_BASE_VALUE
+1659: 24            inc  h                   | increment player level 
+165A: 7D            ld   a,l                 | load A with DIFFICULTY_BASE_VALUE
+165B: FE 07         cp   0x07                 | are we at max difficulty?
+165D: 28 03         jr   z,0x1662             | yes, goto 0x1662
+165F: 30 22         jr   nc,0x1683            | edge case: we're above max difficulty! So clamp difficulty level to 7.
+1661: 3C            inc  a                   | otherwise, increment DIFFICULTY_BASE_VALUE
+1662: 6F            ld   l,a
+1663: 22 1B 42      ld   (0x421B),hl          | update PLAYER_LEVEL and DIFFICULTY_BASE_VALUE
+
+1666: 11 00 07      ld   de,0x0700            | command: BOTTOM_OF_SCREEN_INFO_COMMAND, parameter: 0 (DISPLAY_LEVEL_FLAGS)
+1669: CD F2 08      call 0x08F2               | call QUEUE_COMMAND. 
+
+* How many flagships survived from the last round? If so, they need to be added into the swarm before the level starts.
+166C: 3A 1E 42      ld   a,(0x421E)           | get value of FLAGSHIP_SURVIVOR_COUNT into A
+166F: A7            and  a                   | Did any flagships survive from the last round?
+1670: C8            rts  z                   | Return if no flagships survived.
+1671: 21 77 41      ld   hl,0x4177            | load HL with address of free slot in flagship row of ALIEN_SWARM_FLAGS
+1674: 36 01         ld   (hl),0x01            | create a flagship!
+1676: 3D            dec  a                   |   
+1677: 32 1E 42      ld   (0x421E),a           | set value of FLAGSHIP_SURVIVOR_COUNT
+167A: C8            rts  z                   | return if zero. 
+167B: 23            inc  hl                  | bump HL to address of next free slot in flagship row 
+167C: 36 01         ld   (hl),0x01            | create a flagship!
+167E: AF            xor  a                
+167F: 32 1E 42      ld   (0x421E),a           | clear value of FLAGSHIP_SURVIVOR_COUNT
+1682: C9            rts
+
+
+
+CLAMP_DIFFICULTY_LEVEL:
+1683: 3E 07         ld   a,0x07               | maximum value for DIFFICULTY_BASE_VALUE
+1685: C3 62 16      jp   0x1662               | set DIFFICULTY_BASE_VALUE 
+
+
+*
+* When you shoot a flagship, the swarm goes into shock for a short period of time. No aliens will break off to attack you.
+*
+
+HANDLE_SHOCKED_SWARM:
+1688: 21 2B 42      ld   hl,0x422B            | load HL with address of IS_FLAGSHIP_HIT flag     
+168B: CB 46         bit  0,(hl)              | test flag
+168D: C8            rts  z                   | return if flagship has not been hit
+168E: 3A 24 42      ld   a,(0x4224)           | read HAVE_AGGRESSIVE_ALIENS flag
+1691: A7            and  a                   | test flag
+1692: 20 0B         jr   nz,0x169F            | if flag is set, goto 0x169F 
+1694: 3A 21 42      ld   a,(0x4221)           | read HAVE_NO_BLUE_OR_PURPLE_ALIENS
+1697: A7            and  a                   | test flag
+1698: 20 05         jr   nz,0x169F            | if flag is set, goto 0x169F
+169A: 3A 26 42      ld   a,(0x4226)           | read HAVE_NO_INFLIGHT_ALIENS
+169D: 0F            rrca                     | move flag into carry
+169E: D0            rts  nc                  | return if some aliens are inflight
+169F: 23            inc  hl                  | bump HL to address of ALIENS_IN_SHOCK_COUNTER
+16A0: 35            dec  (hl)                | decrement counter. When it hits zero, aliens will snap out of it!
+16A1: C0            rts  nz                  | exit routine if counter non-zero
+16A2: 2B            dec  hl                  | bump HL to address of IS_FLAGSHIP_HIT
+16A3: 36 00         ld   (hl),0x00            | clear flag. Aliens can break off from the swarm to attack again.
+16A5: C9            rts
+
+*
+* Looks like this might be legacy code imported from an older game| it writes to a port that does nothing
+*
+
+16A6: 3A 07 40      ld   a,(0x4007)            | read IS_GAME_OVER flag
+16A9: 0F            rrca                      | move bit 0 into carry
+16AA: D8            rts  c                    | if carry set, return
+16AB: 21 DF 41      ld   hl,0x41DF
+16AE: 7E            ld   a,(hl)
+16AF: A7            and  a
+16B0: C8            rts  z
+16B1: 0F            rrca
+16B2: 0F            rrca
+16B3: 32 04 68      ld   (0x6804),a            | Does nothing - this port is not connected
+16B6: 35            dec  (hl)
+16B7: C9            rts
+
+
+*
+* You may have noticed that when you're close to obliterating the swarm, that the background swarm noises
+* get fewer and fewer, until there's no background noise, just the sound of attacking aliens and your bullets.
+* This is the routine that handles the background noises. But this isn't the most important thing the routine does. 
+* 
+* Tucked away here is more important code, which affects the aliens aggressiveness. If you have 3 aliens or less
+* in the swarm (inflight aliens don't count), the aliens are enraged and will be far more aggressive.
+* Any aliens that take flight to attack you (inflight aliens) will never return to the swarm and keep attacking
+* until either you or they are dead.
+*
+* If you wish to artificially enforce aggressiveness, pause the game and input the following into the MAME debugger:
+*
+* maincpu.mb@16e3=c9
+* maincpu.mb@16e7=c9
+* maincpu.pb@4224=1       // note the .pb, not .mb
+*
+* This will make the aliens attack you constantly - even when you start a new level.
+
+HANDLE_ALIEN_AGGRESSIVENESS:
+16B8: 3A 07 40      ld   a,(0x4007)           | read IS_GAME_OVER flag
+16BB: 0F            rrca                     | move flag into carry
+16BC: D8            rts  c                   | return if GAME OVER   
+16BD: 21 23 41      ld   hl,0x4123            | load HL with address of very first alien in ALIEN_SWARM_FLAGS
+16C0: 11 06 00      ld   de,0x0006            | DE is an offset to add to HL after processing a row of aliens
+16C3: 4B            ld   c,e                 | Conveniently, E is also number of rows of aliens in swarm! (6) 
+16C4: 3E 01         ld   a,0x01               | A is going to be used to total the number of aliens in the swarm 
+16C6: 06 0A         ld   b,0x0A               | 10 aliens maximum per row
+16C8: 86            add  a,(hl)              
+16C9: 2C            inc  l                   | bump HL to point to next alien in ALIEN_SWARM_FLAGS
+16CA: 10 FC         djnz 0x16C8               | repeat until all aliens in the row have been done
+16CC: 19            add  hl,de               | make HL point to first alien in row above 
+16CD: 0D            dec  c                   | do rows until C==0
+16CE: C2 C6 16      jp   nz,0x16C6
+
+* When we get here, A = total number of aliens left alive in the swarm + 1
+16D1: 21 00 68      ld   hl,0x6800            | load HL with address of !SOUND  reset background F1 port
+16D4: 06 03         ld   b,0x03               | number of ports to write to maximum 
+16D6: 3D            dec  a                   | decrement total by 1 
+16D7: 28 14         jr   z,0x16ED             | if total is zero, goto 0x16ED 
+
+* This piece of code writes 1 to !SOUND  reset background F1 to F3 
+16D9: 36 01         ld   (hl),0x01            | 
+16DB: 2C            inc  l
+16DC: 10 F8         djnz 0x16D6
+
+16DE: FE 02         cp   0x02                 |                  
+16E0: 38 05         jr   c,0x16E7             | 
+16E2: AF            xor  a
+16E3: 32 24 42      ld   (0x4224),a           | clear HAVE_AGGRESSIVE_ALIENS flag
+16E6: C9            rts
+
+* This piece of code is only called when there are 3 aliens or less in the swarm.
+* It makes the aliens extremely aggressive!
+16E7: 3E 01         ld   a,0x01
+16E9: 32 24 42      ld   (0x4224),a           | set HAVE_AGGRESSIVE_ALIENS flag
+16EC: C9            rts
+
+* This piece of code writes 0 to !SOUND  reset background F1 to F3
+16ED: 36 00         ld   (hl),0x00
+16EF: 2C            inc  l
+16F0: 10 FB         djnz 0x16ED
+16F2: C3 DE 16      jp   0x16DE
 
 
 	
@@ -2395,7 +4231,7 @@ SET_COLOUR_ATTRIBUTES:
 *05A0: 1C            inc  e                   | Add 2 to DE..
 *05A1: 1C            inc  e                   | .. so that it points to the next attribute value
 *05A2: 10 F9         djnz 0x059D               | and do until b==0
-*05A4: C9            ret
+*05A4: C9            rts
 	rts
 
 UNPACK_ALIEN_SWARM:
@@ -2415,7 +4251,7 @@ UNPACK_ALIEN_SWARM:
 *0656: 30 F5         jr   nc,0x064D            | if bit 7 of C wasn't set, goto 0x064D
 *0658: 13            inc  de                  | move to next byte
 *0659: 10 F2         djnz 0x064D               | do until b ==0
-*065B: C9            ret
+*065B: C9            rts
 *065C: 36 00         ld   (hl),0x00            | write 0 to (hl) 
 *065E: C3 53 06      jp   0x0653               | 
 
@@ -2593,7 +4429,7 @@ PROCESS_CIRCULAR_COMMAND_QUEUE:
 2:
 	move.l	a0,CIRC_CMD_QUEUE_PROC       | Set lo byte of pointer to 0xC0 (0x40C0 = start of circular queue)
 	move.b	d4,d0		                 | Now d0 = parameter to command
-	pea		0b(pc)						 | push it onto stack, so when we hit a RET it'll return to 0x200A
+	pea		0b(pc)						 | push it onto stack, so when we hit a rts it'll return to 0x200A
 	jmp		(a1)		                 | jump to proper code from the table below					 
 
 jump_table_203D:
@@ -2675,7 +4511,7 @@ PRINT_TEXT_COMMAND:
 * I'll stick my neck out and guess this code is to erase text that was drawn previously.
 *2319: 1A            ld   a,(de)
 *231A: FE 3F         cp   0x3F
-*231C: C8            ret  z
+*231C: C8            rts  z
 *231D: 36 40         ld   (hl),0x40
 *231F: 13            inc  de
 *2320: 09            add  hl,bc
@@ -2728,7 +4564,7 @@ l_2323:
 *2355: 71            ld   (hl),c              | write initial scroll offset to OBJRAM_BACK_BUF
 *2356: 3E 01         ld   a,0x01
 *2358: 32 B0 40      ld   (0x40B0),a           | set IS_COLUMN_SCROLLING flag
-*235B: C9            ret
+*235B: C9            rts
 
 TEXTPTRS:                                     
 	dc.l	TXT_GAME_OVER
@@ -3308,3 +5144,19 @@ bcd_table:
 	.byte	0x98
 	.byte	0x99
 	
+*
+* Defines the arc to perform a loop the loop maneuvre. 
+* Referenced by code @0x0D71 and 0x101F.
+*
+* The table comprises byte pairs:
+*   byte 0: signed offset to add to INFLIGHT_ALIEN.X
+*   byte 1: unsigned offset to add to *or* subtract from (depends on which way alien is facing when it breaks off from swarm) INFLIGHT_ALIEN.Y 
+*
+INFLIGHT_ALIEN_ARC_TABLE:
+	.byte	0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x01,0xFF,0x00,0xFF,0x00,0xFF,0x01,0xFF,0x00  
+	.byte	0xFF,0x01,0xFF,0x00,0x00,0x01,0xFF,0x00,0xFF,0x01,0x00,0x01,0xFF,0x00,0x00,0x01  
+	.byte	0xFF,0x01,0x00,0x01,0xFF,0x01,0x00,0x01,0x00,0x01,0xFF,0x01,0x00,0x01,0x00,0x01  
+	.byte	0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x01,0x01,0x00,0x01,0x00,0x01,0x01,0x01  
+	.byte	0x00,0x01,0x01,0x01,0x00,0x01,0x01,0x00,0x00,0x01,0x01,0x01,0x01,0x00,0x00,0x01  
+	.byte	0x01,0x00,0x01,0x01,0x01,0x00,0x01,0x01,0x01,0x00,0x01,0x00,0x01,0x01,0x01,0x00  
+	.byte	0x01,0x00,0x01,0x00,0x01,0x00,0x01
