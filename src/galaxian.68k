@@ -875,11 +875,11 @@ galaxian_irq:
 
 		subq.b	#1,TIMING_VARIABLE             | decrement value
 *TODO
-*		jbsr CHECK_IF_COIN_INSERTED               | 
-*jbsr HANDLE_UNPROCESSED_COINS
-*jbsr HANDLE_SOUND
-*jbsr HANDLE_SWARM_SOUND
-*jbsr HANDLE_TEXT_SCROLL
+		jbsr CHECK_IF_COIN_INSERTED               | 
+		jbsr HANDLE_UNPROCESSED_COINS
+		jbsr HANDLE_SOUND
+		jbsr HANDLE_SWARM_SOUND
+		jbsr HANDLE_TEXT_SCROLL
 
 * invoke script [SCRIPT_NUMBER]
 	moveq	#0,d0
@@ -1010,16 +1010,7 @@ script_one_jump_table:
 	.long	WAIT_FOR_TEMP_COUNTER_2_THEN_ADVANCE_TO_NEXT_STAGE
 	.long	SET_SCRIPT_STAGE_TO_1
 
-SCRIPT_TWO:
-	TODOM	0x1002
-	rts
-SCRIPT_THREE:
-	TODOM	0x1003
-	rts
-SCRIPT_FOUR:
-	TODOM	0x1004
-	rts
-	
+
 
 *
 * Enables starfield, displays GAME OVER and the amount of credit remaining.
@@ -1219,6 +1210,182 @@ l_0988:
 	move.w	SWARM_SCROLL_VALUE(pc),d5         | read SWARM_SCROLL_VALUE
 	jra		l_096f
 
+
+
+*
+* This routine is responsible for scrolling on the SCORE ADVANCE TABLE items.
+* It is not responsible for scrolling the actual alien swarm.
+*
+
+HANDLE_TEXT_SCROLL:
+	move.b	IS_COLUMN_SCROLLING(pc),d0                       	| read IS_COLUMN_SCROLLING flag [ld   a,(0x40B0)]
+	ror.b	#1,d0                            	| move flag value into carry [rrca]
+	bcs.b	0f
+	rts                                    	| return if flag was not set [ret  nc]
+0:
+	*TODO this is wrong!!
+	move.w	COLUMN_SCROLL_ATTR_BACKBUF_PTR(pc),a0                   	| Load HL with pointer to scroll attribute data in OBJRAM_BACK_BUF. [ld   hl,(0x40B1)]
+	move.b	(a0),d0                         	| read scroll value [ld   a,(hl)]
+
+* We only want to scroll on a new character every 8th pixel. The code below effectively checks if (scroll offset MODULO 8 == 0)
+	and.b	#0x07,d0                         	| mask in bits 0..2. We now have a value from 0..7 in A. [and  0x07]
+	jne	l_18e8                             	| if A is not zero, we don't scroll on a new character yet, goto 0x18E8. [jr   nz,0x18E8]
+
+ex   de,hl                              	| swap HL and DE. This preserves value of HL elsewhere without requiring a PUSH or a store
+	move.w	COLUMN_SCROLL_NEXT_CHAR_PTR(pc),d6                   	| HL now is pointer to a character to be scrolled onto screen [ld   hl,(0x40B3)]
+	move.b	(a0),d0                         	| read character to scroll on [ld   a,(hl)]
+	cmp.b	#0x3F,d0                         	| is this a terminating byte marking the end of the characters to scroll on? [cp   0x3F]
+	jeq	l_18e7                             	| if so, goto 0x18E7 [jr   z,0x18E7]
+
+	addq.w	#1,d6                           	| bump pointer to next character [inc  hl]
+	move.w	d6,COLUMN_SCROLL_NEXT_CHAR_PTR                       	| and update COLUMN_SCROLL_NEXT_CHAR_PTR pointer [ld   (0x40B3),hl]
+	sub.b	#0x30,d0                         	| [sub  0x30]
+	move.w	COLUMN_SCROLL_CHAR_RAM_PTR(pc),d6                   	| get character RAM address to plot character at [ld   hl,(0x40B5)]
+	jbsr	osd_w_bg_videoram                         	| store character into character RAM [ld   (hl),a]
+
+	subq.w	#32,d6                              	| Add offset to HL. HL now points to character in row above, same column.
+	move.b	a0,l_40B5                       	| And update pointer [ld   (0x40B5),hl]
+
+l_18e7:
+ex   de,hl                              	| now HL points to scroll attribute data in OBJRAM_BACK_BUF
+l_18e8:
+	subq.b	#1,(a0)                         	| update scroll offset value [dec  (hl)]
+	beq.b	0f
+	rts                                    	| exit if scroll offset value is not zero [ret  nz]
+0:
+
+	moveq	#0,d0                            	| We've scrolled as much as we need to. Stop the scroll. [xor  a]
+	move.b	d0,IS_COLUMN_SCROLLING                       	| clear IS_COLUMN_SCROLLING flag [ld   (0x40B0),a]
+	rts                                    	| [ret]
+
+
+CHECK_IF_COIN_INSERTED:
+	move.b	DIP_SWITCH_1_2_STATE(pc),d0                       	| read stored state of dip switch 1 & 2 [ld   a,(0x4000)]
+	cmp.b	#0x03,d0                         	| are dip switches set to FREE PLAY? [cp   0x03]
+	jeq	l_1917                             	| yes, free play enabled, so goto 0x1917: we don't need to check if coins are inserted [jr   z,0x1917]
+	                     	| pointer to PORT_STATE_6000 value [ld   hl,0x4010]
+	move.b	PORT_STATE_6000(pc),d0                         	| read value [ld   a,(hl)]
+											| [inc  l]
+											| [inc  l]
+											| bump HL to 0x4013, which is PREV_PORT_STATE_6000 value [inc  l]
+	or.b	PREV_PORT_STATE_6000(pc),d0                           	| combine bits set for current state of port 6000 with bits set from previous state [or   (hl)]
+	                        	| [inc  l]
+	                        	| bump HL to 0x4015, which is PREV_PREV_PORT_STATE_6000 value [inc  l]
+	not.b	d0                               	| flip bits [cpl]
+	and.b	PREV_PREV_PORT_STATE_6000(pc),(a0)
+	                            	| bump HL to 0x4016, which is PREV_PREV_PREV_PORT_STATE_6000 value. [inc  l]
+	and.b	PREV_PREV_PREV_PORT_STATE_6000(pc),(a0)
+	btst.b	#7,d0                           	| read SERVICE state [bit  7,a]
+	jne	l_191e                             	| if SERVICE is pressed, goto 0x191E [jr   nz,0x191E]
+	and.b	#0x03,d0                         	| mask in COIN 1 & COIN 2 bits, discard rest [and  0x03]
+	bne.b	0f
+	rts                                    	| if neither bits are set, meaning no coins inserted, return [ret  z]
+0:
+	lea	UNPROCESSED_COINS(pc),a0                      	| address of UNPROCESSED_COINS counter [ld   hl,0x4004]
+	addq.b	#1,(a0)                         	| increment UNPROCESSED_COINS counter [inc  (hl)]
+	btst.b	#0,d0                           	| test COIN 1 state [bit  0,a]
+	bne.b	0f
+	rts                                    	| return if no coin inserted [ret  z]
+0:
+	and.b	#0x02,d0                         	| test COIN 2 state [and  0x02]
+	bne.b	0f
+	rts                                    	| return if no coin inserted [ret  z]
+0:
+	addq.b	#1,(a0)                         	| increment UNPROCESSED_COINS counter [inc  (hl)]
+	rts                                    	| [ret]
+
+* Only comes here if we have FREE PLAY enabled in the dip switches
+l_1917:
+	move.b	#1,COIN_COUNT
+	move.b	#9,NUM_CREDITS               	| set COIN_COUNT to 1 and NUM_CREDITS to 9. [ld   (0x4001),hl]
+	rts                                    	| [ret]
+
+*
+* This is called when SERVICE is pressed.
+*
+
+l_191e:
+	lea	NUM_CREDITS(pc),a0                      	| address of NUM_CREDITS [ld   hl,0x4002]
+	move.b	(a0),d0                         	| read number of credits [ld   a,(hl)]
+	cmp.b	#0x63,d0                         	| compare to 99 (decimal) [cp   0x63]
+	bcs.b	0f
+	rts                                    	| if A < 99 decimal, return [ret  nc]
+0:
+	addq.b	#1,(a0)                         	| otherwise, increment number of credits [inc  (hl)]
+	move.b	#0x01,d0                        	| [ld   a,0x01]
+	move.b	d0,PLAY_PLAYER_CREDIT_SOUND                       	| Play sound of credit being added [ld   (0x41C9),a]
+	move.w	#0x0701,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, parameter: 1 (invokes DISPLAY_AVAILABLE_CREDIT) [ld   de,0x0701]
+	jra	QUEUE_COMMAND                             	| jump to QUEUE_COMMAND [jp   0x08F2]
+
+
+
+HANDLE_UNPROCESSED_COINS:
+	lea	l_4003(pc),a0                      	| COIN_CONTROL [ld   hl,0x4003]
+	move.b	(a0),d0                         	| Read value [ld   a,(hl)]
+	tst.b	d0                               	| test if zero. Zero means we process unprocessed coins [and  a]
+	jne	l_1974                             	| if non-zero goto 0x1974 - don't bother processing coins. [jr   nz,0x1974]
+	addq.b	#1,l                            	| point HL to UNPROCESSED_COINS [inc  l]
+	or.b	(a0),d0                           	| Do we have any coins left unprocessed? [or   (hl)]
+	bne.b	0f
+	rts                                    	| Return if no coins left to be processed. [ret  z]
+0:
+	subq.b	#1,(a0)                         	| Otherwise, decrement UNPROCESSED_COINS [dec  (hl)]
+	subq.b	#1,l                            	| point HL to 0x4003, COIN_CONTROL [dec  l]
+	move.b	#0x0F,(a0)                      	| reset COIN_CONTROL [ld   (hl),0x0F]
+	move.b	l_4000,d0                       	| read stored state of dip switches 1 & 2 [ld   a,(0x4000)]
+	cmp.b	#0x03,d0                         	| are both switches set, meaning FREE PLAY? [cp   0x03]
+	bne.b	0f
+	rts                                    	| yes, so return - we don't bother about coins or credits in this case. [ret  z]
+0:
+	subq.b	#1,d0                           	| have we set dip switches to TWO COINS = 1 PLAY? If so, A will be 0 [dec  a]
+	jeq	l_1964                             	| yes, goto 0x1964 to handle TWO COINS 1 PLAY [jr   z,0x1964]
+
+* Nice piece of code @0x194C to add two credits if required with only one CALL. Spot it?
+	lea	l_4002(pc),a0                      	| point HL to NUM_CREDITS [ld   hl,0x4002]
+	subq.b	#1,d0                           	| have we set dip switches to ONE COIN = 2 PLAYS? If so, A will be 0 [dec  a]
+	bne	0f
+	jbsr	l_194f                            	| call code immediately after to add 1 credit, then return from CALL to add another credit! [call z,0x194F]
+0:
+l_194f:
+	move.b	(a0),d0                         	| read number of credits [ld   a,(hl)]
+	cmp.b	#0x63,d0                         	| have we reached 99 credits (decimal)? [cp   0x63]
+	bne.b	0f
+	rts                                    	| yes, so exit, no more credits allowed [ret  z]
+0:
+	jcc	l_1961                             	| if we have more than 99 credits (decimal) then goto 0x1961 - clamp credits to 99. [jr   nc,0x1961]
+	addq.b	#1,(a0)                         	| increment credit count [inc  (hl)]
+	move.b	#0x01,d0                        	| [ld   a,0x01]
+	move.b	d0,l_41C9                       	| Set PLAY_PLAYER_CREDIT_SOUND flag to 1. I think you can guess what this does|) [ld   (0x41C9),a]
+	lea	l_0701(pc),a1                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, parameter: 1 (invokes DISPLAY_AVAILABLE_CREDIT) [ld   de,0x0701]
+	jra	l_08f2                             	| jump to QUEUE_COMMAND [jp   0x08F2]
+
+l_1961:
+	move.b	#0x63,(a0)                      	| set NUM_CREDITS to 99 decimal. [ld   (hl),0x63]
+	rts                                    	| [ret]
+
+* Called when dip switches are set to TWO COINS ONE PLAY
+l_1964:
+	lea	l_4001(pc),a0                      	| load HL with address of COIN_COUNT [ld   hl,0x4001]
+	btst.b	#0,(a0)                         	| Have we only inserted one coin? [bit  0,(hl)]
+	jeq	l_1971                             	| if bit test fails, we've not inserted any coins yet, goto 0x1971 [jr   z,0x1971]
+	clr.b	(a0)                             	| reset COIN_COUNT to say we've acknowledged coins and awarded extra credit [ld   (hl),0x00]
+	addq.b	#1,l                            	| bump HL to point to NUM_CREDITS [inc  l]
+	jra	l_194f                             	| call routine to add a credit [jp   0x194F]
+
+* Called to reset COIN_COUNT to 1.
+l_1971:
+	move.b	#0x01,(a0)                      	| [ld   (hl),0x01]
+	rts                                    	| [ret]
+
+
+* HL = 0x4003 (COIN_CONTROL)
+l_1974:
+	ror.b	#1,d0                            	| [rrca]
+	ror.b	#1,d0                            	| [rrca]
+	ror.b	#1,d0                            	| [rrca]
+	move.b	d0,l_6003                       	| write to DRIVER|COIN CONTROL [ld   (0x6003),a]
+	subq.b	#1,(a0)                         	| [dec  (hl)]
+	rts                                    	| [ret]
 
 
 
@@ -1453,7 +1620,6 @@ DISPLAY_NAMCO_LOGO:
 	move.b	#0x11,TEMP_COUNTER_2
 	move.b	#0x40,TEMP_COUNTER_1
 	addq.b	#1,ATTRACT_MODE_SCROLL_ID
-	bsr		osd_break
 	move.w	#0x060F,d3            | command: PRINT_TEXT, parameter: #0x0F (Displays NAMCO logo)
 	jra		QUEUE_COMMAND               
 
@@ -1479,8 +1645,6 @@ CLEAR_ALIEN_SWARM_AND_SUSPEND_SWARM_ANIMATION:
 	TODOM	10
 CREATE_ATTRACT_MODE_ALIEN_SWARM:
 	TODOM	11
-HANDLE_SPAWN_PLAYER:
-	TODOM	12
 HANDLE_MAIN_GAME_LOGIC:
 	TODOM	13
 HANDLE_PLAYER_ONE_KILLED:
@@ -1909,19 +2073,171 @@ l_0dcc:
 
 	
 	
-INFLIGHT_ALIEN_CONVOY_CHARGER_SET_COLOUR_POS_ANIM:
-	TODOM	0x104
-INFLIGHT_ALIEN_CONVOY_CHARGER_START_SCROLL:
-	TODOM	0x104
-INFLIGHT_ALIEN_CONVOY_CHARGER_DO_SCROLL:
-	TODOM	0x104
-INFLIGHT_ALIEN_DYING_SETUP_ANIM_AND_SOUND:    	
-	TODOM	0x104
-INFLIGHT_ALIEN_DYING_DISPLAY_EXPLOSION:
-	TODOM	0x104
-INFLIGHT_ALIEN_DYING_FINALLY_BUYS_FARM:
-	TODOM	0x104
 
+
+
+* Set the colour, X coordinate and animation frame of the INFLIGHT_ALIEN to,0xbe scrolled on
+* beneath CONVOY CHARGER.
+*
+* Expects:
+* IX = pointer to INFLIGHT_ALIEN structure
+*
+*
+
+INFLIGHT_ALIEN_CONVOY_CHARGER_SET_COLOUR_POS_ANIM:
+	move.b	(IndexInSwarm,a2),d0                    	| read INFLIGHT_ALIEN.IndexInSwarm [ld   a,(ix+0x07)]
+* Value in A now identifies type of alien:
+* 3: Flagship
+* 2: Red alien
+* 1: Purple alien
+* 0: Blue alien
+	not.b	d0                               	| flip the bits [cpl]
+	and.b	#0x03,d0                         	| [and  0x03]
+
+* now A is 0..3, where:
+* 0: Flagship
+* 1: Red alien
+* 2: Purple alien
+* 3: Blue alien
+	move.b	d0,d1                           	| [ld   b,a]
+	addq.b	#1,d0                           	| ensure colour value is nonzero [inc  a]
+	move.b	d0,(Colour,a2)                    	| set INFLIGHT_ALIEN.Colour [ld   (ix+0x16),a]
+	rol.b	#4,d0                            	| multiply A.. [rlca]*4 by 16
+	add.b	#0x8C,d0                         	| X coord = 0x8C + (A * 16) [add  a,0x8C]
+	move.b	d0,(inf_alien_X,a2)                    	| set INFLIGHT_ALIEN.X [ld   (ix+0x03),a]
+	move.b	#0x18,(TempCounter1,a2)                 	| set INFLIGHT_ALIEN.TempCounter1 [ld   (ix+0x10),0x18]
+	addq.b	#1,(StageOfLife,a2)                    	| advance alien to its next stage of life [inc  (ix+0x02)]
+	clr.b	(AnimFrameStartCode,a2)                        	| set INFLIGHT_ALIEN.AnimFrameStartCode [ld   (ix+0x0f),0x00]
+	move.b	d1,d0                           	| [ld   a,b]
+	tst.b	d0                               	| flagship? [and  a]
+	beq.b	0f
+	rts                                    	| return if not [ret  nz]
+0:
+
+* This is a flagship, the animation frame start is different from the other aliens
+	move.b	#0x18,(AnimFrameStartCode,a2)                 	| set INFLIGHT_ALIEN.AnimFrameStartCode [ld   (ix+0x0f),0x18]
+	rts                                    	| [ret]
+
+
+
+* On the WE ARE THE GALAXIANS.. CONVOY CHARGER attract mode page,
+* start scrolling an alien sprite onto screen, and print its associated points values
+*
+* Expects:
+* IX = pointer to INFLIGHT_ALIEN structure
+*
+
+INFLIGHT_ALIEN_CONVOY_CHARGER_START_SCROLL:
+	addq.b	#1,(inf_alien_Y,a2)                    	| keep incrementing INFLIGHT_ALIEN.Y.. [inc  (ix+0x04)]
+	subq.b	#1,(TempCounter1,a2)                    	| ..until this counter hits zero. [dec  (ix+0x10)]
+	beq.b	0f
+	rts                                    	| [ret  nz]
+0:
+
+	move.b	(IndexInSwarm,a2),d0                    	| read INFLIGHT_ALIEN.IndexInSwarm [ld   a,(ix+0x07)]
+	add.b	#0x4B,d0                         	| set bit 6 to indicate the text needs to be scrolled on [add  a,0x4B]
+	move.w	#0x300,d3		| command is PRINT_TEXT
+	move.b	d0,d3
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	addq.b	#1,(StageOfLife,a2)                    	| advance to next stage of alien's life [inc  (ix+0x02)]
+	rts                                    	| [ret]
+
+
+
+*
+* Scroll alien sprite onto screen
+*
+* Expects:
+* IX = pointer to INFLIGHT_ALIEN structure
+*
+
+INFLIGHT_ALIEN_CONVOY_CHARGER_DO_SCROLL:
+	move.b	(0x04,a2),d0                    	| read INFLIGHT_ALIEN.Y [ld   a,(ix+0x04)]
+	sub.b	#0xC8,d0                         	| [sub  0xC8]
+	cmp.b	#0x05,d0                         	| [cp   0x05]
+	bcc.b	0f
+	rts                                    	| [ret  c]
+0:
+	addq.b	#1,(0x04,a2)                    	| update INFLIGHT_ALIEN.Y [inc  (ix+0x04)]
+	rts                                    	| [ret]
+
+
+
+*
+* Set up a dying alien's death animation and sound effect.
+*
+* Expects:
+* IX = pointer to INFLIGHT_ALIEN structure
+
+INFLIGHT_ALIEN_DYING_SETUP_ANIM_AND_SOUND:
+	move.b	#0x04,(0x10,a2)                 	| set INFLIGHT_ALIEN.TempCounter1 to speed of death animation (lower = faster) [ld   (ix+0x10),0x04]
+	move.b	#0x04,(0x11,a2)                 	| set INFLIGHT_ALIEN.TempCounter2 to number of times to repeat death animation [ld   (ix+0x11),0x04]
+	move.b	#0x1C,(0x12,a2)                 	| set INFLIGHT_ALIEN.DyingAnimFrameCode [ld   (ix+0x12),0x1C]
+	addq.b	#1,(0x02,a2)                    	| bump INFLIGHT_ALIEN.StageOfLife to next stage [inc  (ix+0x02)]
+	move.b	(0x07,a2),d0                    	| read INFLIGHT_ALIEN.IndexInSwarm [ld   a,(ix+0x07)]
+	cmp.b	#0x70,d0                         	| is this a flagship? [cp   0x70]
+	jcc	l_110c                             	| yes, goto 0x110C to play flagship hit sound [jr   nc,0x110C]
+	move.b	#0x07,d0                        	| [ld   a,0x07]
+	move.b	d0,ALIEN_DEATH_SOUND                       	| play sound effect of alien hit [ld   (0x41DF),a]
+	rts                                    	| [ret]
+
+* play flagship hit sound
+l_110c:
+	move.b	#0x17,d0                        	| [ld   a,0x17]
+	move.b	d0,ALIEN_DEATH_SOUND                       	| play sound effect of flagship hit [ld   (0x41DF),a]
+	rts                                    	| [ret]
+
+
+*
+* Show the dying alien explosion animation.
+*
+* Expects:
+* IX = point to INFLIGHT_ALIEN structure
+*
+
+INFLIGHT_ALIEN_DYING_DISPLAY_EXPLOSION:
+	subq.b	#1,(TempCounter1,a2)                    	| decrement INFLIGHT_ALIEN.TempCounter1 [dec  (ix+0x10)]
+	beq.b	0f
+	rts                                    	| if counter hasn't reached zero, not time to update explosion animation frame yet [ret  nz]
+0:
+	move.b	#0x04,(TempCounter1,a2)                 	| reset animation counter. Higher number = slower explosion animation speed [ld   (ix+0x10),0x04]
+	addq.b	#1,(DyingAnimFrameCode,a2)       	| bump INFLIGHT_ALIEN.DyingAnimFrameCode to next frame [inc  (ix+0x12)]
+	subq.b	#1,(TempCounter2,a2)      	| decrement INFLIGHT_ALIEN.TempCounter2 which holds count of frames left to show [dec  (ix+0x11)]
+	beq.b	0f
+	rts                                    	| if we've not shown all the explosion frames, exit [ret  nz]
+0:
+
+	move.b	(IndexInSwarm,a2),d0                    	| read INFLIGHT_ALIEN.IndexInSwarm [ld   a,(ix+0x07)]
+	cmp.b	#0x70,d0                         	| is this a flagship? [cp   0x70]
+	jcc	DISPLAY_FLAGSHIP_POINTS_VALUE                             	| yes, goto DISPLAY_FLAGSHIP_POINTS_VALUE [jr   nc,0x112D]
+	clr.b	(IsDying,a2)                        	| alien's not a flagship, so just clear INFLIGHT_ALIEN.IsDying to say "we've finished dying, thanks". [ld   (ix+0x01),0x00]
+	rts                                    	| [ret]
+
+
+*
+* After you shoot a flagship, display its points value for a while.
+*
+
+DISPLAY_FLAGSHIP_POINTS_VALUE:
+	move.b	#0x32,(TempCounter1,a2)                 	| set INFLIGHT_ALIEN.TempCounter1 to length of time to keep points on screen [ld   (ix+0x10),0x32]
+	move.b	FLAGSHIP_SCORE_FACTOR(pc),d0                       	| read FLAGSHIP_SCORE_FACTOR. 3 = full (800) points [ld   a,(0x422D)]
+	add.b	#0x20,d0                         	| [add  a,0x20]
+	move.b	d0,(DyingAnimFrameCode,a2)                    	| set INFLIGHT_ALIEN.DyingAnimFrameCode [ld   (ix+0x12),a]
+	addq.b	#1,(StageOfLife,a2)                    	| set INFLIGHT_ALIEN.StageOfLife (or death, should I say.) [inc  (ix+0x02)]
+	rts                                    	| [ret]
+
+
+* keeps points value on screen until counter hits zero.
+*
+* After that, the alien is officially dead and the INFLIGHT_ALIEN structure is ready for re-use by another (living) attacking alien.
+*
+INFLIGHT_ALIEN_DYING_FINALLY_BUYS_FARM:
+	subq.b	#1,(TempCounter1,a2)                    	| decrement INFLIGHT_ALIEN.TempCounter1 [dec  (ix+0x10)]
+	beq.b	0f
+	rts                                    	| if points value countdown isn't zero, exit [ret  nz]
+0:
+	clr.b	(IsDying,a2)                        	| clear INFLIGHT_ALIEN.IsDying flag. [ld   (ix+0x01),0x00]
+	rts                                    	| [ret]
 	
 
 *
@@ -2751,18 +3067,1088 @@ LEA_DE_OF_CURRENT_PLAYER_SCORE:
 SET_COLOUR_ATTRIBUTES_TABLE_1:
 		lea		COLOUR_ATTRIBUTE_TABLE_1(pc),a0 
 
-*TODO
 SET_COLOUR_ATTRIBUTES:
-*0598: 11 21 40      ld   de,0x4021            | address of first attribute in OBJRAM_BACK_BUF 
-*059B: 06 20         ld   b,0x20               | we're setting attributes for all 32 columns in the row
-*059D: 7E            ld   a,(hl)              | read attribute value from ROM 
-*059E: 12            ld   (de),a              | write to attribute value in OBJRAM_BACK_BUF
-*059F: 23            inc  hl                  | bump HL to next value in ROM
-*05A0: 1C            inc  e                   | Add 2 to DE..
-*05A1: 1C            inc  e                   | .. so that it points to the next attribute value
-*05A2: 10 F9         djnz 0x059D               | and do until b==0
-*05A4: C9            rts
-	rts
+	lea	l_4021(pc),a1                      	| address of first attribute in OBJRAM_BACK_BUF [ld   de,0x4021]
+	move.b	#0x20,d1                        	| we're setting attributes for all 32 columns in the row [ld   b,0x20]
+	move.b	(a0),d0                         	| read attribute value from ROM [ld   a,(hl)]
+	move.b	d0,(a1)                         	| write to attribute value in OBJRAM_BACK_BUF [ld   (de),a]
+	addq.w	#1,a0                           	| bump HL to next value in ROM [inc  hl]
+	addq.b	#1,e                            	| Add 2 to DE.. [inc  e]
+	addq.b	#1,e                            	| .. so that it points to the next attribute value [inc  e]
+	subq.b	#1,d1                           	| [...]
+	jne	l_059d                             	| and do until b==0 [djnz 0x059D]
+	rts                                    	| [ret]
+
+*
+* Credit has been inserted. Now wait for a start button to be pushed.
+*
+*
+*
+
+SCRIPT_TWO:
+	jbsr	HANDLE_SWARM_MOVEMENT                            	| call HANDLE_SWARM_MOVEMENT [call 0x090D]
+	jbsr	SET_ALIEN_PRESENCE_FLAGS                            	| call SET_ALIEN_PRESENCE_FLAGS [call 0x098E]
+	moveq	#0,d0
+	lea	l_400(pc),a0
+	move.b	SCRIPT_STAGE(pc),d0                       	| read SCRIPT_STAGE [ld   a,(0x400A)]
+	add.w	d0,d0
+	add.w	d0,d0
+	move.l	(a0,d0.w),a0
+	jsr|	(a0)				| jump to code @ 0x0400 + (A*2)
+	jra		HANDLE_START_BUTTONS		| address of HANDLE_START_BUTTONS [ld   hl,0x0492]
+	
+l_0400:
+	.long	INIT_0408
+	.long	WAIT_BEFORE_DISPLAYING_PUSH_START_BUTTON
+	.long	DISPLAY_PUSH_START_BUTTON_AND_BONUS_GALIXIP_FOR
+	.long	BLINK_LAMPS_IF_CREDIT_INSERTED
+
+
+
+
+
+INIT_l_0408:
+	lea	COLOUR_ATTRIBUTE_TABLE_2(pc),a0                      	| pointer to COLOUR_ATTRIBUTE_TABLE_2 [ld   hl,0x1D91]
+	jbsr	SET_COLOUR_ATTRIBUTES                            	| call SET_COLOUR_ATTRIBUTES [call 0x0598]
+
+* hide all sprites
+	lea	OBJRAM_BACK_BUF_SPRITES(pc),a0                      	| load HL with address of OBJRAM_BACK_BUF_SPRITES [ld   hl,0x4060]
+	move.b	#0x40,d1                        	| [ld   b,0x40]
+	moveq	#0,d0                            	| [xor  a]
+rst  0x10                               	| Fill B bytes of memory from HL with value in A.
+
+* hide all bullets and inflight aliens
+	lea	ENEMY_BULLETS_START(pc),a0                      	| load HL with address of ENEMY_BULLETS_START [ld   hl,0x4260]
+rst  0x10                               	| Fill B bytes of memory from HL with value in A.
+	move.b	#0x50,d1                        	| [ld   b,0x50]
+rst  0x10                               	| Fill B bytes of memory from HL with value in A.
+
+	move.b	d0,DISABLE_SWARM_ANIMATION                       	| clear DISABLE_SWARM_ANIMATION [ld   (0x4238),a]
+	move.b	d0,IS_COLUMN_SCROLLING                       	| clear IS_COLUMN_SCROLLING [ld   (0x40B0),a]
+	move.w	#0x5002,d6                      	| point to address in character RAM (3rd character of top row) [ld   hl,0x5002]
+	move.w	d6,TEMP_CHAR_RAM_PTR                       	| set TEMP_CHAR_RAM_PTR [ld   (0x400B),hl]
+	lea	TEMP_COUNTER_2(pc),a0                      	| load HL with address of TEMP_COUNTER_2 [ld   hl,0x4009]
+	move.b	#0x10,(a0)                      	| set countdown to 0x10 (16 decimal) [ld   (hl),0x10]
+	addq.b	#1,SCRIPT_STAGE                         	| advance to next stage of script [inc  (hl)]
+	rts                                    	| [ret]
+
+
+
+WAIT_BEFORE_DISPLAYING_PUSH_START_BUTTON:
+	lea	PUSH_START_BUTTON_COUNTER(pc),a0                      	| pointer to PUSH_START_BUTTON_COUNTER [ld   hl,0x4019]
+	subq.b	#1,(a0)                         	| decrement counter [dec  (hl)]
+	jne	BLINK_LAMPS_IF_CREDIT_INSERTED                             	| if non zero, goto BLINK_LAMPS_IF_CREDIT_INSERTED [jp   nz,0x0473]
+
+* counter's hit zero, go to next stage of script.
+	lea	SCRIPT_STAGE(pc),a0                      	| pointer to SCRIPT_STAGE [ld   hl,0x400A]
+	addq.b	#1,(a0)                         	| advance to next stage of script [inc  (hl)]
+	lea	ALIEN_SWARM_FLAGS(pc),a0                      	| load HL with address of ALIEN_SWARM_FLAGS [ld   hl,0x4100]
+	move.b	#0x80,d1                        	| sizeof(ALIEN_SWARM_FLAGS) [ld   b,0x80]
+	moveq	#0,d0                            	| [xor  a]
+rst  0x10                               	| Fill B bytes of memory from HL with value in A.
+	rts                                    	| [ret]
+
+
+
+
+DISPLAY_PUSH_START_BUTTON_AND_BONUS_GALIXIP_FOR:
+	move.w	TEMP_CHAR_RAM_PTR(pc),d6                   	| Get pointer to row to clear from TEMP_CHAR_RAM_PTR [ld   hl,(0x400B)]
+	move.b	#0x1C,d1                        	| #0x1C (28 decimal) characters to clear [ld   b,0x1C]
+	move.b	#0x10,d0                        	| Ordinal for empty space character [ld   a,0x10]
+rst  0x10                               	| Fill B bytes of memory from HL with value in A.
+	addq.w	#4,d6	                      	| We've done 28 characters. Need 4 more to move to next row. [ld   de,0x0004]
+											| Adjust HL to point to start of next row
+	move.b	#0x1C,d1                        	| #0x1C (28 decimal) characters to clear [ld   b,0x1C]
+rst  0x10                               	| Fill B bytes of memory from HL with value in A.
+	addq.w	#4,d6                              	| Adjust HL to point to start of next row
+	move.b	d6,TEMP_CHAR_RAM_PTR                       	| And update TEMP_CHAR_RAM_PTR pointer [ld   (0x400B),hl]
+
+* wait for TEMP_COUNTER_2 to reach 0
+	lea	TEMP_COUNTER_2(pc),a0                      	| load HL with address of TEMP_COUNTER_2 [ld   hl,0x4009]
+	subq.b	#1,(a0)                         	| [dec  (hl)]
+	beq.b	0f
+	rts                                    	| [ret  nz]
+0:
+
+* then move to next stage of script
+	addq.b	#1,SCRIPT_STAGE                         	| advance to next stage of script [inc  (hl)]
+
+* reset screen orientation to defaults
+	moveq	#0,d0                            	| [xor  a]
+	*move.b	d0,l_7006                       	| set regen hflip [ld   (0x7006),a]
+	*move.b	d0,l_7007                       	| set regen vflip [ld   (0x7007),a]
+	move.b	d0,DISPLAY_IS_COCKTAIL_P2                       	| set DISPLAY_IS_COCKTAIL_P2 [ld   (0x4018),a]
+
+* display BONUS GALIXIP FOR and PUSH START BUTTON messages
+	lea	l_0702(pc),a1                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND , parameter: 2 (invokes DISPLAY_BONUS_GALIXIP_FOR) [ld   de,0x0702]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	lea	l_0601(pc),a1                      	| command: PRINT_TEXT, parameter: 1 (index of "PUSH START BUTTON") [ld   de,0x0601]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+
+
+
+
+*
+*
+* Make the lamps on the arcade cabinet blink if credit(s) available.
+*
+*
+
+BLINK_LAMPS_IF_CREDITS:
+l_0473:
+	move.b	TIMING_VARIABLE,d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
+	and.b	#0x20,d0                         	| mask in bit 5 [and  0x20]
+	jeq	l_048b                             	| if bit 5 is not set, turn off the lamps [jr   z,0x048B]
+
+* Does player have credit? If not, then don't turn the lamps on.
+	move.b	NUM_CREDITS,d0                       	| read NUM_CREDITS [ld   a,(0x4002)]
+	tst.b	d0                               	| test if credits is 0 [and  a]
+	bne.b	0f
+	rts                                    	| return if no credits [ret  z]
+0:
+
+* turn the lamps on to show you have credit
+	move.b	d0,d1                           	| [ld   b,a]
+	move.b	#0x01,d0                        	| [ld   a,0x01]
+	*move.b	d0,l_6000                       	| turn on lamp 1 [ld   (0x6000),a]
+	subq.b	#1,d1                           	| [dec  b]
+	bne.b	0f
+	rts                                    	| [ret  z]
+0:
+	*move.b	d0,l_6001                       	| turn on lamp 2 [ld   (0x6001),a]
+	rts                                    	| [ret]
+
+* turn lamps off
+l_048b:
+	*move.b	d0,l_6000                       	| turn on/off lamp 1 [ld   (0x6000),a]
+	*move.b	d0,l_6001                       	| turn on/off lamp 2 [ld   (0x6001),a]
+	rts                                    	| [ret]
+
+
+
+
+*
+*
+* Handle 1P or 2P being pressed.
+*
+* Notes:
+* 1P = deducts 1 credit.
+* 2P = deducts 2 credits
+*
+
+HANDLE_START_BUTTONS:
+	move.b	PORT_STATE_6800,d0                       	| read PORT_STATE_6800 [ld   a,(0x4011)]
+	btst.b	#0,d0                           	| test for 1P START button being hit [bit  0,a]
+	jne	ONEP_START_BUTTON_HANDLER                             	| if button is hit, goto 1P_START_BUTTON_HANDLER [jr   nz,0x04F2]
+	btst.b	#1,d0                           	| test for 2P START button being hit [bit  1,a]
+	bne.b	0f
+	rts                                    	| [ret  z]
+0:
+
+* The following piece of code executes when 2P START button is pushed
+TWOP_START_BUTTON_HANDLER:
+	move.b	NUM_CREDITS(pc),d0                       	| read NUM_CREDITS [ld   a,(0x4002)]
+	cmp.b	#0x02,d0                         	| do we have at least 2 credits for a 2 player game? [cp   0x02]
+	bcc.b	0f
+	rts                                    	| if credits < 2, then we don't have enough credit, return [ret  c]
+0:
+	subq.b	#0x02,d0                        	| otherwise, reduce credits by 2 [sub  0x02]
+	move.b	d0,NUM_CREDITS                       	| and update NUM_CREDITS with remainder [ld   (0x4002),a]
+
+* initialise player 2's state (lives etc) to defaults
+	lea	l_051B(pc),a0                      	| load HL with address of DEFAULT_PLAYER_STATE [ld   hl,0x051B]
+	lea	l_41A0(pc),a1                      	| load DE with address of PLAYER_TWO_STATE [ld   de,0x41A0]
+ld   bc,0x0020                          	| sizeof (PLAYER_TWO_STATE)
+ldir
+
+* if dip switch 5 is on, then player 2 gets 3 lives
+	move.b	DIP_SWITCH_5_STATE,d0                       	| read DIP_SWITCH_5_STATE [ld   a,(0x401F)]
+	ror.b	#1,d0                            	| move bit 0 into carry [rrca]
+	bcc	0f
+	jbsr	l_050f                            	| if carry is set, call AWARD_PLAYER_TWO_THREE_LIVES [call c,0x050F]
+0:
+	move.w	#0,d5                      	| CURRENT_PLAYER will be set to 0, IS_TWO_PLAYER_GAME set to 1 [ld   hl,0x0100]
+	move.w	#1,d6
+l_04bc:
+	move.b	d5,CURRENT_PLAYER                       	| set CURRENT_PLAYER, and IS_TWO_PLAYER_GAME [ld   (0x400D),hl]
+	move.b	d6,IS_TWO_PLAYER_GAME                       	| set CURRENT_PLAYER, and IS_TWO_PLAYER_GAME [ld   (0x400D),hl]
+
+* Create alien swarm and load default settings for player 1
+	lea	PACKED_DEFAULT_SWARM_DEFINITION(pc),a0                      	| load HL with address of PACKED_DEFAULT_SWARM_DEFINITION [ld   hl,0x051B]
+	lea	PLAYER_ONE_PACKED_SWARM_DEF(pc),a1                      	| load DE with address of PLAYER_ONE_PACKED_SWARM_DEF [ld   de,0x4180]
+ld   bc,0x0020                          	| sizeof (PLAYER_ONE_PACKED_SWARM_DEF)+sizeof(PLAYER_ONE_STATE)
+ldir
+
+* if dip switch 5 is on, then player 1 gets 3 lives
+	move.b	DIP_SWITCH_5_STATE,d0                       	| read DIP_SWITCH_5_STATE [ld   a,(0x401F)]
+	ror.b	#1,d0                            	| move bit 0 into carry [rrca]
+	bcc	0f
+	jbsr	AWARD_PLAYER_ONE_THREE_LIVES                            	| if carry is set, call AWARD_PLAYER_ONE_THREE_LIVES [call c,0x0515]
+0:
+
+	moveq	#0,d0                            	| [xor  a]
+	move.b	d0,SCRIPT_STAGE                       	| set SCRIPT_STAGE to 0 [ld   (0x400A),a]
+	move.b	#0x03,d0                        	| [ld   a,0x03]
+	move.b	d0,SCRIPT_NUMBER                       	| set SCRIPT_NUMBER to 3 [ld   (0x4005),a]
+	move.b	#0x01,d0                        	| [ld   a,0x01]
+	move.b	d0,IS_GAME_IN_PLAY                       	| set IS_GAME_IN_PLAY [ld   (0x4006),a]
+	move.b	d0,l_41D1                       	| [ld   (0x41D1),a]
+
+* Display high score, reset P1 and P2's score to 0
+	move.w	#0x604,d3                      	| command: PRINT_TEXT, parameter: 4 (index of "HIGH SCORE") [ld   de,0x0604]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	move.w	#0x400,d3                      	| command: RESET_SCORE_COMMAND, parameter: 0 (reset player 1's score and clear life awarded) [ld   de,0x0400]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	addq.b	#1,d3                            	| command: RESET_SCORE_COMMAND, parameter: 1 (reset player 2's score and clear life awarded) [inc  e]
+	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND [jp   0x08F2]
+
+
+*
+* Called when 1P START is pressed
+*
+
+ONEP_START_BUTTON_HANDLER:
+l_04f2:
+	move.b	NUM_CREDITS,d0                       	| read number of credits [ld   a,(0x4002)]
+	tst.b	d0                               	| test if number of credits is zero [and  a]
+	jeq	l_0509                             	| if number of credits is zero, goto 0x0509 [jr   z,0x0509]
+	subq.b	#1,d0                           	| otherwise reduce number of credits by 1 [dec  a]
+	move.b	d0,NUM_CREDITS                       	| and store back in credit counter [ld   (0x4002),a]
+	lea	PLAYER_TWO_PACKED_SWARM_DEF(pc),a0                      	| load HL with address of PLAYER_TWO_PACKED_SWARM_DEF [ld   hl,0x41A0]
+	move.b	#0x20,d1                        	| sizeof(PLAYER_TWO_PACKED_SWARM_DEF) + sizeof(PLAYER_TWO_STATE) [ld   b,0x20]
+	moveq	#0,d0                            	| [xor  a]
+rst  0x10                               	| clear player 2 swarm & state as we're not using them
+	moveq	#0,d5                      	| CURRENT_PLAYER will be set to 0, IS_TWO_PLAYER_GAME set to 0 [ld   hl,0x0000]
+	moveq	#0,d6                      	| CURRENT_PLAYER will be set to 0, IS_TWO_PLAYER_GAME set to 0 [ld   hl,0x0000]
+	jra	l_04bc                             	| go set CURRENT_PLAYER, and IS_TWO_PLAYER_GAME. [jp   0x04BC]
+
+l_0509:
+	move.b	#0x01,d0                        	| [ld   a,0x01]
+	move.b	d0,SCRIPT_NUMBER                       	| set SCRIPT_NUMBER to 1 [ld   (0x4005),a]
+	rts                                    	| [ret]
+
+
+
+* Only called if Dip Switch 5 is set to ON
+AWARD_PLAYER_TWO_THREE_LIVES:
+	move.b	#0x03,d0                        	| [ld   a,0x03]
+	move.b	d0,l_41B5                       	| Set number of lives for player 2 [ld   (0x41B5),a]
+	rts                                    	| [ret]
+
+
+* Only called if Dip Switch 5 is set to ON
+AWARD_PLAYER_ONE_THREE_LIVES:
+	move.b	#0x03,d0                        	| [ld   a,0x03]
+	move.b	d0,l_4195                       	| Set number of lives for player 1 [ld   (0x4195),a]
+	rts                                    	| [ret]
+
+
+
+*DEFAULT_SWARM_DEFINITION_AND_PLAYER_STATE    | EQU 0x051B:
+*    PACKED_DEFAULT_SWARM_DEFINITION:
+*    | The first 16 bytes defining the default alien swarm. 
+*    | For information on how the bytes are unpacked, please see docs @ 0x0646
+*    051B: 00 00 00 00 F8 1F F8 1F F8 1F F0 0F E0 07 40 02            
+*
+*    | When starting a new game, these are the default values 
+*    DEFAULT_PLAYER_STATE:
+*    052B: 3C                                 | Default value for DIFFICULTY_COUNTER_1 
+*    052C: 14                                 | Default value for DIFFICULTY_COUNTER_2
+*    00 02 00 02 00 0F 00 00 00            
+*
+*
+*
+* This script is responsible for managing PLAYER 1's game.
+*
+*
+*
+
+SCRIPT_THREE:
+	jbsr	HANDLE_SWARM_MOVEMENT                            	| call HANDLE_SWARM_MOVEMENT [call 0x090D]
+	jbsr	SET_ALIEN_PRESENCE_FLAGS                            	| call SET_ALIEN_PRESENCE_FLAGS [call 0x098E]
+	moveq	#0,d0
+	move.b	SCRIPT_STAGE(pc),d0                       	| [ld   a,(0x400A)]
+	add.w	d0,d0
+	add.w	d0,d0
+	lea		l_0540(pc),a0		
+	move.l	(a0,d0.w),a0		| jump to code @ l_0540 + (A*2)
+	jmp		(a0)
+l_0540:
+	.long	l_0550
+	.long	CLEAR_ROW_OF_SCREEN
+	.long	PLAYER_ONE_INIT
+	.long	CLEAR_PLAYER_TEXT
+	.long	HANDLE_SPAWN_PLAYER
+	.long	HANDLE_MAIN_GAME_LOGIC
+	.long	HANDLE_PLAYER_ONE_KILLED
+	.long	SWITCH_TO_PLAYER_TWO
+
+
+*
+l_0550:
+	lea	ALIEN_SWARM_FLAGS(pc),a0                      	| load HL with address of ALIEN_SWARM_FLAGS [ld   hl,0x4100]
+	move.b	#0x80,d1                        	| sizeof (ALIEN_SWARM_FLAGS) [ld   b,0x80]
+	moveq	#0,d0                            	| [xor  a]
+	*move.b	d0,l_6000                       	| clear !DRIVER lamp 1 [ld   (0x6000),a]
+	*move.b	d0,l_6001                       	| clear !DRIVER lamp 2 [ld   (0x6001),a]
+rst  0x10                               	| Clear the alien swarm
+
+	move.b	d0,TIMING_VARIABLE                       	| set TIMING_VARIABLE [ld   (0x425F),a]
+
+	lea	HAS_PLAYER_SPAWNED(pc),a0                      	| pointer to HAS_PLAYER_SPAWNED. Also start of player state [ld   hl,0x4200]
+	move.b	#0x17,d1                        	| 0x17 (23 decimal) bytes to clear [ld   b,0x17]
+rst  0x10                               	| Clear all player state
+	addq.b	#1,l                            	| [inc  l]
+	move.b	#0x18,d1                        	| [ld   b,0x18]
+rst  0x10                               	| Fill B bytes of memory from HL with value in A.
+	lea	ENEMY_BULLETS_START(pc),a0                      	| load HL with address of ENEMY_BULLETS_START [ld   hl,0x4260]
+	move.b	#0x46,d1                        	| [ld   b,0x46]
+rst  0x10                               	| Fill B bytes of memory from HL with value in A.
+	move.b	#0x01,d0                        	| [ld   a,0x01]
+	move.b	d0,HAVE_NO_INFLIGHT_ALIENS                       	| set HAVE_NO_INFLIGHT_ALIENS flag [ld   (0x4226),a]
+
+	addq.b	#1,SCRIPT_STAGE                         	| advance to next stage of script [inc  (hl)]
+	move.b	#0x20,TEMP_COUNTER_2                      	| load counter with 0x20 (32 decimal) [ld   (hl),0x20]
+	move.w	#0x5000,TEMP_CHAR_RAM_PTR                       	| store in TEMP_CHAR_RAM_PTR [ld   (0x400B),hl]
+	rts                                    	| [ret]
+
+
+
+CLEAR_ROW_OF_SCREEN:
+	move.w	l_400B(pc),a0                   	| read TEMP_CHAR_RAM_PTR [ld   hl,(0x400B)]
+	move.b	#0x20,d1                        	| 0x20 (32 decimal) characters in a row [ld   b,0x20]
+	move.b	#0x10,d0                        	| ordinal of empty character [ld   a,0x10]
+rst  0x10                               	| Clear row of characters
+	move.b	a0,l_400B                       	| update TEMP_CHAR_RAM_PTR [ld   (0x400B),hl]
+	lea	l_4009(pc),a0                      	| load HL with address of TEMP_COUNTER_2 [ld   hl,0x4009]
+	subq.b	#1,(a0)                         	| decrement counter [dec  (hl)]
+	beq.b	0f
+	rts                                    	| return if not zero [ret  nz]
+0:
+	addq.b	#1,l                            	| bump HL to point to 0x400A (SCRIPT_STAGE) [inc  l]
+	addq.b	#1,(a0)                         	| advance to next stage of script [inc  (hl)]
+
+SET_COLOUR_ATTRIBUTES_TABLE_1:
+	lea	l_1D71(pc),a0                      	| pointer to COLOUR_ATTRIBUTE_TABLE_1 [ld   hl,0x1D71]
+
+SET_COLOUR_ATTRIBUTES:
+	lea	l_4021(pc),a1                      	| address of first attribute in OBJRAM_BACK_BUF [ld   de,0x4021]
+	move.b	#0x20,d1                        	| we're setting attributes for all 32 columns in the row [ld   b,0x20]
+l_059d:
+	move.b	(a0),d0                         	| read attribute value from ROM [ld   a,(hl)]
+	move.b	d0,(a1)                         	| write to attribute value in OBJRAM_BACK_BUF [ld   (de),a]
+	addq.w	#1,a0                           	| bump HL to next value in ROM [inc  hl]
+	addq.b	#1,e                            	| Add 2 to DE.. [inc  e]
+	addq.b	#1,e                            	| .. so that it points to the next attribute value [inc  e]
+	subq.b	#1,d1                           	| [...]
+	jne	l_059d                             	| and do until b==0 [djnz 0x059D]
+	rts                                    	| [ret]
+
+
+*
+* Player one's turn is about to commence.
+*
+
+PLAYER_ONE_INIT:
+* restore alien swarm to what it was last turn
+	lea	PLAYER_ONE_PACKED_SWARM_DEF(pc),a1                      	| load DE with address of PLAYER_ONE_PACKED_SWARM_DEF [ld   de,0x4180]
+	jbsr	UNPACK_ALIEN_SWARM                            	| call UNPACK_ALIEN_SWARM [call 0x0646]
+* copy player 1's state (ie: game settings) to current player state
+ex   de,hl                              	| now HL = pointer to PLAYER_ONE_STATE
+	lea	CURRENT_PLAYER_STATE(pc),a1                      	| load DE with address of CURRENT_PLAYER_STATE [ld   de,0x4218]
+ld   bc,0x0008                          	| sizeof(CURRENT_PLAYER_STATE)
+ldir                                    	| write P1 player state
+* reset any game settings
+	moveq	#0,d0                            	| [xor  a]
+	move.b	d0,TIMING_VARIABLE                       	| set TIMING_VARIABLE [ld   (0x425F),a]
+	move.b	d0,HAVE_NO_ALIENS_IN_SWARM                       	| clear HAVE_NO_ALIENS_IN_SWARM flag [ld   (0x4220),a]
+	*move.b	d0,l_7006                       	| reset regen hflip [ld   (0x7006),a]
+	*move.b	d0,l_7007                       	| reset regen vflip [ld   (0x7007),a]
+	move.b	d0,DISPLAY_IS_COCKTAIL_P2                       	| reset DISPLAY_IS_COCKTAIL_P2 [ld   (0x4018),a]
+	lea	SCRIPT_STAGE(pc),a0                      	| load HL with address of SCRIPT_STAGE [ld   hl,0x400A]
+	addq.b	#1,(a0)                         	| advance to next stage in script [inc  (hl)]
+	                            	| bump HL to address of TEMP_COUNTER_2 [dec  l]
+	move.b	#0x96,TEMP_COUNTER_2                      	| set counter value [ld   (hl),0x96]
+	lea	l_0640(pc),a0                      	| [ld   hl,0x0640]
+	move.b	a0,l_4245                       	| set FLAGSHIP_ATTACK_MASTER_COUNTER_1 and FLAGSHIP_ATTACK_MASTER_COUNTER_2 [ld   (0x4245),hl]
+* if its not demo mode, display the scores
+	move.b	IS_GAME_IN_PLAY,d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	ror.b	#1,d0                            	| move flag into carry [rrca]
+	bcs.b	0f
+	rts                                    	| return if game is not in play [ret  nc]
+0:
+	move.b	IS_TWO_PLAYER_GAME,d0                       	| read IS_TWO_PLAYER_GAME [ld   a,(0x400E)]
+	ror.b	#1,d0                            	| move bit 0 into carry [rrca]
+	jcs	l_05fc                             	| if carry is set, we're in a 2 player game, goto 0x05FC [jr   c,0x05FC]
+* the next 2 lines are only executed if its a one player game
+	move.w	#0x500,d3                      	| command: DISPLAY_SCORE_COMMAND, parameter: 0  (Displays Player 1's score) [ld   de,0x0500]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+* the remaining lines are executed regardless of number of players
+l_05e2:
+	move.b	#2,d3								| command: DISPLAY_SCORE_COMMAND, parameter: 2  (invokes DISPLAY_HIGH_SCORE)
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	addq.b	#1,d3                            	| command: PRINT_TEXT, parameter: 2 (index of "PLAYER ONE") [inc  d]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	move.b	#4,d3						| command: PRINT_TEXT, parameter: 4 (index of "HIGH SCORE")
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	move.w	#0x703,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, calls DISPLAY_PLAYER_SHIPS_REMAINING [ld   de,0x0703]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	move.w	#0x700,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, calls DISPLAY_LEVEL_FLAGS [ld   de,0x0700]
+	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND [jp   0x08F2]
+
+* Called when we're in a two player game. Displays player one's score, player two's score and high score.
+l_05fc:
+	move.w	#0x503,d3                      	| command: DISPLAY_SCORE_COMMAND, parameter: 3 (invokes DISPLAY_ALL_SCORES) [ld   de,0x0503]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	jra	l_05e2                             	| go display high score, ships remaining [jp   0x05E2]
+
+
+*
+*
+* Remove the text "PLAYER ONE" / "PLAYER TWO" from the screen.
+*
+*
+
+CLEAR_PLAYER_TEXT:
+	lea	TEMP_COUNTER_2(pc),a0                      	| load HL with address of TEMP_COUNTER_2 [ld   hl,0x4009]
+	subq.b	#1,(a0)                         	| [dec  (hl)]
+	beq.b	0f
+	rts                                    	| [ret  nz]
+0:
+	move.b	#0x14,(a0)                      	| [ld   (hl),0x14]
+	addq.b	#1,l                            	| bump HL to point to 0x400A (SCRIPT_STAGE) [inc  l]
+	addq.b	#1,(a0)                         	| advance to next stage of script [inc  (hl)]
+* the text "PLAYER ONE" and "PLAYER TWO" are plotted to the same character cells
+	lea	l_0682(pc),a1                      	| command: PRINT_TEXT, parameter: #0x82 - clear "PLAYER ONE" from screen [ld   de,0x0682]
+	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND [jp   0x08F2]
+
+
+
+
+HANDLE_SPAWN_PLAYER:
+* Wait until its time to spawn the player
+	lea	TEMP_COUNTER_2(pc),a0                      	| load HL with address of TEMP_COUNTER_2 [ld   hl,0x4009]
+	subq.b	#1,(a0)                         	| [dec  (hl)]
+	beq.b	0f
+	rts                                    	| [ret  nz]
+0:
+	move.b	#0x0A,(a0)                      	| reset TEMP_COUNTER_2 [ld   (hl),0x0A]
+	addq.b	#1,l                            	| bump HL to point to 0x400A (SCRIPT_STAGE) [inc  l]
+	addq.b	#1,(a0)                         	| advance to next stage of script [inc  (hl)]
+
+* Spawn the player
+	
+	clr.b	IS_PLAYER_DYING
+	move.b	#1,HAS_PLAYER_SPAWNED	| set HAS_PLAYER_SPAWNED to 1, IS_PLAYER_DYING to 0 [ld   (0x4200),hl]
+	move.b	#0x80,d0                        	| [ld   a,0x80]
+	move.b	d0,PLAYER_Y                       	| set PLAYER_Y [ld   (0x4202),a]
+
+	lea	ALIEN_ATTACK_COUNTER_DEFAULT_VALUES(pc),a0                      	| load HL with address of ALIEN_ATTACK_COUNTER_DEFAULT_VALUES [ld   hl,0x15E3]
+	lea	ALIEN_ATTACK_COUNTERS(pc),a1                      	| load DE with address of ALIEN_ATTACK_COUNTERS [ld   de,0x424A]
+ld   bc,0x0010                          	| sizeof(ALIEN_ATTACK_COUNTERS) array
+ldir                                    	| reset all counters to their default values
+
+	moveq	#0,d0                            	| [xor  a]
+	move.b	d0,OBJRAM_BACK_BUF+0x38                       	| reset scroll offset in OBJRAM_BACK_BUF [ld   (0x4058),a]
+	move.b	d0,OBJRAM_BACK_BUF+0x3A                       	| reset scroll offset in OBJRAM_BACK_BUF [ld   (0x405A),a]
+
+* Draw lives left
+	move.w	#0x703,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, calls DISPLAY_PLAYER_SHIPS_REMAINING [ld   de,0x0703]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	move.w	#0x200,d3                      	| command: DISPLAY_PLAYER_COMMAND, parameter: 0 (invokes DRAW_PLAYER_SHIP) [ld   de,0x0200]
+	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND [jp   0x08F2]
+
+
+HANDLE_MAIN_GAME_LOGIC:
+	jbsr	HANDLE_PLAYER_MOVE
+	jbsr	HANDLE_PLAYER_BULLET
+	jbsr	HANDLE_ENEMY_BULLETS
+	jbsr	HANDLE_INFLIGHT_ALIENS
+	jbsr	HANDLE_INFLIGHT_ALIEN_SPRITE_UPDATE
+	jbsr	HANDLE_PLAYER_SHOOT
+	jbsr	HANDLE_SWARM_ALIEN_TO_PLAYER_BULLET_COLLISION_DETECTION
+	jbsr	HANDLE_PLAYER_TO_ENEMY_BULLET_COLLISION_DETECTION
+	jbsr	HANDLE_INFLIGHT_ALIEN_TO_PLAYER_BULLET_COLLISION_DETECTION
+	jbsr	HANDLE_PLAYER_TO_INFLIGHT_ALIEN_COLLISION_DETECTION
+	jbsr	HANDLE_PLAYER_BULLET_EXPIRED
+	jbsr	HANDLE_FLAGSHIP_ATTACK
+	jbsr	HANDLE_SINGLE_ALIEN_ATTACK
+	jbsr	SET_ALIEN_ATTACK_FLANK
+	jbsr	HANDLE_LEVEL_DIFFICULTY
+	jbsr	HANDLE_PLAYER_HIT
+	jbsr	HANDLE_PLAYER_DYING
+	jbsr	CHECK_IF_ALIEN_CAN_ATTACK
+	jbsr	UPDATE_ATTACK_COUNTERS
+	jbsr	CHECK_IF_FLAGSHIP_CAN_ATTACK
+	jbsr	HANDLE_CALC_INFLIGHT_ALIEN_SHOOTING_DISTANCE
+	jbsr	CHECK_IF_LEVEL_IS_COMPLETE
+	jbsr	HANDLE_LEVEL_COMPLETE
+	jbsr	HANDLE_ALIEN_AGGRESSIVENESS
+	jbsr	HANDLE_SHOCKED_SWARM
+	jbsr	HANDLE_SIMULATE_PLAYER_IN_ATTRACT_MODE
+
+* OK, this part of the main game loop determines under what circumstances we can end the level.
+* First we check the status of the player and the player bullet. Are they visible?
+	move.b	HAS_PLAYER_BULLET_BEEN_FIRED(pc),d0                       	| read HAS_PLAYER_BULLET_BEEN_FIRED flag [ld   a,(0x4208)]
+	or.b	HAS_PLAYER_SPAWNED(pc),d0                   	| read both HAS_PLAYER_SPAWNED and IS_PLAYER_DYING flags in one go [ld   hl,(0x4200)]
+	or.b	IS_PLAYER_DYING(pc),d0                   	| read both HAS_PLAYER_SPAWNED and IS_PLAYER_DYING flags in one go [ld   hl,(0x4200)]
+														| combine all three flags.. [or   h]
+														| into 1. If any of the three is set, A will be 1 [or   l]
+														| Test if A was set to 1. [rrca]
+	beq.b	0f
+	rts                                    	| Return if player bullet has been fired, or player has spawned or is dying [ret  c]
+0:
+
+* Wait until all aliens are dead.
+	move.b	HAVE_NO_INFLIGHT_OR_DYING_ALIENS,d0                       	| read HAVE_NO_INFLIGHT_OR_DYING_ALIENS [ld   a,(0x4225)]
+	ror.b	#1,d0                            	| move flag value into carry. [rrca]
+	bcs.b	0f
+	rts                                    	| if carry flag is not set, then that means there are still aliens attacking or going through a death animation [ret  nc]
+0:
+
+* wait until all enemy bullets are off screen.
+	lea	ENEMY_BULLETS_START(pc),a0                      	| load HL with address of ENEMY_BULLETS_START [ld   hl,0x4260]
+	move.b	#0x0E,d1                        	| #0x0E (14 decimal) bullets max to process [ld   b,0x0E]
+	moveq	#0,d0                            	| clear A [xor  a]
+l_06ca:
+	or.b	(a0),d0                           	| read ENEMY_BULLET.IsActive flag. set A to 1 if bullet is active. [or   (hl)]
+	addq.w	#5,a0
+	subq.b	#1,d1                           	| [...]
+	jne	l_06ca                             	| repeat until B==0 [djnz 0x06CA]
+	ror.b	#1,d0                            	| are there any bullets still active on screen? If so, carry will be set [rrca]
+	bcc.b	0f
+	rts                                    	| yes, bullets still active, return [ret  c]
+0:
+
+* OK, when we get here, the level is complete. We can go to the next level.
+	subq.b	#1,TEMP_COUNTER_2                         	| [dec  (hl)]
+	beq.b	0f
+	rts                                    	| [ret  nz]
+0:
+	                            | bump HL to point to address of SCRIPT_STAGE [inc  l]
+	addq.b	#1,SCRIPT_STAGE                         	| advance to next stage of script [inc  (hl)]
+	rts                                    	| [ret]
+
+
+
+*
+* Player 1 has just been killed.
+*
+* See also: 0x07E8
+
+HANDLE_PLAYER_ONE_KILLED:
+	lea	SCRIPT_STAGE(pc),a0                      	| load HL with pointer to SCRIPT_STAGE [ld   hl,0x400A]
+
+	move.b	PLAYER_LIVES(pc),d0                       	| read PLAYER_LIVES [ld   a,(0x421D)]
+	tst.b	d0                               	| test if zero [and  a]
+	jne	l_0701                             	| if player 1 has lives remaining, goto 0x0701 [jr   nz,0x0701]
+
+* OK, player 1 has no lives. What about player 2?
+	move.b	PLAYER_TWO_LIVES(pc),d0                       	| read PLAYER_TWO_LIVES [ld   a,(0x41B5)]
+	tst.b	d0                               	| test if zero [and  a]
+	jeq	l_0722                             	| if player 2 has no lives, goto GAME_OVER [jr   z,0x0722]
+
+* player 1 has no lives. If its not a 2 player game, then its GAME OVER.
+	move.b	IS_TWO_PLAYER_GAME(pc),d0                       	| read IS_TWO_PLAYER_GAME [ld   a,(0x400E)]
+	tst.b	d0                               	| test if zero [and  a]
+	jeq	l_0722                             	| if zero, it's not a 2 player game, goto GAME_OVER [jr   z,0x0722]
+
+* OK, its a 2 player game and player 2 has some lives.
+	addq.b	#1,(a0)                         	| bump to next stage of the script [inc  (hl)]
+	move.b	#0x82,TEMP_COUNTER_2                      	| set counter [ld   (hl),0x82]
+
+	move.b	IS_GAME_IN_PLAY(pc),d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	ror.b	#1,d0                            	| move flag into carry [rrca]
+	bcs.b	0f
+	rts                                    	| return if game is not in play [ret  nc]
+0:
+
+* Display PLAYER ONE GAME OVER
+	move.w	#0x0602,d3                      	| command: PRINT_TEXT, parameter: 2 (index of "PLAYER ONE") [ld   de,0x0602]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	move.w	#0x0600,d3                             	| index of "GAME OVER"
+	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND [jp   0x08F2]
+
+* Player one's been killed. Is it player two's turn now?
+l_0701:
+	move.b	PLAYER_TWO_LIVES(pc),d0                       	| read PLAYER_TWO_LIVES [ld   a,(0x41B5)]
+	tst.b	d0                               	| test if zero [and  a]
+	jeq	l_0712                             	| [jr   z,0x0712]
+	move.b	IS_TWO_PLAYER_GAME(pc),d0                       	| read IS_TWO_PLAYER_GAME [ld   a,(0x400E)]
+	tst.b	d0                               	| test if flag is set [and  a]
+	jeq	l_0712                             	| if its not a two player game goto 0x0712 [jr   z,0x0712]
+l_070d:
+	addq.b	#1,(a0)                         	| bump to next stage of the script [inc  (hl)]
+l_070e:
+	move.b	#0x50,TEMP_COUNTER_2                      	| set counter [ld   (hl),0x50]
+	rts                                    	| [ret]
+
+* If we get here, either its a single player game or player two has lost all their lives.
+l_0712:
+	move.b	IS_GAME_IN_PLAY(pc),d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	ror.b	#1,d0                            	| move bit 0 into carry [rrca]
+	jcc	l_071d                             	| if carry is not set, game is not in play, goto 0x071D [jr   nc,0x071D]
+	move.b	#0x04,(a0)                      	| set SCRIPT_STAGE to 4 [ld   (hl),0x04]
+	jra	l_070e                             	| [jp   0x070E]
+
+l_071d:
+	move.b	#0x0E,(a0)                      	|set SCRIPT_STAGE to 0x0E (14 decimal) [ld   (hl),0x0E]
+	jra	l_070e                             	| [jp   0x070E]
+
+
+*
+* Player 1 and player 2 have used up all their lives.
+*
+
+GAME_OVER:
+l_0722:
+	move.b	IS_GAME_IN_PLAY(pc),d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	ror.b	#1,d0                            	| move bit 0 into carry [rrca]
+	jcc	l_070d                             	| if carry is not set, game is not in play, goto 0x070D [jr   nc,0x070D]
+	move.b	#0x01,d0                        	| [ld   a,0x01]
+	move.b	d0,SCRIPT_NUMBER                       	| set SCRIPT_NUMBER to 1 [ld   (0x4005),a]
+	moveq	#0,d0                            	| [xor  a]
+	move.b	d0,IS_GAME_IN_PLAY                       	| clear IS_GAME_IN_PLAY [ld   (0x4006),a]
+	move.b	d0,SCRIPT_STAGE                       	| clear SCRIPT_STAGE [ld   (0x400A),a]
+	jbsr	RESET_SOUND                            	| call RESET_SOUND [call 0x1CB5]
+	move.w	#0x600,d3                      	| command: PRINT_TEXT, parameter: 0 (index of "GAME OVER") [ld   de,0x0600]
+	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND [jp   0x08F2]
+
+
+
+*
+* Player one has died. It's player two's turn now.
+*
+
+SWITCH_TO_PLAYER_TWO:
+	lea	l_4009(pc),a0                      	| load HL with address of TEMP_COUNTER_2 [ld   hl,0x4009]
+	subq.b	#1,(a0)                         	| decrement counter [dec  (hl)]
+	beq.b	0f
+	rts                                    	| return if count !=0 [ret  nz]
+0:
+	addq.b	#1,l                            	| bump HL to point to SCRIPT_STAGE [inc  l]
+	moveq	#0,d0                            	| [xor  a]
+	move.b	d0,(a0)                         	| [ld   (hl),a]
+	move.b	d0,l_4222                       	| reset LEVEL_COMPLETE flag [ld   (0x4222),a]
+	move.b	d0,l_422B                       	| reset IS_FLAGSHIP_HIT flag [ld   (0x422B),a]
+
+* preserve state of the swarm so that it can,0xbe restored for player one's next turn.
+	lea	l_4180(pc),a1                      	| load DE with pointer to PLAYER_ONE_PACKED_SWARM_DEF [ld   de,0x4180]
+	jbsr	l_0764                            	| call PACK_ALIEN_SWARM [call 0x0764]
+
+* save rest of player state so it can,0xbe restored too.
+	lea	l_4218(pc),a0                      	| load HL with address of CURRENT_PLAYER_STATE [ld   hl,0x4218]
+ld   bc,0x0008
+ldir                                    	| update player one's state
+
+* OK, now execute script to handle player two.
+	move.b	#0x01,d0                        	| [ld   a,0x01]
+	move.b	d0,l_400D                       	| set CURRENT_PLAYER to 1 (Player TWO) [ld   (0x400D),a]
+	move.b	#0x04,d0                        	| [ld   a,0x04]
+	move.b	d0,l_4005                       	| set SCRIPT_NUMBER to 4 [ld   (0x4005),a]
+	rts                                    	| [ret]
+
+
+*
+* Packs the 128 byte array that defines the alien swarm into a,0x16 byte buffer.
+*
+* This is used when a player dies and the game has to persist (ie: remember) the current state of the alien swarm
+* before the other player's turn starts.
+*
+* See also UNPACK_ALIEN_SWARM which unpacks the,0x16 byte buffer back into ALIEN_SWARM_FLAGS.
+*
+*
+* Expects:
+*,0xDE = pointer to,0x16 byte buffer.
+*
+
+PACK_ALIEN_SWARM:
+	lea	l_4100(pc),a0                      	| load HL with address of ALIEN_SWARM_FLAGS [ld   hl,0x4100]
+	move.b	#0x10,d1                        	| buffer is 0x10 (16 decimal) bytes in length [ld   b,0x10]
+	move.b	#0x01,d2                        	| [ld   c,0x01]
+l_076b:
+	moveq	#0,d0                            	| [xor  a]
+l_076c:
+	btst.b	#0,(a0)                         	| [bit  0,(hl)]
+	jeq	l_0771                             	| [jr   z,0x0771]
+	or.b	d2,d0                             	| [or   c]
+l_0771:
+	addq.w	#1,a0                           	| [inc  hl]
+	rol.b	#1,d2                            	| [rlc  c]
+	jcc	l_076c                             	| [jr   nc,0x076C]
+	move.b	d0,(a1)                         	| [ld   (de),a]
+	addq.w	#1,a1                           	| [inc  de]
+	subq.b	#1,d1                           	| [...]
+	jne	l_076b                             	| [djnz 0x076B]
+	rts                                    	| [ret]
+
+
+
+*
+* This script is responsible for managing PLAYER 2's game.
+*
+*
+*
+
+SCRIPT_FOUR:
+	jbsr	HANDLE_SWARM_MOVEMENT                            	| call HANDLE_SWARM_MOVEMENT [call 0x090D]
+	jbsr	SET_ALIEN_PRESENCE_FLAGS                            	| call SET_ALIEN_PRESENCE_FLAGS [call 0x098E]
+	moveq	#0,d0
+	move.b	SCRIPT_STAGE(pc),d0                       	| [ld   a,(0x400A)]
+	add.w	d0,d0
+	add.w	d0,d0
+	lea		l_0785(pc),a0		
+	move.l	(a0,d0.w),a0		| jump to code @ 0x0785 + (A*2)
+	jmp		(a0)
+
+l_0785:
+	.long	l_0550
+	.long	CLEAR_ROW_OF_SCREEN
+	.long	PLAYER_TWO_INIT
+	.long	CLEAR_PLAYER_TEXT
+	.long	HANDLE_SPAWN_PLAYER
+	.long	HANDLE_MAIN_GAME_LOGIC
+	.long	HANDLE_PLAYER_TWO_KILLED
+	.long	SWITCH_TO_PLAYER_ONE
+
+
+*
+* Player two's turn is about to commence.
+*
+
+
+PLAYER_TWO_INIT:
+* restore alien swarm to what it was last turn
+	lea	l_41A0(pc),a1                      	| address of PLAYER_TWO_PACKED_SWARM_DEF [ld   de,0x41A0]
+	jbsr	l_0646                            	| call UNPACK_ALIEN_SWARM [call 0x0646]
+* copy player two's state (ie: game settings) to current player state
+ex   de,hl                              	| now HL = pointer to PLAYER_TWO_STATE
+	lea	l_4218(pc),a1                      	| load DE with address of CURRENT_PLAYER_STATE [ld   de,0x4218]
+ld   bc,0x0008
+ldir                                    	| move player 2's state to CURRENT_PLAYER_STATE
+
+* reset any game settings
+	moveq	#0,d0                            	| [xor  a]
+	move.b	d0,l_425F                       	| set TIMING_VARIABLE [ld   (0x425F),a]
+	move.b	d0,l_4220                       	| clear HAVE_NO_ALIENS_IN_SWARM flag. [ld   (0x4220),a]
+
+* if the cabinet is cocktail, flip the screen for player two
+	move.b	l_400F,d0                       	| read IS_COCKTAIL [ld   a,(0x400F)]
+	tst.b	d0                               	| test if its zero (meaning UPRIGHT) [and  a]
+	jeq	l_07ba                             	| if its upright, goto 0x07BA [jr   z,0x07BA]
+	move.b	d0,l_4018                       	| set DISPLAY_IS_COCKTAIL_P2 to true [ld   (0x4018),a]
+	move.b	d0,l_7006                       	| enable "regen hflip" which hardware flips the screen horizontally [ld   (0x7006),a]
+	move.b	d0,l_7007                       	| enable "regen vflip" which hardware flips the screen vertically [ld   (0x7007),a]
+
+l_07ba:
+	lea	l_400A(pc),a0                      	| load HL with address of SCRIPT_STAGE [ld   hl,0x400A]
+	addq.b	#1,(a0)                         	| advance to next stage [inc  (hl)]
+	subq.b	#1,l                            	| bump HL to point to TEMP_COUNTER_2 [dec  l]
+	move.b	#0x96,(a0)                      	| set counter [ld   (hl),0x96]
+	lea	l_0830(pc),a0                      	| [ld   hl,0x0830]
+	move.b	a0,l_4245                       	| set FLAGSHIP_ATTACK_MASTER_COUNTER_1 and FLAGSHIP_ATTACK_MASTER_COUNTER_2 [ld   (0x4245),hl]
+
+* if its not demo mode, display the scores
+	move.b	l_4006,d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	ror.b	#1,d0                            	| move bit 0 into carry [rrca]
+	bcs.b	0f
+	rts                                    	| return if game is not in play [ret  nc]
+0:
+	lea	l_0503(pc),a1                      	| command: DISPLAY_SCORE_COMMAND, parameter: 3 (invokes DISPLAY_ALL_SCORES) [ld   de,0x0503]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	lea	l_0603(pc),a1                      	| command: PRINT_TEXT, parameter: 3 (index of "PLAYER TWO") [ld   de,0x0603]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	addq.b	#1,e                            	| index of "HIGH SCORE" [inc  e]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	lea	l_0703(pc),a1                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, parameter: 3 (invokes DISPLAY_PLAYER_SHIPS_REMAINING) [ld   de,0x0703]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	lea	l_0700(pc),a1                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, parameter: 0 (invokes DISPLAY_LEVEL_FLAGS) [ld   de,0x0700]
+	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND [jp   0x08F2]
+
+
+*
+* Player 2 has just been killed.
+*
+* See also: 0x06D8 (HANDLE_PLAYER_ONE_KILLED)
+*
+
+HANDLE_PLAYER_TWO_KILLED:
+	lea	l_400A(pc),a0                      	| load HL with address of SCRIPT_STAGE [ld   hl,0x400A]
+	move.b	l_421D,d0                       	| read PLAYER_LIVES [ld   a,(0x421D)]
+	tst.b	d0                               	| test if zero [and  a]
+	jne	l_080c                             	| if player 2 has lives remaining, goto 0x080C [jr   nz,0x080C]
+
+* OK, player 1 has no lives. What about player 1?
+	move.b	l_4195,d0                       	| read PLAYER_ONE_LIVES [ld   a,(0x4195)]
+	tst.b	d0                               	| test if zero [and  a]
+	jeq	l_0722                             	| if player one is out of lives then that means GAME OVER for both players, goto 0x0722 [jp   z,0x0722]
+
+* player 1 has some lives left
+	addq.b	#1,(a0)                         	| increment SCRIPT_STAGE [inc  (hl)]
+	subq.b	#1,l                            	| bump HL to point to TEMP_COUNTER_2 [dec  l]
+	move.b	#0x82,(a0)                      	| set value of counter [ld   (hl),0x82]
+
+* are we in demo mode?
+	move.b	l_4006,d0                       	| read IS_GAME_IN_PLAY flag [ld   a,(0x4006)]
+	ror.b	#1,d0                            	| move flag into carry [rrca]
+	bcs.b	0f
+	rts                                    	| return if game is not in play [ret  nc]
+0:
+
+* Display PLAYER TWO GAME OVER
+	lea	l_0603(pc),a1                      	| command: PRINT_TEXT, parameter: 3 (index of "PLAYER TWO") [ld   de,0x0603]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+ld   e,0x00                             	| index of text string "GAME OVER"
+	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND [jp   0x08F2]
+
+* Player two's been killed. Is it player one's turn now?
+l_080c:
+	move.b	l_4195,d0                       	| read PLAYER_ONE_LIVES [ld   a,(0x4195)]
+	tst.b	d0                               	| test if zero [and  a]
+	jeq	l_0712                             	| if zero, goto 0x0712 [jp   z,0x0712]
+	addq.b	#1,(a0)                         	| increment SCRIPT_STAGE [inc  (hl)]
+	subq.b	#1,l                            	| bump HL to point to TEMP_COUNTER_2 [dec  l]
+	move.b	#0x50,(a0)                      	| [ld   (hl),0x50]
+	rts                                    	| [ret]
+
+
+*
+*
+* Called when player two has died and it's now player one's turn.
+*
+*
+
+SWITCH_TO_PLAYER_ONE:
+	lea	l_4009(pc),a0                      	| load HL with address of TEMP_COUNTER_2 [ld   hl,0x4009]
+	subq.b	#1,(a0)                         	| [dec  (hl)]
+	beq.b	0f
+	rts                                    	| [ret  nz]
+0:
+
+	addq.b	#1,l                            	| bump HL to point to SCRIPT_STAGE [inc  l]
+	moveq	#0,d0                            	| [xor  a]
+	move.b	d0,(a0)                         	| set SCRIPT_STAGE to 0 [ld   (hl),a]
+
+	move.b	d0,l_400D                       	| set CURRENT_PLAYER to 0 (player one) [ld   (0x400D),a]
+	move.b	#0x03,d0                        	| [ld   a,0x03]
+	move.b	d0,l_4005                       	| set SCRIPT_NUMBER [ld   (0x4005),a]
+
+* preserve state of the swarm so that it can,0xbe restored for player two's next turn.
+	lea	l_41A0(pc),a1                      	| Address of PLAYER_TWO_PACKED_SWARM_DEF [ld   de,0x41A0]
+	jbsr	l_0764                            	| call PACK_ALIEN_SWARM to convert the swarm into bit flags and write to DE [call 0x0764]
+
+* save rest of player state so it can,0xbe restored too.
+	lea	l_4218(pc),a0                      	| load HL with address of CURRENT_PLAYER_STATE [ld   hl,0x4218]
+ld   bc,0x0008
+ldir                                    	| preserve player two's state
+	rts                                    	| [ret]
+
+
+
+*
+* Read player joystick/ movement controls and move player ship accordingly.
+* As stated in DISPLAY_PLAYER_COMMAND (0x215F), the player ship isn't a sprite, its 4x4 characters.
+* When you move the ship, the columns containing the ship are scrolled.
+*
+* See also:
+* HANDLE_PLAYER_SHOOT.
+*
+
+HANDLE_PLAYER_MOVE:
+	lea	l_4200(pc),a0                      	| load HL with address of HAS_PLAYER_SPAWNED flag [ld   hl,0x4200]
+	btst.b	#0,(a0)                         	| has player spawned? [bit  0,(hl)]
+	jeq	l_0877                             	| no, goto SPAWN_PLAYER_OR_DIE [jr   z,0x0877]
+	addq.b	#1,l                            	| [inc  l]
+	addq.b	#1,l                            	| now HL points to PLAYER_Y [inc  l]
+
+* are we in demo mode?
+	move.b	l_4006,d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	ror.b	#1,d0                            	| move bit 0 into carry. If carry is now set, the game is in play. [rrca]
+	jcc	l_0892                             	| carry not set, game is not in play, goto 0x0892 to simulate moving player ship in attract mode [jp   nc,0x0892]
+	move.b	l_4018,d0                       	| read DISPLAY_IS_COCKTAIL_P2 flag [ld   a,(0x4018)]
+	ror.b	#1,d0                            	| move bit 0 into carry [rrca]
+	jcs	l_088c                             	| if carry is set, we're in cocktail mode and it's player 2 in control. Goto 0x088C [jr   c,0x088C]
+
+* read movement controls
+	move.b	l_4010,d0                       	| read PORT_STATE_6000 [ld   a,(0x4010)]
+l_0850:
+	move.b	d0,d1                           	| save a copy in B [ld   b,a]
+	btst.b	#3,d0                           	| has MOVE RIGHT been pushed? [bit  3,a]
+	jeq	l_085b                             	| no, goto TEST_JOYSTICK_PUSHED_LEFT [jr   z,0x085B]
+
+* player pushed stick right
+	move.b	(a0),d0                         	| load PLAYER_Y into A [ld   a,(hl)]
+	cmp.b	#0x17,d0                         	| compare to #0x17 (23 decimal) [cp   0x17]
+	jcs	l_085b                             	| if A < #0x17 then player is at far right screen edge and can go no further, goto 0x085B [jr   c,0x085B]
+	subq.b	#1,(a0)                         	| decrement PLAYER_Y (moving ship RIGHT: remember, the monitor is flipped 90 degrees) [dec  (hl)]
+
+TEST_JOYSTICK_PUSHED_LEFT:
+l_085b:
+	btst.b	#2,d1                           	| has MOVE LEFT been pushed? [bit  2,b]
+	jeq	l_0865                             	| No, goto 0x0865 [jr   z,0x0865]
+
+* player pushed stick left
+	move.b	(a0),d0                         	| get Y coordinate of player ship into A [ld   a,(hl)]
+	cmp.b	#0xE9,d0                         	| compare to #0xE9 (233 decimal) [cp   0xE9]
+	jcc	l_0865                             	| if A>= #0xE9 then player is at far left screen edge and can go no further, goto 0x0865 [jr   nc,0x0865]
+	addq.b	#1,(a0)                         	| increment PLAYER_Y (moving ship LEFT) [inc  (hl)]
+
+* set scroll value for columns containing the player ship characters
+SET_PLAYER_SHIP_SCROLL_OFFSET:
+l_0865:
+	move.b	(a0),d0                         	| get ship Y coordinate into A [ld   a,(hl)]
+	not.b	d0                               	| flip the bits [cpl]
+	add.b	#0x80,d0                         	| add an offset. Now we have a scroll value in A. [add  a,0x80]
+	move.b	#0x06,d2                        	| set colour of player ship [ld   c,0x06]
+l_086b:
+	lea	l_4054(pc),a0                      	| set hl to point to first column containing player ship pseudosprite. [ld   hl,0x4054]
+
+* the players ship is 2x2 characters when alive, 4x4 when its exploding. We need to set the scroll offset for the 4 columns.
+	move.b	#0x04,d1                        	| we're doing 4 columns [ld   b,0x04]
+l_0870:
+	move.b	d0,(a0)                         	| write scroll offset to OBJRAM_BACK_BUF (see docs @top) [ld   (hl),a]
+	addq.b	#1,l                            	| bump pointer to colour value for column [inc  l]
+	move.b	d2,(a0)                         	| write colour to OBJRAM_BACK_BUF (see docs @ top) [ld   (hl),c]
+	addq.b	#1,l                            	| bump pointer to scroll offset value for column [inc  l]
+	subq.b	#1,d1                           	| [...]
+	jne	l_0870                             	| do until b==0 [djnz 0x0870]
+	rts                                    	| [ret]
+
+* if we get here, then either the player hasn't spawned, or the player is hit.
+SPAWN_PLAYER_OR_DIE:
+l_0877:
+	addq.b	#1,l                            	| point HL to IS_PLAYER_DYING flag [inc  l]
+	btst.b	#0,(a0)                         	| test flag [bit  0,(hl)]
+	jne	l_0882                             	| if flag is set, player will die, goto PLAYER_EXPLOSION_INIT [jr   nz,0x0882]
+
+* spawn player
+	addq.b	#1,l                            	| otherwise, point HL to PLAYER_Y [inc  l]
+	clr.b	(a0)                             	| set value of PLAYER_Y to 0 [ld   (hl),0x00]
+	jra	l_0865                             	| and set the scroll for the player ship [jp   0x0865]
+
+* if we get here, the player is about to explode.
+PLAYER_EXPLOSION_INIT:
+l_0882:
+	addq.b	#1,l                            	| point HL to PLAYER_Y [inc  l]
+	move.b	(a0),d0                         	| read value of PLAYER_Y [ld   a,(hl)]
+	not.b	d0                               	| [cpl]
+	add.b	#0x80,d0                         	| add an offset. Now we have a scroll value in A. [add  a,0x80]
+	move.b	#0x07,d2                        	| colour value (see 0x0872) [ld   c,0x07]
+	jra	l_086b                             	| and set the scroll offsets and colour values for the exploding ship [jp   0x086B]
+
+
+l_088c:
+	move.b	l_4011,d0                       	| read PORT_STATE_6800 [ld   a,(0x4011)]
+	jra	l_0850                             	| now test player 2's movement stick [jp   0x0850]
+
+* In ATTRACT MODE, this piece of code supplies faked joystick movements and FIRE button presses to the player move logic.
+* The player spaceship looks like someone is controlling it.
+l_0892:
+	move.b	l_423F,d0                       	| read bit flags from ATTRACT_MODE_FAKE_CONTROLLER. [ld   a,(0x423F)]
+	jra	l_0850                             	| [jp   0x0850]
+
+
+
+
+*
+* This routine is responsible for moving the player bullet, and positioning the player bullet sprite.
+*
+*
+
+HANDLE_PLAYER_BULLET:
+	jbsr	l_08bc                            	| call POSITION_PLAYER_BULLET [call 0x08BC]
+	move.w	l_4209(pc),a0                   	| load value of PLAYER_BULLET_Y  into H, PLAYER_BULLET_X into L [ld   hl,(0x4209)]
+	move.b	l_4018,d0                       	| read DISPLAY_IS_COCKTAIL_P2 [ld   a,(0x4018)]
+	ror.b	#1,d0                            	| move bit 0 into carry. [rrca]
+	jcs	l_08b1                             	| If carry is set, then player 2 is playing and its a cocktail cab: goto 0x08B1. [jr   c,0x08B1]
+
+* This code updates the bullet sprite state in the OBJRAM back buffer.
+	move.b	#l,d0                           	| load A with PLAYER_BULLET_X [ld   a,l]
+	not.b	d0                               	| [cpl]
+	add.b	-4,d0                            	| subtract 4 [add  a,-4]
+	move.b	d0,l_409F                       	| update OBJRAM_BUF_PLAYER_BULLET_X [ld   (0x409F),a]
+	move.b	#h,d0                           	| load A with PLAYER_BULLET_Y [ld   a,h]
+	not.b	d0                               	| [cpl]
+	move.b	d0,l_409D                       	| update OBJRAM_BUF_PLAYER_BULLET_Y [ld   (0x409D),a]
+	rts                                    	| [ret]
+
+* this code only runs when the game is in cocktail mode and it's player 2 playing.
+* It takes into account the screen is upside down and positions the player bullet properly.
+l_08b1:
+	move.b	#l,d0                           	| [ld   a,l]
+	subq.b	#1,d0                           	| [dec  a]
+	move.b	d0,l_409F                       	| update OBJRAM_BUF_PLAYER_BULLET_X [ld   (0x409F),a]
+	move.b	#h,d0                           	| [ld   a,h]
+	not.b	d0                               	| [cpl]
+	move.b	d0,l_409D                       	| update OBJRAM_BUF_PLAYER_BULLET_Y [ld   (0x409D),a]
+	rts                                    	| [ret]
+
+
+
+*
+* If the player bullet has not been fired, position it just above the player ship.
+*
+* Otherwise, move player bullet upscreen. When bullet reaches its limit, set IS_PLAYER_BULLET_DONE flag to 1.
+*
+
+POSITION_PLAYER_BULLET:
+	lea	l_4208(pc),a0                      	| pointer to HAS_PLAYER_BULLET_BEEN_FIRED flag [ld   hl,0x4208]
+	btst.b	#0,(a0)                         	| test if flag is set [bit  0,(hl)]
+	addq.w	#1,a0                           	| HL now points to PLAYER_BULLET_X [inc  hl]
+	jeq	l_08d3                             	| if player has not fired, goto POSITION_PLAYER_BULLET_ABOVE_SHIP [jr   z,0x08D3]
+
+* player bullet has been fired. Subtract 4 from its X coordinate and check if its gone off screen.
+	move.b	(a0),d0                         	| get X coordinate of bullet [ld   a,(hl)]
+	subq.b	#0x04,d0                        	| subtract 4, moving bullet UP the screen [sub  0x04]
+	move.b	d0,(a0)                         	| update X coordinate of bullet [ld   (hl),a]
+	sub.b	#0x0E,d0                         	| [sub  0x0E]
+	subq.b	#0x04,d0                        	| subtract 18 (decimal) total from X coordinate [sub  0x04]
+	bcs.b	0f
+	rts                                    	| if there's no carry, then the players bullet has not reached its limit [ret  nc]
+0:
+
+* player bullet has gone offscreen
+	move.b	#0x01,d0                        	| [ld   a,0x01]
+	move.b	d0,l_420B                       	| set IS_PLAYER_BULLET_DONE flag [ld   (0x420B),a]
+	rts                                    	| [ret]
+
+* the player bullet isn't fired, so place it above the player ship.
+POSITION_PLAYER_BULLET_ABOVE_SHIP:
+l_08d3:
+	move.b	#0xDC,(a0)                      	| set PLAYER_BULLET_X [ld   (hl),0xDC]
+	addq.b	#1,l                            	| point HL to PLAYER_BULLET_Y [inc  l]
+	move.b	l_4200,d0                       	| read HAS_PLAYER_SPAWNED flag [ld   a,(0x4200)]
+	btst.b	#0,d0                           	| test if player has spawned [bit  0,a]
+	jeq	l_08e2                             	| no, player has not spawned, goto 0x08E2 [jr   z,0x08E2]
+	move.b	l_4202,d0                       	| read PLAYER_Y [ld   a,(0x4202)]
+	move.b	d0,(a0)                         	| and write to PLAYER_BULLET_Y [ld   (hl),a]
+	rts                                    	| [ret]
+
+* player hasn't spawned. Hide the bullet!
+l_08e2:
+	clr.b	(a0)                             	| write 0 to PLAYER_BULLET_Y [ld   (hl),0x00]
+	rts                                    	| [ret]
+
+
+*
+* Check if the player bullet has gone all the way upscreen. If so, allow player to shoot again.
+*
+
+CHECK_IF_PLAYER_BULLET_IS_DONE:
+	move.b	l_420B,d0                       	| read IS_PLAYER_BULLET_DONE flag [ld   a,(0x420B)]
+	ror.b	#1,d0                            	| move bit 0 into carry. If carry is set then the player bullet's gone as far as it can. [rrca]
+	bcs.b	0f
+	rts                                    	| if no carry, then return. [ret  nc]
+0:
+	moveq	#0,d0                            	| [xor  a]
+	move.b	d0,l_420B                       	| reset the IS_PLAYER_BULLET_DONE flag [ld   (0x420B),a]
+	move.b	d0,l_4208                       	| reset HAS_PLAYER_BULLET_BEEN_FIRED flag. Player can shoot again. [ld   (0x4208),a]
+	rts                                    	| [ret]
+
+
+
+
+
 
 UNPACK_ALIEN_SWARM:
 	lea	ALIEN_SWARM_FLAGS(pc),a0                      	| load HL with address of ALIEN_SWARM_FLAGS [ld   hl,0x4100]
@@ -3058,46 +4444,49 @@ PRINT_TEXT_COMMAND:
 *
 
 l_2323:
-*TODO
-* 22 B5 40      ld   (0x40B5),hl          | store pointer to character RAM in COLUMN_SCROLL_CHAR_RAM_PTR
-*2326: EB            ex   de,hl               | now HL = pointer to text string, DE = pointer to character RAM 
-*2327: 22 B3 40      ld   (0x40B3),hl          | store pointer to next char to scroll on in COLUMN_SCROLL_NEXT_CHAR_PTR
-*232A: 7B            ld   a,e                 | get low byte of character RAM address into A
-*232B: E6 1F         and  0x1F                 | mask in bits 0..4. Effectively A = A mod #0x20 (32 decimal). A now represents a column index from 0-31.
-*232D: 47            ld   b,a                 | save column index in B.
-** compute offset into OBJRAM_BACK_BUF
-*232E: 87            add  a,a                 | A=A*2. This is because attribute RAM requires 2 bytes per column. 
-*232F: C6 20         add  a,0x20               | add 0x20 (32 decimal) as OBJRAM_BACK_BUF starts at 0x4020
-*2331: 6F            ld   l,a                 | 
-*2332: 26 40         ld   h,0x40               | now HL = a pointer to scroll attribute value in OBJRAM_BACK_BUF 
-*2334: 22 B1 40      ld   (0x40B1),hl          | set COLUMN_SCROLL_ATTR_BACKBUF_PTR
-*2337: E5            push hl                  | save pointer to scroll offset attribute on the stack
-*
-*2338: CB 3B         srl  e
-*233A: CB 3B         srl  e
-*233C: 7A            ld   a,d                
-*233D: E6 03         and  0x03
-*233F: 0F            rrca
-*2340: 0F            rrca
-*2341: B3            or   e
-*2342: E6 F8         and  0xF8
-*2344: 4F            ld   c,a                 | C = scroll offset to write to OBJRAM_BACK_BUF 
-*
-** we're going to clear this line ready for scrolling text on.
-*2345: 21 00 50      ld   hl,0x5000            | HL = start of character RAM
-*2348: 78            ld   a,b                 | restore column index from B (see @0x232D)
-*2349: 85            add  a,l                 
-*234A: 6F            ld   l,a                 | Add column index to L. Now HL = pointer to column to clear
-*234B: 11 20 00      ld   de,0x0020            | offset to add to HL. 0x20 (32 decimal) characters per row
-*234E: 43            ld   b,e                 | B = count of how many characters need to be cleared by DJNZ loop
-*234F: 36 10         ld   (hl),0x10            | write empty space character
-*2351: 19            add  hl,de               | add offset to HL. Now HL points to same column next row down
-*2352: 10 FB         djnz 0x234F
-*2354: E1            pop  hl                  | restore attribute pointer from the stack
-*2355: 71            ld   (hl),c              | write initial scroll offset to OBJRAM_BACK_BUF
-*2356: 3E 01         ld   a,0x01
-*2358: 32 B0 40      ld   (0x40B0),a           | set IS_COLUMN_SCROLLING flag
-*235B: C9            rts
+	move.b	a0,l_40B5                       	| store pointer to character RAM in COLUMN_SCROLL_CHAR_RAM_PTR [ld   (0x40B5),hl]
+ex   de,hl                              	| now HL = pointer to text string, DE = pointer to character RAM
+	move.b	a0,l_40B3                       	| store pointer to next char to scroll on in COLUMN_SCROLL_NEXT_CHAR_PTR [ld   (0x40B3),hl]
+	move.b	#e,d0                           	| get low byte of character RAM address into A [ld   a,e]
+	and.b	#0x1F,d0                         	| mask in bits 0..4. Effectively A = A mod #0x20 (32 decimal). A now represents a column index from 0-31. [and  0x1F]
+	move.b	d0,d1                           	| save column index in B. [ld   b,a]
+* compute offset into OBJRAM_BACK_BUF
+	add.b	d0,d0                            	| A=A*2. This is because attribute RAM requires 2 bytes per column. [add  a,a]
+	add.b	#0x20,d0                         	| add 0x20 (32 decimal) as OBJRAM_BACK_BUF starts at 0x4020 [add  a,0x20]
+ld   l,a                                	|
+ld   h,0x40                             	| now HL = a pointer to scroll attribute value in OBJRAM_BACK_BUF
+	move.b	a0,l_40B1                       	| set COLUMN_SCROLL_ATTR_BACKBUF_PTR [ld   (0x40B1),hl]
+push hl                                 	| save pointer to scroll offset attribute on the stack
+
+srl  e
+srl  e
+	move.b	#d,d0                           	| [ld   a,d]
+	and.b	#0x03,d0                         	| [and  0x03]
+	ror.b	#1,d0                            	| [rrca]
+	ror.b	#1,d0                            	| [rrca]
+	or.b	e,d0                              	| [or   e]
+	and.b	#0xF8,d0                         	| [and  0xF8]
+	move.b	d0,d2                           	| C = scroll offset to write to OBJRAM_BACK_BUF [ld   c,a]
+
+* we're going to clear this line ready for scrolling text on.
+	lea	l_5000(pc),a0                      	| HL = start of character RAM [ld   hl,0x5000]
+	move.b	d1,d0                           	| restore column index from B (see @0x232D) [ld   a,b]
+	add.b	l,d0                             	| [add  a,l]
+ld   l,a                                	| Add column index to L. Now HL = pointer to column to clear
+	lea	l_0020(pc),a1                      	| offset to add to HL. 0x20 (32 decimal) characters per row [ld   de,0x0020]
+	move.b	#e,d1                           	| B = count of how many characters need to be cleared by DJNZ loop [ld   b,e]
+l_234f:
+	move.b	#0x10,(a0)                      	| write empty space character [ld   (hl),0x10]
+add  hl,de                              	| add offset to HL. Now HL points to same column next row down
+	subq.b	#1,d1                           	| [...]
+	jne	l_234f                             	| [djnz 0x234F]
+pop  hl                                 	| restore attribute pointer from the stack
+	move.b	d2,(a0)                         	| write initial scroll offset to OBJRAM_BACK_BUF [ld   (hl),c]
+	move.b	#0x01,d0                        	| [ld   a,0x01]
+	move.b	d0,l_40B0                       	| set IS_COLUMN_SCROLLING flag [ld   (0x40B0),a]
+	rts                                    	| [ret]
+
+
 
 TEXTPTRS:                                     
 	dc.l	TXT_GAME_OVER
@@ -5229,7 +6618,7 @@ l_169f:
 *	bcc.b	0f
 *	rts                                    	| if carry set, return [ret  c]
 *0:
-*	lea	l_41DF(pc),a0                      	| [ld   hl,0x41DF]
+*	lea	ALIEN_DEATH_SOUND(pc),a0                      	| [ld   hl,0x41DF]
 *	move.b	(a0),d0                         	| [ld   a,(hl)]
 *	tst.b	d0                               	| [and  a]
 *	bne.b	0f

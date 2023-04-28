@@ -7,6 +7,8 @@ PROGRESS:
 
 - empty shell copied from Xevious
 - *TODO
+- 1226: handle_scroll_text looks wrong: vrais pointeurs? adresses ecran?
+  relie a l_2323?
 
 FEATURES:
 
