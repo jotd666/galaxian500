@@ -1624,22 +1624,6 @@ draw_hw_sprite:
 	
 
 
-* d0=DSWA, d1=DSWB
-osd_read_dipswitches:
-	move.w	#0x1F,d0
-	move.w	d0,d1
-	* precomputed DSW bits
-	or.w	start_lives_dsw(pc),d0
-	or.w	difficulty_level_dsw(pc),d1
-	
-
-
-	move.l	_joypad_state(pc),d2
-	btst	#JPB_BTN_BLU,d2   | 2nd button: bomb
-	beq.b	1f
-	bclr	#0,d1	| active low
-1:
-	rts
 
 osd_stars_on:
 	rts
@@ -1851,6 +1835,24 @@ osd_read_p2_inputs:
 		rts
 
 osd_debug_hook:
+	rts
+	
+* d0=DSWA, d1=DSWB
+
+osd_read_dipswitches_old:
+	move.w	#0x1F,d0
+	* precomputed DSW bits
+	or.w	start_lives_dsw(pc),d0
+	
+
+
+	**move.l	_joypad_state(pc),d2
+
+	rts
+
+* bits 0-1: Values for BONUS GALIXIP. 7 = 7000, 10 = 10000, 12 =12000, 20 = 20000
+osd_read_dipswitches:
+	moveq	#0,d0
 	rts
 	
 osd_read_coin:
