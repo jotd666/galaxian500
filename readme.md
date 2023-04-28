@@ -6,6 +6,12 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 PROGRESS:
 
 - empty shell copied from Xevious
+- grep.py "lea.*\|.*,\("
+4639:   lea     l_421A(pc),a0                           | load H with DIFFICULTY_BASE_VALUE and L with DIFFICULTY_EXTRA_VALUE [ld   hl,(0x421A)]
+4735:   lea     l_4177(pc),a0                           | point to usually empty flagship entry in ALIEN_SWARM_FLAGS. [ld   hl,(0x4177)]
+4742:   lea     l_421A(pc),a0                           | load H with DIFFICULTY_BASE_VALUE and L with DIFFICULTY_EXTRA_VALUE [ld   hl,(0x421A)]
+4959:   lea     l_421B(pc),a0                           | load H with PLAYER_LEVEL and L with DIFFICULTY_BASE_VALUE [ld   hl,(0x421B)]
+
 
 FEATURES:
 
