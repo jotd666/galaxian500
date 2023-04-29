@@ -1683,14 +1683,113 @@ BLINK_CONVOY_CHARGER_POINTS:
 	jbsr	HANDLE_DRAW_CONVOY_CHARGER_POINTS
 	jra		WAIT_FOR_TEMP_COUNTERS
 
+
+*
+* Cleanup for the "WE ARE THE GALAXIANS" page.
+*
+* Clears the screen. Hides the sprites. Displays GAME OVER.
+*
+
 CLEAR_WE_ARE_GALAXIANS_SCREEN_AND_DISPLAY_GAME_OVER:
-	TODOM	8
+	jbsr	HANDLE_ALIEN_SWARM_SCROLL_RESET                            	| call HANDLE_ALIEN_SWARM_SCROLL_RESET [call 0x0363]
+* clear everything except HUD
+	move.w	TEMP_CHAR_RAM_PTR(pc),d6                   	| read contents of TEMP_CHAR_RAM_PTR. Now HL = pointer to row to clear [ld   hl,(0x400B)]
+	move.b	#0x1C,d1                        	| we want to clear 0x1C (28 decimal) characters [ld   b,0x1C]
+	move.b	#0x10,d0                        	| ordinal of empty character [ld   a,0x10]
+	jbsr		rst_10_video					| Clear 28 characters on column
+												| As the screen is 32 characters wide, we need to add 4 to get to... [ld   de,0x0004]
+	addq.w	#4,d6                              	| the start of the next column
+	move.w	d6,TEMP_CHAR_RAM_PTR                       	| Update TEMP_CHAR_RAM_PTR [ld   (0x400B),hl]
+
+* wait until TEMP_COUNTER_2 reaches 0
+	lea	TEMP_COUNTER_2(pc),a0                      	| load HL with address of TEMP_COUNTER_2 [ld   hl,0x4009]
+	subq.b	#1,(a0)                         	| [dec  (hl)]
+	beq.b	0f
+	rts                                    	| [ret  nz]
+0:
+	addq.b	#1,SCRIPT_STAGE                         	| advance to next stage of script [inc  (hl)]
+
+* clear INFLIGHT_ALIENS array.
+	lea	INFLIGHT_ALIENS(pc),a0                      	| load HL with address of INFLIGHT_ALIENS [ld   hl,0x42B0]
+	moveq	#0,d0                            	| [xor  a]
+	move.b	d0,d1                           	| [ld   b,a]
+	jbsr	rst_10                               	| Fill B bytes of memory from HL with value in A.
+
+* hide all sprites & bullets
+	lea	OBJRAM_BACK_BUF_SPRITES(pc),a0                      	| pointer to OBJRAM_BACK_BUF_SPRITES [ld   hl,0x4060]
+	move.b	#0x40,d1                        	| [ld   b,0x40]
+	jbsr	rst_10								| clear sprite and bullet information from back buffer
+
+* display GAME OVER
+	move.b	#0x40,TEMP_COUNTER_1
+	move.b	#0x4,TEMP_COUNTER_2       	| set TEMP_COUNTER_1 and TEMP_COUNTER_2 [ld   (0x4008),hl]
+	jbsr	SET_COLOUR_ATTRIBUTES_TABLE_1                            	| call SET_COLOUR_ATTRIBUTES_TABLE_1 [call 0x0595]
+	move.w	#0x0600,d3                      	| command: PRINT_TEXT, parameter: 0 (index of "GAME OVER") [ld   de,0x0600]
+	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND [jp   0x08F2]
+
+
+
+*
+* Displays GAME over and the amount of credit remaining.
+*
+* See also: DISPLAY_GAME_OVER_AND_REMAINING_CREDIT_1 @ 0x018C
+*
+
 DISPLAY_GAME_OVER_AND_REMAINING_CREDIT_2:
-	TODOM	9
+	move.w	#0x0701,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND , calls DISPLAY_AVAILABLE_CREDIT [ld   de,0x0701]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	move.w	#0x600,d3                      	| command: PRINT_TEXT, parameter: 0 (index of "GAME OVER") [ld   de,0x0600]
+	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	addq.b	#1,SCRIPT_STAGE                         	| advance to next stage of script [inc  (hl)]
+	move.b	#0x60,TEMP_COUNTER_1
+	move.b	#0x10,TEMP_COUNTER_2       	| set TEMP_COUNTER_1 and TEMP_COUNTER_2 [ld   (0x4008),hl]
+	rts                                    	| [ret]
+
+
+
+*
+* Clears the alien swarm from the screen.
+*
+*
+
 CLEAR_ALIEN_SWARM_AND_SUSPEND_SWARM_ANIMATION:
-	TODOM	10
+	lea	ALIEN_SWARM_FLAGS(pc),a0                      	| load HL with address of ALIEN_SWARM_FLAGS [ld   hl,0x4100]
+	move.b	#0x80,d1                        	| sizeof(ALIEN_SWARM_FLAGS) [ld   b,0x80]
+	moveq	#0,d0                            	| [xor  a]
+	jbsr	rst_10		| Reset all flags in ALIEN_SWARM_FLAGS array
+	move.b	d0,TIMING_VARIABLE                       	| clear TIMING_VARIABLE [ld   (0x425F),a]
+	move.b	d0,DISABLE_SWARM_ANIMATION                       	| clear DISABLE_SWARM_ANIMATION [ld   (0x4238),a]
+	move.b	#0x40,TEMP_COUNTER_2                      	| [ld   (hl),0x40]
+	jra	l_0593                             	| advance to next stage of script [jp   0x0593]
+
+
+
+*
+*
+*
+*
+*
+
 CREATE_ATTRACT_MODE_ALIEN_SWARM:
-	TODOM	11
+	lea	PACKED_DEFAULT_SWARM_DEFINITION(pc),a1                      	| load DE with address of PACKED_DEFAULT_SWARM_DEFINITION [ld   de,0x051B]
+	jbsr	UNPACK_ALIEN_SWARM                            	| call UNPACK_ALIEN_SWARM [call 0x0646]
+	lea		DEFAULT_PLAYER_STATE(pc),a0		| now HL = pointer to DEFAULT_PLAYER_STATE (0x052B)
+	lea	CURRENT_PLAYER_STATE(pc),a1                      	| load DE with address of CURRENT_PLAYER_STATE [ld   de,0x4218]
+	move.w	#8,d1			| sizeof (CURRENT_PLAYER_STATE)
+	jbsr	ldir                                    	| reset current player state to default
+	clr.b	TIMING_VARIABLE                       	| reset TIMING_VARIABLE [ld   (0x425F),a]
+
+* Give the demo player 1 life
+	move.b	#1,PLAYER_LIVES                       	| set PLAYER_LIVES [ld   (0x421D),a]
+	lea	SCRIPT_STAGE(pc),a0                      	| pointer to SCRIPT_STAGE [ld   hl,0x400A]
+	addq.b	#1,(a0)                         	| advance to next stage of script [inc  (hl)]
+	move.w	    TEMP_CHAR_RAM_PTR(pc),d6                        	| bump HL to point to TEMP_CHAR_RAM_PTR [inc  l]
+	move.b	#0x96,d0                      	| [ld   (hl),0x96]
+	bsr		osd_w_bg_videoram
+	move.b	#0x40,FLAGSHIP_ATTACK_MASTER_COUNTER_1
+	move.b	#0x06,FLAGSHIP_ATTACK_MASTER_COUNTER_2  	| set FLAGSHIP_ATTACK_MASTER_COUNTER_1 and FLAGSHIP_ATTACK_MASTER_COUNTER_2 [ld   (0x4245),hl]
+	rts                                    	| [ret]
+
 
 *
 * In the demo mode, this erases all of the points values underneath the text "CHARGER"
@@ -3443,6 +3542,7 @@ CLEAR_ROW_OF_SCREEN:
 	beq.b	0f
 	rts                                    	| return if not zero [ret  nz]
 0:
+l_0593:
 	addq.b	#1,SCRIPT_STAGE                         	| advance to next stage of script [inc  (hl)]
 
 SET_COLOUR_ATTRIBUTES_TABLE_1:
