@@ -893,19 +893,27 @@ osd_w_bg_colorram:
 	rts
 
 * d6=screen address (preserved), d0=tile (preserved)
-* d6 starts at 0x5000
-* must preserve A0 and D7 too
+* d6 starts at 0x5000 ends at 0x57FF
+* should preserve all registers
+
 osd_w_bg_videoram:
     .ifeq OPT_DISABLE_BG_LAYER
 	movem.l	d0-d3/d6/a0-a1,-(a7)
 	sub.w	#SCREEN_ADDRESS,d6
+	cmp.w	#0x800,d6
+	bcs.b	1f
+	* should not happen
+	bsr		osd_break
+1:
 	lea		bg_videoram,a1
 	add.w	d6,a1
 	cmp.b	(a1),d0
 	beq.b	0f		| already the proper value
 	move.b	d0,(a1)	| update logical grid
 	lea		bg_colorram,a1
-	move.b	(a1,d6.w),d1	| color & X/Y flip data
+	add.w	d6,d6		| 2 bytes per character (scroll+attribute)
+	move.b	(a1,d6.w),d1	| scroll value
+	move.b	(1,a1,d6.w),d2	| color & X/Y flip data
 	bsr.b		update_bg_tile
 0:
 	movem.l	(a7)+,d0-d3/d6/a0-a1
