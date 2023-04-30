@@ -4582,22 +4582,528 @@ jump_table_203D:
     .long	DISPLAY_SCORE_COMMAND
     .long	PRINT_TEXT_COMMAND
     .long	DISPLAY_BOTTOM_OF_SCREEN_COMMAND
-	
+
+*
+* Called when an alien rejoins the swarm.
+*
+
 DRAW_ALIEN_COMMAND:
-	rts
-	
+	jbsr	GET_ALIEN_CHAR_RAM_ADDR                            	| call GET_ALIEN_CHAR_RAM_ADDR [call 0x20E1]
+	jbsr	CHOOSE_ANIMATION_FRAME_FOR_ALIEN_REJOINING_SWARM                            	| call CHOOSE_ANIMATION_FRAME_FOR_ALIEN_REJOINING_SWARM [call 0x2104]
+	jra	DRAW_ALIEN                             	| jump to DRAW_ALIEN [jp   0x2131]
+
+
+
+*
+* Called to delete an alien because it's either been killed or it's broken off for an attack.
+*
+
 DELETE_ALIEN_COMMAND:
-	rts
-	
+	jbsr	GET_ALIEN_CHAR_RAM_ADDR                            	| call GET_ALIEN_CHAR_RAM_ADDR [call 0x20E1]
+	tst.b	d7
+	jne	PLOT_CHARACTERS_2_BY_2_ASCENDING                             	| jump to PLOT_CHARACTERS_2_BY_2_ASCENDING [jp   c,0x2583]
+	jra	l_25a7                             	| plot two spaces in the same column [jp   0x25A7]
+
+
+*
+* Animates the alien swarm.
+*
+* Can,0xbe disabled by setting 0x4238 (DISABLE_SWARM_ANIMATION) flag to 1.
+*
+* Note:
+* The WE ARE THE GALAXIANS attract mode screen requires the DISABLE_SWARM_ANIMATION flag set
+* because the text overlays where the swarm would,0xbe and we don't want it corrupted by the animation routine.
+*
+
+HANDLE_SWARM_ANIMATION:
+	move.b	l_425F,d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
+	move.b	d0,d1                           	| [ld   b,a]
+	and.b	#0x0F,d0                         	| mask in lower nibble [and  0x0F]
+	jeq	l_209c                             	| if lower nibble is 0, goto HANDLE_1UP_2UP_BLINKING [jr   z,0x209C]
+
+* A = column of aliens to animate (0-15)
+	lea	l_4120(pc),a0                      	| load HL with pointer to bottommost row of aliens in ALIEN_SWARM_FLAGS [ld   hl,0x4120]
+	add.b	l,d0                             	| [add  a,l]
+ld   l,a                                	| Now HL points to bottommost alien in the column
+	move.b	l_4238,d0                       	| read DISABLE_SWARM_ANIMATION flag [ld   a,(0x4238)]
+	ror.b	#1,d0                            	| move bit 0 into carry [rrca]
+	bcc.b	0f
+	rts                                    	| if flag was set, return [ret  c]
+0:
+
+* animate each alien in the column
+	move.b	#0x10,d2                        	| sizeof a row of aliens in ALIEN_SWARM_FLAGS [ld   c,0x10]
+	move.b	#0x06,d1                        	| number of rows of aliens to process. [ld   b,0x06]
+l_207d:
+push bc
+push hl
+	move.b	#l,d0                           	| [ld   a,l]
+	btst.b	#0,(a0)                         	| test flag in ALIEN_SWARM_FLAGS to see if alien is present [bit  0,(hl)]
+	jne	l_2089                             	| if alien is present, goto 0x2089 [jr   nz,0x2089]
+
+	jbsr	l_205e                            	| call DELETE_ALIEN_COMMAND to erase the alien from the screen [call 0x205E]
+	jra	l_2094                             	| [jr   0x2094]
+
+l_2089:
+	jbsr	l_20e1                            	| call GET_ALIEN_CHAR_RAM_ADDR [call 0x20E1]
+	clr.b	d2                               	| load randomness value (see docs for CALCULATE_ALIEN_ANIMATION_FRAME_INDEX) [ld   c,0x00]
+	jbsr	l_211d                            	| call CALCULATE_ALIEN_ANIMATION_FRAME_INDEX [call 0x211D]
+	jbsr	l_2131                            	| call DRAW_ALIEN [call 0x2131]
+
+l_2094:
+pop  hl
+pop  bc
+	move.b	#l,d0                           	| [ld   a,l]
+	add.b	d2,d0                            	| [add  a,c]
+ld   l,a                                	| HL = HL + 16 decimal. Now HL points to alien above, in same column
+	subq.b	#1,d1                           	| [...]
+	jne	l_207d                             	| repeat until all rows of aliens done [djnz 0x207D]
+	rts                                    	| [ret]
+
+
+*
+* When the game has a human in control, make 1UP or 2UP "blink".
+*
+* 1UP never blinks during attract mode, presumably because it distracts the viewer's attention.
+*
+
+HANDLE_1UP_2UP_BLINKING:
+l_209c:
+	move.b	l_4006,d0                       	| read IS_GAME_IN_PLAY flag [ld   a,(0x4006)]
+	tst.b	d0                               	| test if zero [and  a]
+	jeq	l_20a7                             	| if flag is not set, goto 0x20A7 [jr   z,0x20A7]
+	move.b	d0,l_40AB                       	| set CAN_BLINK_1UP_2UP flag [ld   (0x40AB),a]
+	jra	BLINK_1UP_or_2UP_TEXT                             	| goto BLINK_1UP_or_2UP_TEXT [jr   0x20AC]
+
+
+l_20a7:
+	move.b	l_40AB,d0                       	| read CAN_BLINK_1UP_2UP [ld   a,(0x40AB)]
+	tst.b	d0                               	| test if zero [and  a]
+	bne.b	0f
+	rts                                    	| if flag is not set, return [ret  z]
+0:
+
+*
+* This code makes the 1UP or 2UP text blink during the game.
+*
+* Expects:
+* B = any number (sourced from TIMING_VARIABLE @ 0x425F).
+*
+
+BLINK_1UP_OR_2UP_TEXT:
+	move.b	CURRENT_PLAYER(pc),d0                       	| read CURRENT_PLAYER [ld   a,(0x400D)]
+	jbsr	l_214e                            	| get character RAM address for where 1UP or 2UP is printed [call 0x214E]
+	move.w	#-32,d3                      	| load DE with -32 decimal [ld   de,0xFFE0]
+	btst.b	#4,d1                           	| test bit 4 of timing variable value [bit  4,b]
+	jeq	l_20cd                             	| if not set, then draw "1UP" or "2UP" [jr   z,0x20CD]
+
+* erase "1UP" or "2UP" for current player
+	move.b	#0x10,d0                        	| ordinal for empty space character [ld   a,0x10]
+	jbsr	osd_w_bg_videoram                         	| erase first character of "1UP" or "2UP" [ld   (hl),a]
+	add  d3,d6                              	| bump HL to point to character directly above
+	jbsr	osd_w_bg_videoram                         	| erase second character [ld   (hl),a]
+	add  d3,d6                              	| bump HL to point to character directly above
+	jbsr	osd_w_bg_videoram                         	| erase third character [ld   (hl),a]
+
+	move.b	IS_TWO_PLAYER_GAME(pc),d0                       	| read IS_TWO_PLAYER_GAME [ld   a,(0x400E)]
+	tst.b	d0                               	| test flag [and  a]
+	bne.b	0f
+	rts                                    	| return if not a two-player game [ret  z]
+0:
+	move.b	CURRENT_PLAYER(pc),d0                       	| read CURRENT_PLAYER [ld   a,(0x400D)]
+	eor.b	#0x01,d0                          	| swap between player one and two (0= Player One, 1=Player 2) [xor  0x01]
+	jbsr	l_214e                            	| get character RAM address for where 1UP or 2UP is printed [call 0x214E]
+
+* plot "1UP" or "2UP"
+l_20cd:
+	addq.b	#1,d0                           	| A now is the ordinal for the "1" or "2" character [inc  a]
+	jbsr	osd_w_bg_videoram                         	| write "1" or "2" [ld   (hl),a]
+	add  d3,d6                              	| bump HL to point to character directly above
+	move.b	#0x25,d0                      	| 'U' [ld   (hl),0x25]
+	jbsr	osd_w_bg_videoram
+	add  d3,d6                              	| bump HL to point to character directly above
+	move.b	#0x20,d0                      	| 'P' [ld   (hl),0x20]
+	jbsr	osd_w_bg_videoram
+	btst.b	#4,d1                           	| [bit  4,b]
+	beq.b	0f
+	rts                                    	| [ret  nz]
+0:
+	tst.b	IS_GAME_IN_PLAY                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	beq.b	0f
+	rts                                    	| if game is in play, return [ret  nz]
+0:
+	move.b	d0,CAN_BLINK_1UP_2UP                       	| clear CAN_BLINK_1UP_2UP flag. [ld   (0x40AB),a]
+	rts                                    	| [ret]
+
+* Get character RAM address of alien in swarm.
+*
+* Expects:
+* A = index of alien in swarm (0-127)
+*
+* Returns:
+* B = A on entry (D1 = D0 on entry)
+* HL (D6) = pointer to screen RAM where alien should be plotted
+* Carry flag (D7) = set if alien is on an "odd" row
+*
+* Screen address is calculated as follows:
+* Flagship:              0x5004 + (column index * 0x40)
+* Red alien:             0x5006 + (column index * 0x40)
+* Purple alien:          0x5007 + (column index * 0x40)
+* Blue alien top row:    0x5009 + (column index * 0x40)
+* Blue alien middle row: 0x500A + (column index * 0x40)
+* Blue alien bottom row: 0x500C + (column index * 0x40)
+*
+* Carry (D7) is set when A identifies a Flagship, Purple, Blue Alien Mid row alien.
+*
+* I could spend more time figuring out exactly how this code works, but I don't think the benefit outweighs the
+* effort. It's one of those algorithms where I look at it and just don't "get it". I figure if you want to patch it,
+* you could easily create a lookup table - and the lookup table approach would probably be faster than this method.
+
+GET_ALIEN_CHAR_RAM_ADDR:
+	move.b	d0,d1                           	| preserve A in B [ld   b,a]
+	and.b	#0x0F,d0                         	| now A is the column index of the alien (0-15). *Clears carry* [and  0x0F]
+	ror.b	#2,d0                            	| move bit 0 & bit 1.. [rrca]
+												| ..into bits 6 & 7 respectively. [rrca]
+	move.b	d0,d2                           	| [ld   c,a]
+	and.b	#0x03,d0                         	| [and  0x03]
+	move.b	d0,d5			| [ld h,a]
+
+	move.b	d2,d0                           	| [ld   a,c]
+	and.b	#0xC0,d0                         	| [and  0xC0]
+	move.b	d0,d6		| [ld l,a]
+
+	move.b	d1,d0                           	| restore alien index from B (see @0x20E1) [ld   a,b]
+	ror.b	#4,d0                            	| divide A.. [rrca] by 16. Now A is a row index. [rrca]
+	and.b	#0x07,d0                         	| Ensure A falls between 0 and 7. >7 is invalid. *also clears carry flag* [and  0x07]
+* row 7 = flagship row.  row 2 = blue alien bottom row
+	move.b	d0,d2                           	| save row index in C. [ld   c,a]
+	* here carry is 0, so roxr is safe (but could also be ror on 68000)
+	roxr.b	#1,d0                           	| divide row index by 2. if row index is odd, then set carry flag [rra]
+
+* very important that we preserve the carry flag here (inD7), because DRAW_ALIEN @ 2131 needs it
+	scs		d7
+	move.w	d0,-(a7)			| [push af]
+	addx.b	d2,d0	|	[adc  a,c]
+	not.b	d0                               	| [cpl]
+	and.b	#0x0F,d0                         	| [and  0x0F]
+	add.b	d0,d6                             	| [add  a,l]
+											| [ld   l,a]
+	lsl.w	#8,d5
+	and.w	#0xFF,d6
+	add.w	#0x5000,d6           	| add start of character RAM [ld   de,0x5000]
+	add.w	d5,d6     |  [add  hl,de]
+
+	move.w	(a7)+,d0		| [pop  af]
+
+	rts                                    	| [ret]
+
+
+*
+* This code is called when an alien returns to the swarm and an animation frame needs to,0xbe chosen.
+*
+* Expects:
+* B = index of alien (0-127)
+*
+
+CHOOSE_ANIMATION_FRAME_FOR_ALIEN_REJOINING_SWARM:
+	move.w	D0,-(a7)					| [push af]
+	move.b	d1,d0                           	| A = index of alien [ld   a,b]
+	cmp.b	#0x70,d0                         	| is the index < 0x70 (112 decimal) [cp   0x70]
+	jcs	l_210e                             	| yes, index < 0x70, goto 0x210E [jr   c,0x210E]
+l_210a:
+	move.b	#0x80,d1                        	| this is a flagship row - set bit 7 so code @0x213F knows [ld   b,0x80]
+	move.w	(a7)+,d0			| [pop  af]
+	rts                                    	| [ret]
+
+l_210e:
+	and.b	#0x0F,d0                         	| A = A MODULO 16. Now A = column of alien [and  0x0F]
+	move.b	d0,d1                           	| make B = column of alien [ld   b,a]
+	move.b	TIMING_VARIABLE(pc),d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
+	and.b	#0x0F,d0                         	| mask in bits 0..3 [and  0x0F]
+	clr.b	d2                               	| [ld   c,0x00]
+	cmp.b	d1,d0                            	| [cp   b]
+	jcc	l_211c                             	| if A> B goto 0x211C [jr   nc,0x211C]
+	subq.b	#1,d2                           	| [dec  c]
+l_211c:
+	move.w	(a7)+,d0			| [pop  af]
+
+
+* All aliens, except flagships, have 4 possible animation frames.
+*
+* This routine calculates an index which is used to look up the correct animation from a table.
+*
+* Expects:
+* B = index of alien (0-127)
+* C = value to add to calculated index, to make animation frames vary.
+*
+* Returns:
+* B = animation frame index from 0..3
+
+CALCULATE_ALIEN_ANIMATION_FRAME_INDEX:
+	move.w	D0,-(a7)					| [push af]
+	move.b	d1,d0                           	| A now = index of alien [ld   a,b]
+	cmp.b	#0x70,d0                         	| is the index >= 0x70 (112 decimal) ? [cp   0x70]
+	jcc	l_210a                             	| yes, then this is a flagship row, they don't animate, goto 0x210A [jr   nc,0x210A]
+	move.b	l_425F,d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
+	ror.b	#4,d0                            	| rotate A.. [rrca]*4 4 bits right
+	add.b	d1,d0                            	| add in index of alien [add  a,b]
+	add.b	d2,d0                            	| add in "randomness" value [add  a,c]
+	and.b	#0x03,d0                         	| ensure animation frame index is between 0..3 [and  0x03]
+	move.b	d0,d1                           	| set B to animation frame index [ld   b,a]
+	move.w	(a7)+,d0			| [pop  af]
+	rts                                    	| [ret]
+
+
+
+* Draws alien [B] where B is an index into the ALIEN_SWARM_FLAGS array.
+*
+* For odd rows in the swarm (ie: flagship, purple aliens, blue middle row) the aliens occupy 2 columns x 2 rows of characters.
+* For even rows, each alien in the row occupies 1 column and 2rows of characters.
+*
+*
+* Expects:
+* B = animation frame index
+* HL = character RAM address to plot alien
+* Carry flag (D7) = if set, draw characters on odd row
+
+DRAW_ALIEN:
+	| [ex   de,hl]
+	tst.b	d7
+	jne	l_213d                             	| if carry is set, we're drawing an odd row [jr   c,0x213D]
+
+	lea	ALIEN_SWARM_CHARACTERS_SET_1x2(pc),a0                      	| load HL with pointer to ALIEN_SWARM_CHARACTERS_SET_1x2 [ld   hl,0x2157]
+	moveq	#0,d0
+	move.b	d1,d0                           	| load A with animation frame index [ld   a,b]
+    move.b	(a0,d0.w),d0                           	| call routine to fetch value @ HL + A [rst  0x20]
+	| [ex   de,hl]
+	jra	PLOT_TWO_CHARACTERS_IN_SAME_COLUMN                             	| jump to PLOT_TWO_CHARACTERS_IN_SAME_COLUMN [jp   0x25A9]
+
+* if we get here, we're drawing an "odd" row
+l_213d:
+	moveq	#0,d0
+	move.b	d1,d0                           	| load A with animation frame index [ld   a,b]
+	tst.b	d0                               	| test if its zero [and  a]
+	jpl	l_2146                             	| if bit 7 is not set (see docs @ 0x210A) then its not a flagship we're drawing, goto 0x2146 [jp   p,0x2146]
+	move.b	#0xA4,d0                        	| starting character for flagship [ld   a,0xA4]
+	jra	l_214a                             	| draw the flagship [jr   0x214A]
+
+l_2146:
+	lea	l_215B(pc),a0                      	| load HL with address of ALIEN_SWARM_CHARACTERS_SET_2x2 list [ld   hl,0x215B]
+    move.b	(a0,d0.w),d0                           	| call routine to fetch value @ HL + A [rst  0x20]
+l_214a:
+	| [ex   de,hl]
+	jra	l_2585                             	| jump to PLOT_CHARACTERS_2_BY_2_ASCENDING [jp   0x2585]
+
+
+*
+* Expects:
+* A = player index
+*
+* Returns:
+* HL = pointer to where first character of 1UP or 2UP will,0xbe plotted
+*
+l_214E:
+	move.w	#0x5340,d6                      	| 1UP [ld   hl,0x5340]
+	tst.b	d0                               	| [and  a]
+	bne.b	0f
+	rts                                    	| [ret  z]
+0:
+	move.w	#0x50E0,d6                      	| 2UP [ld   hl,0x50E0]
+	rts                                    	| [ret]
+
+* start ordinals of characters for 1x2 aliens (see docs @ 0x2131 and 0x25A9)
+ALIEN_SWARM_CHARACTERS_SET_1x2:
+	.byte	0x41,0x35,0x41,0x31
+
+* star ordinals of characters for 2x2 aliens (see docs @ 0x2131 and 0x2585)
+ALIEN_SWARM_CHARACTERS_SET_2x2:
+	.byte	0x44,0x38,0x44,0x3C
+
+*
+* Value in register A       Action taken
+* =================================================================
+* 0:                        Draw player ship in normal, alive state
+* 1:                        Erase player ship
+* Any other:                Render player ship as exploding
+*
+* NOTE:
+* The player ship isn't a sprite. It's comprised of 4x4 characters.
+*
+*
+
 DISPLAY_PLAYER_COMMAND:
-	rts
-	
+	tst.b	d0                               	| test if A is 0 [and  a]
+	jeq	DRAW_PLAYER_SHIP                             	| if A is 0, goto DRAW_PLAYER_SHIP [jr   z,0x219B]
+	subq.b	#1,d0                           	| [dec  a]
+	jeq	ERASE_PLAYER_SHIP                             	| if A was 1 on entry, goto ERASE_PLAYER_SHIP [jr   z,0x2187]
+	subq.b	#1,d0                           	| [dec  a]
+
+DRAW_PLAYER_SHIP_EXPLODING:
+	lsl.b	#4,d0                            	| multiply A... [add  a,a]*4 .. by 16 [add  a,a]
+	not.b	d0                               	| [cpl]
+	and.b	#0x30,d0                         	| [and  0x30]
+	add.b	#0xC0,d0                         	| [add  a,0xC0]
+	move.w	#0x51DA,d6                      	| character RAM address for top right of explosion [ld   hl,0x51DA]
+	jbsr	PLOT_CHARACTERS_2_BY_2_ASCENDING                            	| call PLOT_CHARACTERS_2_BY_2_ASCENDING [call 0x2585]
+	move.w	#0x51DC,d6                      	| character RAM address for bottom right of explosion [ld   hl,0x51DC]
+	jbsr	PLOT_CHARACTERS_2_BY_2_ASCENDING                            	| call PLOT_CHARACTERS_2_BY_2_ASCENDING [call 0x2585]
+	move.w	#0x521A,d6                      	| character RAM address for top left of explosion [ld   hl,0x521A]
+	jbsr	PLOT_CHARACTERS_2_BY_2_ASCENDING                            	| call PLOT_CHARACTERS_2_BY_2_ASCENDING [call 0x2585]
+	move.w	#0x521C,d6                      	| character RAM address for bottom left of explosion [ld   hl,0x521C]
+	jra	PLOT_CHARACTERS_2_BY_2_ASCENDING                             	| call PLOT_CHARACTERS_2_BY_2_ASCENDING [jp   0x2585]
+
+ERASE_PLAYER_SHIP:
+	move.w	#0x51DA,d6                      	| [ld   hl,0x51DA]
+	move.w	#0x1C,d3                      	| offset to add to HL after drawing characters [ld   de,0x001C]
+	move.b	#0x04,d2                        	| row counter: 4 characters high [ld   c,0x04]
+	move.b	#0x40,d0
+l_218f:
+	move.b	#0x04,d1                        	| column counter: 4 characters wide [ld   b,0x04]
+l_2191:
+	jbsr	osd_w_bg_videoram                   	| ordinal for empty character [ld   (hl),0x40]
+	addq.w	#1,a0                           	| bump to next character on same column [inc  hl]
+	subq.b	#1,d1                           	| [...]
+	jne	l_2191                             	| do until B==0 [djnz 0x2191]
+	add.w	d3,d6                              	| add offset to HL to point to row beneath
+	subq.b	#1,d2                           	| decrement row counter [dec  c]
+	jne	l_218f                             	| if row counter is not 0, goto 0x218F [jr   nz,0x218F]
+	rts                                    	| [ret]
+
+DRAW_PLAYER_SHIP:
+	jbsr	ERASE_PLAYER_SHIP          	| erase existing ship or explosion [call 0x2187]
+	move.b	#0x60,d0                        	| ordinal of first character to plot [ld   a,0x60]
+	move.w	#0x51FC,d6                      	| character RAM address [ld   hl,0x51FC]
+	jra	PLOT_CHARACTERS_2_BY_2_ASCENDING                             	| jump to PLOT_CHARACTERS_2_BY_2_ASCENDING [jp   0x2585]
+
+
+*
+*
+* Value in register A       Points added to score
+* ===============================================
+* 0,0x30
+* 1,0x40
+* 2,0x50
+* 3,0x60
+* 4,0x70
+* 5,0x80
+* 6,0x90
+* 7                         100
+* 8                         150
+* 9                         200
+*,0x10                        300
+*,0x11                        800
+
 UPDATE_PLAYER_SCORE_COMMAND:
-	rts
-	
+	.ifdef	TODO   |TODO
+	move.b	d0,d2                           	| save A in C as the rst corrupts A [ld   c,a]
+
+	jbsr	LEA_DE_OF_CURRENT_PLAYER_SCORE                   	| call LEA_DE_OF_CURRENT_PLAYER_SCORE. Now DE = pointer to current player's score [call 0x2290]
+	move.b	d2,d0                           	| restore A (points value ID) from C [ld   a,c]
+	add.b	d2,d0                            	| And then multiply .. [add  a,c]
+	add.b	d2,d0                            	| .. A by 3. [add  a,c]
+	move.b	d0,d2                           	| [ld   c,a]
+	clr.b	d1                               	| Extend A into BC. Now BC is an offset into ALIEN_SCORE_TABLE [ld   b,0x00]
+	lea	ALIEN_SCORE_TABLE(pc),a0                      	| pointer to ALIEN_SCORE_TABLE [ld   hl,0x22D0]
+add  hl,bc                              	| now HL points to an entry in the score table.
+	tst.b	d0                               	| clear carry flag [and  a]
+	move.b	#0x03,d1                        	| Players score is 3 bytes in size [ld   b,0x03]
+l_21b8:
+	move.b	(a1),d0                         	| read byte from players score [ld   a,(de)]
+adc  a,(hl)                             	| add byte from the score table
+
+* When this instruction is executed, the A register is BCD corrected using the contents of the flags. The exact process is the following: if the least significant four bits of A contain a non-BCD digit (i. e. it is greater than 9) or the H flag is set, then $06 is added to the register. Then the four most significant bits are checked. If this more significant digit also happens to be greater than 9 or the C flag is set, then $60 is added.
+	**TODO daa                                     	| ensure that the result is valid BCD
+	move.b	d0,(a1)+                         	| update player score [ld   (de),a]
+	a                           	| bump to next BCD digits in players score [inc  de]
+	addq.w	#1,a0                           	| bump to next BCD digits in alien score [inc  hl]
+	subq.b	#1,d1                           	| [...]
+	jne	l_21b8                             	| repeat until all digits in player score have been updated. [djnz 0x21B8]
+	subq.b	#1,a1                           	| point to first 2 digits of player score [dec  de]
+push de
+	subq.w	#1,a1                           	| point to 3rd and 4th digits of player score [dec  de]
+ld   h,a                                	| load H with first two digits of player score
+	move.b	(a1),d0                         	| [ld   a,(de)]
+ld   l,a                                	| load L with 3rd and 4th digits of player score
+add  hl,hl
+add  hl,hl
+add  hl,hl
+add  hl,hl                              	| multiply HL * 16, which shifts all bits left 4 places.
+	move.b	#h,d0                           	| [ld   a,h]
+	lea	BONUS_GALIXIP_FOR(pc),a0                      	| read BONUS_GALIXIP_FOR value [ld   hl,0x40AC]
+cp   (hl)
+	bcs	0f
+	jbsr	AWARD_EXTRA_LIFE                            	| call AWARD_EXTRA_LIFE if our score is higher [call nc,0x229C]
+0:
+	addq.w	#1,a1                           	| [inc  de]
+	move.b	CURRENT_PLAYER,d0                       	| read CURRENT_PLAYER [ld   a,(0x400D)]
+	jbsr	DECIDE_TO_DISPLAY_PLAYER_ONE_OR_PLAYER_TWO_SCORE           	| call DECIDE_TO_DISPLAY_PLAYER_ONE_OR_PLAYER_TWO_SCORE [call 0x2256]
+pop  de
+	lea	l_40AA(pc),a0                      	| point to last byte (first 2 digits) of HI_SCORE [ld   hl,0x40AA]
+	move.b	#0x03,d1                        	| Players score is 3 bytes in size [ld   b,0x03]
+l_21df:
+	move.b	(a1),d0                         	| read byte from player score [ld   a,(de)]
+cp   (hl)                               	| compare to byte from high score
+	bcc.b	0f
+	rts                                    	| if byte read is lower than the byte from high score, not new high score, so return [ret  c]
+0:
+	jne	l_21e9                             	| if byte is different, we have a new high score, goto 0x21E9 [jr   nz,0x21E9]
+	subq.w	#1,a1                           	| otherwise, bump de [dec  de]
+	subq.w	#1,a0                           	| and bump hl [dec  hl]
+	subq.b	#1,d1                           	| [...]
+	jne	l_21df                             	| repeat until b==0 [djnz 0x21DF]
+	.endif
+	rts                                    	| [ret]
+
+
+*
+* Expects:
+*
+* A is a command.
+*
+* Value in register A       What it represents
+* ==================================================================================================
+* 0                         Reset player 1's score to 0 and clear PLAYER_ONE_AWARDED_EXTRA_LIFE flag.
+* 1                         Reset player 2's score to 0 and clear PLAYER_TWO_AWARDED_EXTRA_LIFE flag.
+* 2                         Reset high score to 0
+* 3                         Do all of the above
+
 RESET_SCORE_COMMAND:
-	rts
-	
+	cmp.b	#0x03,d0                         	| [cp   0x03]
+	jcc	l_2228                             	| if A>= 3 then goto RESET_ALL_SCORES_AND_EXTRA_LIFE_FLAGS [jr   nc,0x2228]
+	move.w	D0,-(a7)			| [push af] we only need to save d0
+	lea	PLAYER_ONE_SCORE(pc),a0                      	| address of PLAYER_ONE_SCORE [ld   hl,0x40A2]
+	lea	PLAYER_ONE_AWARDED_EXTRA_LIFE(pc),a1                      	| address of PLAYER_ONE_AWARDED_EXTRA_LIFE [ld   de,0x40AD]
+	tst.b	d0                               	| test if A is 0 [and  a]
+	jeq	l_221a                             	| if A was 0 on entry, goto 0x221A and reset player 1's score [jr   z,0x221A]
+
+	lea	PLAYER_TWO_SCORE(pc),a0                      	| address of PLAYER_TWO_SCORE [ld   hl,0x40A5]
+	lea	PLAYER_TWO_AWARDED_EXTRA_LIFE(pc),a1                      	| address of PLAYER_TWO_AWARDED_EXTRA_LIFE [ld   de,0x40AE]
+	subq.b	#1,d0                           	| if A was 1 on entry, then zero flag will be set after dec. [dec  a]
+	jeq	l_221a                             	| if zero flag is set, then A was 1 on entry, goto 0x221A and reset player 2's score [jr   z,0x221A]
+	lea	HI_SCORE(pc),a0                      	| address of HI_SCORE [ld   hl,0x40A8]
+    move.l	a0,a1                           	| DE = HL   [ld   e,l] [ld   d,h]
+l_221a:
+	clr.b	(a0)+                             	| clear first byte [ld   (hl),0x00]	                           	| [inc  hl]
+	clr.b	(a0)+                             	| clear second byte [ld   (hl),0x00]
+	                           	| [inc  hl]
+	clr.b	(a0)                             	| clear third byte [ld   (hl),0x00]
+	exg		a0,a1
+	clr.b	(a0)                             	| reset the AWARDED_EXTRA_LIFE flag [ld   (hl),0x00]
+	move.w	(a7)+,d0
+	jra	DISPLAY_SCORE_COMMAND                             	| Goto DISPLAY_SCORE_COMMAND to display reset scores. [jr   0x2231]
+
+RESET_ALL_SCORES_AND_EXTRA_LIFE_FLAGS:
+l_2228:
+	subq.b	#1,d0                           	| [dec  a]
+	move.w	d0,-(a7)
+	jbsr	RESET_SCORE_COMMAND                            	| [call 0x21FE]
+	move.w	(a7)+,d0
+	and.w	#0xFF,d0	| [pop af] pops A as byte
+	bne.b	0f
+	rts                                    	| [ret  z]
+0:
+	jra	l_2228                             	| [jr   0x2228]
+
 	
 *
 * A = index of string to print
@@ -4926,9 +5432,6 @@ DISPLAY_PLAYER_SHIPS_REMAINING:
 	bra.b	1b
 	
 	
-HANDLE_SWARM_ANIMATION:
-	**move.w	#0xF00,0xdff180		| unimplemented
-	rts
 
 * Called to display "BAD RAM [n]" or "BAD ROM [n]""
 * (just to debug our font engine!!)
@@ -5025,7 +5528,7 @@ PLOT_TWO_CHARS_ON_SAME_ROW:
    add.w	d3,d6               | add offset in DE to HL
    rts
 
-l_25A7:
+l_25a7:
 	move.b	#0x2C,d0
 
 *
@@ -5034,8 +5537,8 @@ l_25A7:
 * register A is the ordinal of the first character to draw. A+2 is drawn in the same column of the row beneath.
 *
 * Expects:
-* A = ordinal of first character to plot
-* HL = pointer to character RAM where first character will be plotted
+* A (D0) = ordinal of first character to plot
+* HL (D6) = pointer to character RAM where first character will be plotted
 *
 
 PLOT_TWO_CHARACTERS_IN_SAME_COLUMN:
