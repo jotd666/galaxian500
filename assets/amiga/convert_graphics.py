@@ -24,6 +24,7 @@ gray = (195,195,217)
 pink = (195,0,217)
 yellow = (224,224,0)
 red = (224,0,0)
+violet = (133,0,217)
 
 deep_blue = (0,0,217)
 # 7 base colors
@@ -33,7 +34,7 @@ cyan,
 deep_blue,
 (0,91,217),    # blue
 yellow,
-(133,0,217),   # violet
+violet
 ]
 
 tile_palette = base_palette + [brown]      # last col for flagship as tile
@@ -47,11 +48,22 @@ flagship_sprite_palette +   # 4-5: 2 flagships
 [black,pink,pink,pink]    # 6: score, 7: starfield
 )
 
+attribute_palette = [white,
+yellow,
+yellow,
+red,
+red,
+red,
+cyan,
+violet]
+
 palette = tile_palette + bob_palette + sprite_palette
 
 with open(os.path.join(src_dir,"palette.68k"),"w") as f:
     #f.write("palette:\n")
     bitplanelib.palette_dump(palette,f,pformat=bitplanelib.PALETTE_FORMAT_ASMGNU)
+    f.write("* attributes\n")
+    bitplanelib.palette_dump(attribute_palette,f,pformat=bitplanelib.PALETTE_FORMAT_ASMGNU)
 
 # convert fonts
 fonts = Image.open(os.path.join(this_dir,"text.png"))

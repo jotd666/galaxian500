@@ -903,7 +903,8 @@ osd_w_bg_videoram:
 	cmp.w	#0x800,d6
 	bcs.b	1f
 	* should not happen
-	bsr		osd_break
+	**bsr		osd_break
+	move.w	#0,d6
 1:
 	lea		bg_videoram,a1
 	add.w	d6,a1
@@ -911,9 +912,10 @@ osd_w_bg_videoram:
 	beq.b	0f		| already the proper value
 	move.b	d0,(a1)	| update logical grid
 	lea		bg_colorram,a1
-	add.w	d6,d6		| 2 bytes per character (scroll+attribute)
-	move.b	(a1,d6.w),d1	| scroll value
-	move.b	(1,a1,d6.w),d2	| color & X/Y flip data
+	move.w	d6,d3
+	add.w	d3,d3		| 2 bytes per character (scroll+attribute)
+	move.b	(a1,d3.w),d1	| scroll value
+	move.b	(1,a1,d3.w),d2	| color & X/Y flip data
 	bsr.b		update_bg_tile
 0:
 	movem.l	(a7)+,d0-d3/d6/a0-a1
@@ -1858,9 +1860,41 @@ osd_read_dipswitches_old:
 
 	rts
 
-* bits 0-1: Values for BONUS GALIXIP. 7 = 7000, 10 = 10000, 12 =12000, 20 = 20000
+* 6000: in D0
+*    bits 0-1: coin1 & coin2
+* 6800: in D1
+*    bits 7-6: if both set, means FREE PLAY
+* 1 COIN = 1 PLAY               OFF           OFF
+* 2 COINS = 1 PLAY              ON            OFF
+* 1 COIN = 2 PLAYS              OFF           ON
+* FREE PLAY                     ON            ON 
+
+* 7000: in D2
+*    bits 0-1: Values for BONUS GALIXIP. 7 = 7000, 10 = 10000, 12 =12000, 20 = 20000
 osd_read_dipswitches:
-	moveq	#0,d0
+	moveq	#-1,d0
+	move.w	#0xC0,d1	| free play: 0xC0, insert coin doesn't work ATM
+	moveq	#0,d2
+
+	movem.l	a0,-(a7)
+	lea keyboard_table(pc),a0
+	tst.b	(5,a0)		| "5" key like in MAME
+	beq.b	0f
+	bclr	#0,d0
+0:
+	tst.b	(6,a0)		| "6" key like in MAME
+	beq.b	0f
+	bclr	#1,d0
+0:
+	tst.b	(0,a0)		| "1" key like in MAME
+	beq.b	0f
+	bset	#0,d1
+0:
+	tst.b	(1,a0)		| "2" key like in MAME
+	beq.b	0f
+	bset	#1,d1
+0:
+	move.l	(a7)+,a0
 	rts
 	
 osd_read_coin:

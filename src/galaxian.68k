@@ -911,25 +911,24 @@ galaxian_irq:
 *007C: 11 00 58      ld   de,0x5800            | start of screen attribute RAM
 *007F: 01 80 00      ld   bc,0x0080            | number of bytes to copy from OBJRAM_BACK_BUF 
 *0082: ED B0         ldir                     | update screen & sprites in one go
-
+	move.l	OBJRAM_BACK_BUF,0x100	| debug
 * read ports and stash values read in RAM
-*0084: 3A 00 78      ld   a,(0x7800)           | kick the watchdog
-*0087: 3A 15 40      ld   a,(0x4015)           | read previous, previous state of port 6000 (SW0)
-*008A: 32 16 40      ld   (0x4016),a           | and write to PREV_PREV_PREV_STATE_6000 
-*008D: 3A 13 40      ld   a,(0x4013)           | read previous state of port 6000 (SW0)
-*0090: 32 15 40      ld   (0x4015),a           | and write to PREV_PREV_PORT_STATE_6000  
-*0093: 2A 10 40      ld   hl,(0x4010)          | read state of 6000 (SW0) and 6800 (SW1 & SOUND)
-*0096: 22 13 40      ld   (0x4013),hl          | and write to previous state value
-*0099: 3A 00 70      ld   a,(0x7000)           | read state of DIPSW
-*009C: 32 12 40      ld   (0x4012),a           | and write to PORT_STATE_7000 holder
-*009F: 3A 00 68      ld   a,(0x6800)           | read start button, p2 control, dipsw 1/2 state 
-*00A2: 32 11 40      ld   (0x4011),a           | and write to PORT_STATE_6800 holder
-*00A5: 3A 00 60      ld   a,(0x6000)           | read coin, p1 control, test & service state
-*00A8: 32 10 40      ld   (0x4010),a           | and write to PORT_STATE_6000 holder
+	move.b	PREV_PREV_PORT_STATE_6000,d0                       	| read previous, previous state of port 6000 (SW0) [ld   a,(0x4015)]
+	move.b	d0,PREV_PREV_PREV_PORT_STATE_6000                       	| and write to PREV_PREV_PREV_PORT_STATE_6000 [ld   (0x4016),a]
+	move.b	PREV_PORT_STATE_6000,d0                       	| read previous state of port 6000 (SW0) [ld   a,(0x4013)]
+	move.b	d0,PREV_PREV_PORT_STATE_6000                       	| and write to PREV_PREV_PORT_STATE_6000 [ld   (0x4015),a]
+	move.w	PORT_STATE_6000(pc),d0                   	| read state of 6000 (SW0) and 6800 (SW1 & SOUND) [ld   hl,(0x4010)]
+	move.b	d0,PREV_PORT_STATE_6000                       	| and write to previous state value [ld   (0x4013),hl]
+	jbsr		osd_read_dipswitches                       	| read state of DIPSW [ld   a,(0x7000)]
+	move.b	d2,PORT_STATE_7000                       	| and write to PORT_STATE_7000 holder [ld   (0x4012),a]
+	*move.b	l_6800,d0                       	| read start button, p2 control, dipsw 1/2 state [ld   a,(0x6800)]
+	move.b	d1,PORT_STATE_6800                       	| and write to PORT_STATE_6800 holder [ld   (0x4011),a]
+	*move.b	l_6000,d0                       	| read coin, p1 control, test & service state [ld   a,(0x6000)]
+	move.b	d0,PORT_STATE_6000                       	| and write to PORT_STATE_6000 holder [ld   (0x4010),a]
 
 		subq.b	#1,TIMING_VARIABLE             | decrement value
-*TODO
-		jbsr CHECK_IF_COIN_INSERTED               | 
+
+		jbsr CHECK_IF_COIN_INSERTED
 		jbsr HANDLE_UNPROCESSED_COINS
 		jbsr HANDLE_SOUND
 		jbsr HANDLE_SWARM_SOUND
@@ -954,27 +953,27 @@ SCRIPT_TABLE:
 	
 
 SCRIPT_ZERO:
-		move.w	TEMP_CHAR_RAM_PTR(pc),d6	| Read TEMP_CHAR_RAM_PTR. This holds character RAM to start clearing from
-		move.w	#0x20-1,d1                  | #0x20 (32 decimal) bytes to fill in a row
-		move.w	#0x10,d0				| ordinal of empty character
+	move.w	TEMP_CHAR_RAM_PTR(pc),d6	| Read TEMP_CHAR_RAM_PTR. This holds character RAM to start clearing from
+	move.w	#0x20-1,d1                  | #0x20 (32 decimal) bytes to fill in a row
+	move.w	#0x10,d0				| ordinal of empty character
 0:
-		jbsr		osd_w_bg_videoram
-		addq.w	#1,d6
-		dbf		d1,0b
+	jbsr		osd_w_bg_videoram
+	addq.w	#1,d6
+	dbf		d1,0b
 		
-		move.w	d6,TEMP_CHAR_RAM_PTR       | save in TEMP_CHAR_RAM_PTR
-		subq.b	#1,TEMP_COUNTER_1        | decrement value
-		beq.b	1f
-		rts                          | if counter hasn't hit zero, return
+	move.w	d6,TEMP_CHAR_RAM_PTR       | save in TEMP_CHAR_RAM_PTR
+	subq.b	#1,TEMP_COUNTER_1        | decrement value
+	beq.b	1f
+	rts                          | if counter hasn't hit zero, return
 1:
-		move.b	#1,IS_GAME_OVER		| point HL to IS_GAME_OVER (set to 1)
-		clr.b   IS_GAME_IN_PLAY     | point HL to IS_GAME_IN_PLAY
-		move.b	#1,SCRIPT_NUMBER    | point HL to SCRIPT_NUMBER
-		clr.b	SCRIPT_STAGE   | reset SCRIPT_STAGE to 0
+	move.b	#1,IS_GAME_OVER		| point HL to IS_GAME_OVER (set to 1)
+	clr.b   IS_GAME_IN_PLAY     | point HL to IS_GAME_IN_PLAY
+	move.b	#1,SCRIPT_NUMBER    | point HL to SCRIPT_NUMBER
+	clr.b	SCRIPT_STAGE   | reset SCRIPT_STAGE to 0
 
 	move.b	PORT_STATE_6800(pc),d0                       	| read PORT_STATE_6800 [ld   a,(0x4011)]
-	rol.b	#1,d0                           	| move dip sw1 & dip sw2 state... [rlca]
-	rol.b	#1,d0                           	| ...into bits 0 & 1 of register a [rlca]
+	rol.b	#2,d0                           	| move dip sw1 & dip sw2 state... [rlca]
+												| ...into bits 0 & 1 of register a [rlca]
 	and.b	#0x03,d0                         	| [and  0x03]
 	move.b	d0,DIP_SWITCH_1_2_STATE            	| and store into DIP_SWITCH_1_2_STATE [ld   (0x4000),a]
 
@@ -989,9 +988,9 @@ SCRIPT_ZERO:
 
 * read DIP switches to calculate value of BONUS GALIXIP
 	jbsr		osd_read_dipswitches  	| read state of dip switch 3,4,5,6 [ld   a,(0x7000)]
-	and.w	#0x03,d0                         	| mask in state of dip switches 3 & 4 [and  0x03]
+	and.w	#0x03,d2                         	| mask in state of dip switches 3 & 4 [and  0x03]
 	lea	table_0152(pc),a0                      	| [ld   hl,0x0152   see below table]
-	move.b	(a0,d0.w),BONUS_GALIXIP_FOR                	| write BONUS GALIXIP @ value
+	move.b	(a0,d2.w),BONUS_GALIXIP_FOR                	| write BONUS GALIXIP @ value
  
 
 * Set screen attribute colours then display "1UP" and "HIGH SCORE" 
@@ -1071,7 +1070,7 @@ script_one_jump_table:
 *
 *
 DISPLAY_GAME_OVER_AND_REMAINING_CREDIT_1:      
-	move.w	#0x0701,d3            | command: BOTTOM_OF_SCREEN_INFO_COMMAND, parameter: 1 (invokes DISPLAY_AVAILABLE_CREDIT)
+	move.w	#0x0701,d3            | command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND, parameter: 1 (invokes DISPLAY_AVAILABLE_CREDIT)
 	jbsr	QUEUE_COMMAND		| call QUEUE_COMMAND
 	move.w	#0x0600,d3          | command: PRINT_TEXT_COMMAND, parameter: 0 (index of GAME OVER)
 	jbsr	QUEUE_COMMAND               | call QUEUE_COMMAND
@@ -1365,7 +1364,7 @@ l_191e:
 	addq.b	#1,(a0)                         	| otherwise, increment number of credits [inc  (hl)]
 	move.b	#0x01,d0                        	| [ld   a,0x01]
 	move.b	d0,PLAY_PLAYER_CREDIT_SOUND                       	| Play sound of credit being added [ld   (0x41C9),a]
-	move.w	#0x0701,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, parameter: 1 (invokes DISPLAY_AVAILABLE_CREDIT) [ld   de,0x0701]
+	move.w	#0x0701,d3                      	| command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND, parameter: 1 (invokes DISPLAY_AVAILABLE_CREDIT) [ld   de,0x0701]
 	jra	QUEUE_COMMAND                             	| jump to QUEUE_COMMAND [jp   0x08F2]
 
 
@@ -1396,7 +1395,7 @@ HANDLE_UNPROCESSED_COINS:
 	jbsr	l_194f                            	| call code immediately after to add 1 credit, then return from CALL to add another credit! [call z,0x194F]
 0:
 l_194f:
-	move.b	NUM_CREDITS(pc),d0                         	| read number of credits [ld   a,(hl)]
+	move.b	(a0),d0                         	| read number of credits [ld   a,(hl)]
 	cmp.b	#0x63,d0                         	| have we reached 99 credits (decimal)? [cp   0x63]
 	bne.b	0f
 	rts                                    	| yes, so exit, no more credits allowed [ret  z]
@@ -1405,7 +1404,7 @@ l_194f:
 	addq.b	#1,(a0)                         	| increment credit count [inc  (hl)]
 	move.b	#0x01,d0                        	| [ld   a,0x01]
 	move.b	d0,PLAY_PLAYER_CREDIT_SOUND                       	| Set PLAY_PLAYER_CREDIT_SOUND flag to 1. I think you can guess what this does|) [ld   (0x41C9),a]
-	move.w	#0x0701,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, parameter: 1 (invokes DISPLAY_AVAILABLE_CREDIT) [ld   de,0x0701]
+	move.w	#0x0701,d3                      	| command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND, parameter: 1 (invokes DISPLAY_AVAILABLE_CREDIT) [ld   de,0x0701]
 	jra	QUEUE_COMMAND                             	| jump to QUEUE_COMMAND [jp   0x08F2]
 
 l_1961:
@@ -1736,7 +1735,7 @@ CLEAR_WE_ARE_GALAXIANS_SCREEN_AND_DISPLAY_GAME_OVER:
 *
 
 DISPLAY_GAME_OVER_AND_REMAINING_CREDIT_2:
-	move.w	#0x0701,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND , calls DISPLAY_AVAILABLE_CREDIT [ld   de,0x0701]
+	move.w	#0x0701,d3                      	| command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND , calls DISPLAY_AVAILABLE_CREDIT [ld   de,0x0701]
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
 	move.w	#0x600,d3                      	| command: PRINT_TEXT, parameter: 0 (index of "GAME OVER") [ld   de,0x0600]
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
@@ -3235,7 +3234,7 @@ INIT_0408:
 	jbsr	SET_COLOUR_ATTRIBUTES                            	| call SET_COLOUR_ATTRIBUTES [call 0x0598]
 
 * hide all sprites
-	lea	OBJRAM_BACK_BUF_SPRITES(pc),a0                      	| load HL with address of OBJRAM_BACK_BUF_SPRITES [ld   hl,0x4060]
+	lea	OBJRAM_BACK_BUF_SPRITES(pc),a0 	| load HL with address of OBJRAM_BACK_BUF_SPRITES [ld   hl,0x4060]
 	move.b	#0x40,d1                        	| [ld   b,0x40]
 	moveq	#0,d0                            	| [xor  a]
 	jbsr	rst_10		            	| Fill B bytes of memory from HL with value in A.
@@ -3262,7 +3261,6 @@ WAIT_BEFORE_DISPLAYING_PUSH_START_BUTTON:
 	lea	PUSH_START_BUTTON_COUNTER(pc),a0                      	| pointer to PUSH_START_BUTTON_COUNTER [ld   hl,0x4019]
 	subq.b	#1,(a0)                         	| decrement counter [dec  (hl)]
 	jne	BLINK_LAMPS_IF_CREDIT_INSERTED                             	| if non zero, goto BLINK_LAMPS_IF_CREDIT_INSERTED [jp   nz,0x0473]
-
 * counter's hit zero, go to next stage of script.
 	                     	| pointer to SCRIPT_STAGE [ld   hl,0x400A]
 	addq.b	#1,SCRIPT_STAGE                         	| advance to next stage of script [inc  (hl)]
@@ -3303,10 +3301,11 @@ DISPLAY_PUSH_START_BUTTON_AND_BONUS_GALIXIP_FOR:
 	move.b	d0,DISPLAY_IS_COCKTAIL_P2                       	| set DISPLAY_IS_COCKTAIL_P2 [ld   (0x4018),a]
 
 * display BONUS GALIXIP FOR and PUSH START BUTTON messages
-	move.w	#0x702,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND , parameter: 2 (invokes DISPLAY_BONUS_GALIXIP_FOR) [ld   de,0x0702]
+	move.w	#0x601,d3                      	| command: PRINT_TEXT, parameter: 1 (index of "PUSH START BUTTON") [ld   de,0x0601]
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
-	move.w	#0x601,a1                      	| command: PRINT_TEXT, parameter: 1 (index of "PUSH START BUTTON") [ld   de,0x0601]
+	move.w	#0x702,d3                      	| command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND , parameter: 2 (invokes DISPLAY_BONUS_GALIXIP_FOR) [ld   de,0x0702]
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
+	
 	* continue below...
 
 *
@@ -3606,9 +3605,9 @@ l_05e2:
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
 	move.b	#4,d3						| command: PRINT_TEXT, parameter: 4 (index of "HIGH SCORE")
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
-	move.w	#0x703,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, calls DISPLAY_PLAYER_SHIPS_REMAINING [ld   de,0x0703]
+	move.w	#0x703,d3                      	| command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND, calls DISPLAY_PLAYER_SHIPS_REMAINING [ld   de,0x0703]
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
-	move.w	#0x700,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, calls DISPLAY_LEVEL_FLAGS [ld   de,0x0700]
+	move.w	#0x700,d3                      	| command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND, calls DISPLAY_LEVEL_FLAGS [ld   de,0x0700]
 	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND [jp   0x08F2]
 
 * Called when we're in a two player game. Displays player one's score, player two's score and high score.
@@ -3666,7 +3665,7 @@ HANDLE_SPAWN_PLAYER:
 	move.b	d0,OBJRAM_BACK_BUF+0x3A                       	| reset scroll offset in OBJRAM_BACK_BUF [ld   (0x405A),a]
 
 * Draw lives left
-	move.w	#0x703,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, calls DISPLAY_PLAYER_SHIPS_REMAINING [ld   de,0x0703]
+	move.w	#0x703,d3                      	| command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND, calls DISPLAY_PLAYER_SHIPS_REMAINING [ld   de,0x0703]
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
 	move.w	#0x200,d3                      	| command: DISPLAY_PLAYER_COMMAND, parameter: 0 (invokes DRAW_PLAYER_SHIP) [ld   de,0x0200]
 	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND [jp   0x08F2]
@@ -3969,9 +3968,9 @@ l_07ba:
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
 	addq.b	#1,d3                            	| index of "HIGH SCORE" [inc  e]
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
-	move.w	#0x0703,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, parameter: 3 (invokes DISPLAY_PLAYER_SHIPS_REMAINING) [ld   de,0x0703]
+	move.w	#0x0703,d3                      	| command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND, parameter: 3 (invokes DISPLAY_PLAYER_SHIPS_REMAINING) [ld   de,0x0703]
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
-	move.w	#0x0700,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, parameter: 0 (invokes DISPLAY_LEVEL_FLAGS) [ld   de,0x0700]
+	move.w	#0x0700,d3                      	| command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND, parameter: 0 (invokes DISPLAY_LEVEL_FLAGS) [ld   de,0x0700]
 	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND [jp   0x08F2]
 
 
@@ -4279,7 +4278,7 @@ l_065c:
 * 4:                        Invokes RESET_SCORE_COMMAND
 * 5:                        Invokes DISPLAY_SCORE_COMMAND
 * 6:                        Invokes PRINT_TEXT_COMMAND 
-* 7:                        Invokes BOTTOM_OF_SCREEN_INFO_COMMAND
+* 7:                        Invokes DISPLAY_BOTTOM_OF_SCREEN_COMMAND
 * 
 * The purpose of the parameter in E depends on the command.
 *
@@ -4629,8 +4628,10 @@ RESET_SCORE_COMMAND:
 
 
 PRINT_TEXT_COMMAND:
+
 	lea	TEXTPTRS(pc),a0			    	| HL = address of TEXTPTRS [ld   hl,0x235C]
-	add.w	d0,d0						| A = A * 2.   This may affect C and PO flags. [add  a,a]
+	and.w	#0xFF,d0
+	add.b	d0,d0						| A = A * 2.   This may affect C and PO flags. [add  a,a]
 	scs		d7			| keep carry flag memory
 	move.w	d0,-(a7)
 	add.w	d0,d0
@@ -4759,7 +4760,7 @@ DISPLAY_BOTTOM_OF_SCREEN_COMMAND:
 	jeq		DISPLAY_LEVEL_FLAGS		| if parameter is 0
 	subq.b	#1,d0
 	jeq		DISPLAY_AVAILABLE_CREDIT	| if parameter was 1
-	subq.b	#2,d0
+	subq.b	#1,d0
 	jeq		DISPLAY_BONUS_GALIXIP_FOR	| if parameter was 2
 	
 	move.b	PLAYER_LIVES(pc),d1
@@ -4776,11 +4777,12 @@ DISPLAY_BONUS_GALIXIP_FOR:
 	bne.b	0f
 	rts                   | if no bonus, then return
 0:
-	move.b	#6,d0               | index of BONUS GALIXIP FOR 0000 PTS text string
+	moveq	#6,d0               | index of BONUS GALIXIP FOR 0000 PTS text string
     jbsr PRINT_TEXT_COMMAND               | display text on screen
     move.b	BONUS_GALIXIP_FOR(pc),d0           | read BONUS GALIXIP value
     and.b  #0x0F,d0                 | mask in low nibble
 	move.w	#0x5138,d6           | write value to character RAM
+	jbsr		osd_w_bg_videoram   | and POKE number to screen RAM, displaying single digit in correct place
     move.b	BONUS_GALIXIP_FOR(pc),d0           | read BONUS GALIXIP value
 	and.b  #0xF0,d0			| mask in high nibble
     bne.b	1f            | if it's !=0, goto 0x24E3
@@ -4902,7 +4904,7 @@ DISPLAY_LEVEL_FLAGS:
 
 
 DISPLAY_PLAYER_SHIPS_REMAINING:
-	move.w	0x539E,d6          | address in character RAM
+	move.w	#0x539E,d6          | address in character RAM
 	move.w	#5,d2
 	move.b	HAS_PLAYER_SPAWNED(pc),d0
     beq.b	0f                       
@@ -4989,9 +4991,9 @@ l_258C:
 * A   |  A+1
 
 PLOT_CHARACTERS_2_BY_2_DESCENDING:
-    move.w	D3,-(a7)
-l_2593:
 	move.b	#0x2E,d0
+l_2593:
+    move.w	D3,-(a7)
 PLOT_2X2_CHARACTERS:
 	move.w	#-33,d3		| load de with -33 decimal as signed word
 	jbsr	PLOT_TWO_CHARS_ON_SAME_ROW               | plot 2 characters on one row..	
@@ -6782,7 +6784,7 @@ l_1662:
 	move.b	d5,PLAYER_LEVEL
 	move.b	d6,DIFFICULTY_BASE_VALUE 	| update PLAYER_LEVEL and DIFFICULTY_BASE_VALUE [ld   (0x421B),hl]
 
-	move.l	#0x700,d3                      	| command: BOTTOM_OF_SCREEN_INFO_COMMAND, parameter: 0 (DISPLAY_LEVEL_FLAGS) [ld   de,0x0700]
+	move.l	#0x700,d3                      	| command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND, parameter: 0 (DISPLAY_LEVEL_FLAGS) [ld   de,0x0700]
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND. [call 0x08F2]
 
 * How many flagships survived from the last round? If so, they need to be added into the swarm before the level starts.
@@ -7000,7 +7002,7 @@ TXT_CREDIT:
 	.ascii	"CREDIT?"
 	.align	2
 TXT_BONUS_GALIXIP_FOR___000_PTS:
-	.word	0x537F
+	.word	0x5398
 	.ascii	"BONUS@GALIXIP@FOR@@@000@PTS?"
 	.align	2
 TXT_CONVOY_CHARGER:
