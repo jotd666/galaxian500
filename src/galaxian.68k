@@ -4616,46 +4616,44 @@ DELETE_ALIEN_COMMAND:
 *
 
 HANDLE_SWARM_ANIMATION:
-	move.b	l_425F,d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
+	move.b	TIMING_VARIABLE,d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
 	move.b	d0,d1                           	| [ld   b,a]
-	and.b	#0x0F,d0                         	| mask in lower nibble [and  0x0F]
-	jeq	l_209c                             	| if lower nibble is 0, goto HANDLE_1UP_2UP_BLINKING [jr   z,0x209C]
+	and.w	#0x0F,d0                         	| mask in lower nibble [and  0x0F]
+	jeq	HANDLE_1UP_2UP_BLINKING                             	| if lower nibble is 0, goto HANDLE_1UP_2UP_BLINKING [jr   z,0x209C]
 
 * A = column of aliens to animate (0-15)
-	lea	l_4120(pc),a0                      	| load HL with pointer to bottommost row of aliens in ALIEN_SWARM_FLAGS [ld   hl,0x4120]
-	add.b	l,d0                             	| [add  a,l]
-ld   l,a                                	| Now HL points to bottommost alien in the column
-	move.b	l_4238,d0                       	| read DISABLE_SWARM_ANIMATION flag [ld   a,(0x4238)]
-	ror.b	#1,d0                            	| move bit 0 into carry [rrca]
-	bcc.b	0f
+	lea	ALIEN_SWARM_FLAGS+0x20(pc),a0                      	| load HL with pointer to bottommost row of aliens in ALIEN_SWARM_FLAGS [ld   hl,0x4120]
+	add.w	d0,a0                             	| [add  a,l]
+												| Now HL points to bottommost alien in the column
+	tst.b	DISABLE_SWARM_ANIMATION                       	| read DISABLE_SWARM_ANIMATION flag [ld   a,(0x4238)]
+	beq.b	0f
 	rts                                    	| if flag was set, return [ret  c]
 0:
 
 * animate each alien in the column
-	move.b	#0x10,d2                        	| sizeof a row of aliens in ALIEN_SWARM_FLAGS [ld   c,0x10]
+	move.w	#0x10,d2                        	| sizeof a row of aliens in ALIEN_SWARM_FLAGS [ld   c,0x10]
 	move.b	#0x06,d1                        	| number of rows of aliens to process. [ld   b,0x06]
 l_207d:
-push bc
-push hl
-	move.b	#l,d0                           	| [ld   a,l]
-	btst.b	#0,(a0)                         	| test flag in ALIEN_SWARM_FLAGS to see if alien is present [bit  0,(hl)]
+	movem.w	d2/d3,-(a7)				| [push bc]
+	move.l	a0,-(a7)		| [push hl]
+	move.l	a0,d0
+	sub.l	#ALIEN_SWARM_FLAGS,d0         	| [ld   a,l] (adapted, compute alien index in swarm)
+	tst.b	(a0)                         	| test flag in ALIEN_SWARM_FLAGS to see if alien is present [bit  0,(hl)]
 	jne	l_2089                             	| if alien is present, goto 0x2089 [jr   nz,0x2089]
 
-	jbsr	l_205e                            	| call DELETE_ALIEN_COMMAND to erase the alien from the screen [call 0x205E]
+	jbsr	DELETE_ALIEN_COMMAND                            	| call DELETE_ALIEN_COMMAND to erase the alien from the screen [call 0x205E]
 	jra	l_2094                             	| [jr   0x2094]
 
 l_2089:
-	jbsr	l_20e1                            	| call GET_ALIEN_CHAR_RAM_ADDR [call 0x20E1]
+	jbsr	GET_ALIEN_CHAR_RAM_ADDR                            	| call GET_ALIEN_CHAR_RAM_ADDR [call 0x20E1]
 	clr.b	d2                               	| load randomness value (see docs for CALCULATE_ALIEN_ANIMATION_FRAME_INDEX) [ld   c,0x00]
-	jbsr	l_211d                            	| call CALCULATE_ALIEN_ANIMATION_FRAME_INDEX [call 0x211D]
-	jbsr	l_2131                            	| call DRAW_ALIEN [call 0x2131]
+	jbsr	CALCULATE_ALIEN_ANIMATION_FRAME_INDEX                            	| call CALCULATE_ALIEN_ANIMATION_FRAME_INDEX [call 0x211D]
+	jbsr	DRAW_ALIEN                            	| call DRAW_ALIEN [call 0x2131]
 
 l_2094:
-pop  hl
-pop  bc
-	move.b	#l,d0                           	| [ld   a,l]
-	add.b	d2,d0                            	| [add  a,c]
-ld   l,a                                	| HL = HL + 16 decimal. Now HL points to alien above, in same column
+	move.l	(a7)+,a0		| [pop hl]
+	movem.w	(a7)+,d2/d3				| [pop bc]
+	add.w	d2,a0			| HL = HL + 16 decimal. Now HL points to alien above, in same column
 	subq.b	#1,d1                           	| [...]
 	jne	l_207d                             	| repeat until all rows of aliens done [djnz 0x207D]
 	rts                                    	| [ret]
@@ -4669,16 +4667,15 @@ ld   l,a                                	| HL = HL + 16 decimal. Now HL points t
 
 HANDLE_1UP_2UP_BLINKING:
 l_209c:
-	move.b	l_4006,d0                       	| read IS_GAME_IN_PLAY flag [ld   a,(0x4006)]
+	move.b	IS_GAME_IN_PLAY,d0                       	| read IS_GAME_IN_PLAY flag [ld   a,(0x4006)]
 	tst.b	d0                               	| test if zero [and  a]
 	jeq	l_20a7                             	| if flag is not set, goto 0x20A7 [jr   z,0x20A7]
-	move.b	d0,l_40AB                       	| set CAN_BLINK_1UP_2UP flag [ld   (0x40AB),a]
-	jra	BLINK_1UP_or_2UP_TEXT                             	| goto BLINK_1UP_or_2UP_TEXT [jr   0x20AC]
+	move.b	d0,CAN_BLINK_1UP_2UP                       	| set CAN_BLINK_1UP_2UP flag [ld   (0x40AB),a]
+	jra	BLINK_1UP_OR_2UP_TEXT                             	| goto BLINK_1UP_or_2UP_TEXT [jr   0x20AC]
 
 
 l_20a7:
-	move.b	l_40AB,d0                       	| read CAN_BLINK_1UP_2UP [ld   a,(0x40AB)]
-	tst.b	d0                               	| test if zero [and  a]
+	tst.b	CAN_BLINK_1UP_2UP                       	| read CAN_BLINK_1UP_2UP [ld   a,(0x40AB)]
 	bne.b	0f
 	rts                                    	| if flag is not set, return [ret  z]
 0:
@@ -4844,7 +4841,7 @@ CALCULATE_ALIEN_ANIMATION_FRAME_INDEX:
 	move.b	d1,d0                           	| A now = index of alien [ld   a,b]
 	cmp.b	#0x70,d0                         	| is the index >= 0x70 (112 decimal) ? [cp   0x70]
 	jcc	l_210a                             	| yes, then this is a flagship row, they don't animate, goto 0x210A [jr   nc,0x210A]
-	move.b	l_425F,d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
+	move.b	TIMING_VARIABLE(pc),d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
 	ror.b	#4,d0                            	| rotate A.. [rrca]*4 4 bits right
 	add.b	d1,d0                            	| add in index of alien [add  a,b]
 	add.b	d2,d0                            	| add in "randomness" value [add  a,c]
@@ -4888,11 +4885,11 @@ l_213d:
 	jra	l_214a                             	| draw the flagship [jr   0x214A]
 
 l_2146:
-	lea	l_215B(pc),a0                      	| load HL with address of ALIEN_SWARM_CHARACTERS_SET_2x2 list [ld   hl,0x215B]
+	lea	ALIEN_SWARM_CHARACTERS_SET_2x2(pc),a0                      	| load HL with address of ALIEN_SWARM_CHARACTERS_SET_2x2 list [ld   hl,0x215B]
     move.b	(a0,d0.w),d0                           	| call routine to fetch value @ HL + A [rst  0x20]
 l_214a:
 	| [ex   de,hl]
-	jra	l_2585                             	| jump to PLOT_CHARACTERS_2_BY_2_ASCENDING [jp   0x2585]
+	jra	PLOT_CHARACTERS_2_BY_2_ASCENDING                             	| jump to PLOT_CHARACTERS_2_BY_2_ASCENDING [jp   0x2585]
 
 
 *
@@ -4902,7 +4899,7 @@ l_214a:
 * Returns:
 * HL = pointer to where first character of 1UP or 2UP will,0xbe plotted
 *
-l_214E:
+l_214e:
 	move.w	#0x5340,d6                      	| 1UP [ld   hl,0x5340]
 	tst.b	d0                               	| [and  a]
 	bne.b	0f
