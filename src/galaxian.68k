@@ -905,6 +905,8 @@ CALCULATE_TANGENT:
 	rts
 
 galaxian_irq:
+	lea	OBJRAM_BACK_BUF(pc),a0
+	jbsr	osd_update_attributes
 *TODO
 * update screen in one go - IMPORTANT
 *0079: 21 20 40      ld   hl,0x4020            | pointer to OBJRAM_BACK_BUF buffer held in RAM
@@ -4474,13 +4476,7 @@ INITIALISE_SYSTEM:  | 1A55
 	dbf		d1,0b
 	
 * clear attributes and reset scroll values
-	move	#0x100-1,d1
-	moveq	#0,d0
-	move.w	#0x5400,d6
-0:
-	jbsr		osd_w_bg_colorram	| write 0 to screen attribute RAM. Will both set colour to 0 and reset column scroll.
-	addq.w	#1,d6
-	dbf		d1,0b
+	jbsr		osd_reset_attributes	| write 0 to screen attribute RAM. Will both set colour to 0 and reset column scroll.
 	
 * (skipped startup checks!)
 

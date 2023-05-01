@@ -24,7 +24,6 @@ SCORE_FILE_SIZE = 16*5
 
 SPRITE_LIFETIME = 2
 
-NB_VISIBLE_ROWS = 36
 
 	.ifdef	RELEASE
 OPT_ENABLE_PROFILING = 0
@@ -73,7 +72,7 @@ _custom = 0xDFF000
 
 NB_PLAYFIELD_PLANES = 3
 FG_DIRTY_TILES_SIZE = 0x800
-TOTAL_NB_COLORS = 16   | 8+8
+TOTAL_NB_COLORS = 32   | 8+8+16
 NB_BYTES_PER_ROW = 40
 NB_BYTES_PER_FG_ROW = 32
 NB_LINES = 256
@@ -203,10 +202,11 @@ w\@:
 		.global osd_enable_vblank_interrupt
 		.global osd_ack_vblank_interrupt
 		.global osd_disable_vblank_interrupt
-		.global osd_break
-		.global osd_w_bg_colorram
+		.global osd_break		| for debug	
+		.global osd_calibrate_display		| for debug
 		.global osd_w_bg_videoram
-		.global osd_update_scroll_hw
+		.global osd_reset_attributes
+		.global osd_update_attributes
 		.global osd_update_sprite_shadow
 		.global osd_update_32_sprite_hw
 		.global osd_read_dipswitches
@@ -558,7 +558,37 @@ osd_break:
 	blitz
 	rts
 	
+osd_calibrate_display:
+	movem.l	a0/d0-d1,-(a7)
+	lea		bg_screen_data,a0
+	move.w	#NB_LINES-1,d1
+	clr		d0
+0:
+	st.b	(8,a0,d0.W)
+	st.b	(9,a0,d0.W)
+	st.b	(10,a0,d0.W)
+	st.b	(9+BG_SCREEN_PLANE_SIZE,a0,d0.W)
+	st.b	(10+BG_SCREEN_PLANE_SIZE,a0,d0.W)
+	lea		(BG_SCREEN_PLANE_SIZE,a0),a1
+	st.b	(10+BG_SCREEN_PLANE_SIZE,a1)
+	
+	add.w	#NB_BYTES_PER_ROW,d0
+	dbf		D1,0b
+	movem.l	(a7)+,a0/d0-d1
+	rts
 
+	move.l	fg_drawed_screen_ptr,a0
+	move.w	#NB_LINES-1,d1
+	clr		d0
+0:
+	st.b	(14,a0,d0.W)
+	st.b	(15,a0,d0.W)
+	st.b	(15+FG_SCREEN_PLANE_SIZE,a0,d0.W)
+	add.w	#NB_BYTES_PER_ROW,d0
+	dbf		D1,0b
+	movem.l	(a7)+,a0/d0-d1
+	rts
+	
 osd_sound_mute:
 	st.b	sound_muted
 	rts
@@ -789,11 +819,12 @@ platform_init:
 	
 	* restrict borders: we don't see bobs on the borders!
     move.w #0x1C99,diwstrt(a5)
-    move.w #0x3881-8,diwstop(a5)
+    move.w #0x1C81-8,diwstop(a5)
     move.w #0x0038,ddfstrt(a5)
     move.w #0x00D0,ddfstop(a5)
-    move.w #6600,bplcon0(a5) | 6 bitplanes, dual playfield
+    move.w #0x6600,bplcon0(a5) | 6 bitplanes, dual playfield
     move.w #0,bplcon2(a5)          | no priority (sprite starfield behind)
+    move.w #0,bplcon3(a5)          | no AGA
 
     move.w #0,fmode(a5)
 	
@@ -801,10 +832,7 @@ platform_init:
     * and background layer, can be seen in the title
 	* screen with galaxian bg/fg tiles
     **move.w #2<<4,bplcon1(a5)    | foreground tiles shifted by 2 pixels
-    move.w #0,bplcon1(a5)    | foreground tiles shifted by 2 pixels
-	* 2nd (foreground tiles & sprites) playfield has priority
-	* solvalou sprites (0-1) have priority on sprites, others (andor/bragza) don't
-    move.w #0x004f,bplcon2(a5)
+    move.w #0,bplcon1(a5)    | foreground tiles
 	move.w	#0,d0
     move.w d0,bpl1mod(a5)
     move.w d0,bpl2mod(a5)
@@ -820,9 +848,7 @@ platform_init:
 	move.l	#copperlist,cop1lc(a5)
 	
     * init sprite, bitplane, whatever dma
-	* now it's no longer possible to change
-	* palette dynamically because copperlist
-	* changes banks & LOCT flag on top of the frame
+
     move.w #0x83E0,dmacon(a5)
 
 	* install keyboard and vblank/copper handler
@@ -876,19 +902,60 @@ osd_disable_vblank_interrupt:
 	move.w	#0x0030,_custom+intena
 	rts
 		
-* d6=screen address (preserved), d0=attribute (preserved)
-* d6 starts at 0x5000
-osd_w_bg_colorram:
+
+* 32 couple of values.
+* 2 bytes: offset 0: scroll value, 1: palette clut
+
+osd_reset_attributes:
     .ifeq OPT_DISABLE_BG_LAYER
-	movem.l	d0-d1/d6/d7/a0-a1,-(a7)
-	sub.w	#SCREEN_ADDRESS,d6
-	lea		bg_colorram,a1
-	move.b	d0,(a1,d6.w)	| store attribute in bg table
-	lea		bg_videoram,a1
-	move.b	d0,d1
-	move.b	(a1,d6.w),d0	| fetch tile from character grid
-	**bsr.b	update_bg_tile
-	movem.l	(a7)+,d0-d1/d6/d7/a0-a1
+	movem.l	d0-d2/a0-a4,-(a7)
+	lea		bg_color_table,a1
+	lea		bg_cluts,a2
+	lea		bg_colorram,a5
+	move.w	#32-1,d0
+	moveq	#0,d2
+0:
+	clr.w	d1
+	clr.w	(a5)+
+	move.b	d1,d2
+	lsl.w	#3,d2				| offset of clut
+	lea		(2,a2,d2.w),a3		| skip first black color
+	* now change copperlist for this line
+	move.l	(a1)+,a4
+	move.w	(a3)+,(2,a4)
+	move.w	(a3)+,(6,a4)
+	move.w	(a3)+,(10,a4)
+	dbf		d0,0b
+	movem.l	(a7)+,d0-d2/a0-a4
+   .endif | OPT_DISABLE_BG_LAYER
+	rts
+
+* < A0: pointer on attributes
+* 32 couple of values.
+* 2 bytes: offset 0: scroll value, 1: palette clut
+
+osd_update_attributes:
+    .ifeq OPT_DISABLE_BG_LAYER
+	movem.l	d0-d2/a0-a5,-(a7)
+	lea		bg_color_table,a1
+	lea		bg_cluts,a2
+	lea		bg_colorram,a5
+
+	move.w	#32-1,d0
+	moveq	#0,d2
+0:
+	move.w	(a0)+,d1
+	move.w	d1,(a5)+
+	move.b	d1,d2
+	lsl.w	#3,d2				| offset of clut
+	lea		(2,a2,d2.w),a3		| skip first black color
+	* now change copperlist for this line
+	move.l	(a1)+,a4
+	move.w	(a3)+,(2,a4)
+	move.w	(a3)+,(6,a4)
+	move.w	(a3)+,(10,a4)
+	dbf		d0,0b
+	movem.l	(a7)+,d0-d2/a0-a5
    .endif | OPT_DISABLE_BG_LAYER
 	rts
 
@@ -898,7 +965,7 @@ osd_w_bg_colorram:
 
 osd_w_bg_videoram:
     .ifeq OPT_DISABLE_BG_LAYER
-	movem.l	d0-d3/d6/a0-a1,-(a7)
+	movem.l	d0-d3/d6/a0-a2,-(a7)
 	sub.w	#SCREEN_ADDRESS,d6
 	cmp.w	#0x800,d6
 	bcs.b	1f
@@ -911,14 +978,9 @@ osd_w_bg_videoram:
 	cmp.b	(a1),d0
 	beq.b	0f		| already the proper value
 	move.b	d0,(a1)	| update logical grid
-	lea		bg_colorram,a1
-	move.w	d6,d3
-	add.w	d3,d3		| 2 bytes per character (scroll+attribute)
-	move.b	(a1,d3.w),d1	| scroll value
-	move.b	(1,a1,d3.w),d2	| color & X/Y flip data
 	bsr.b		update_bg_tile
 0:
-	movem.l	(a7)+,d0-d3/d6/a0-a1
+	movem.l	(a7)+,d0-d3/d6/a0-a2
     .endif | OPT_DISABLE_BG_LAYER
 	rts
 
@@ -1012,21 +1074,32 @@ update_bg_tile:
 	lsl.w	#3,d3		| times 8
 	add.w	d3,a1
 	add.w	d6,a1
+	cmp.b	#0x10,d0	| empty character
+	jeq	1f
 	lea		characters,a0
 	add.w	d0,d0
 	add.w	d0,d0
 	move.l	(a0,d0.w),d0
-	beq.b	0f
+	jeq	1f
 	move.l	d0,a0
-	
 	.set	offset,0
 	.rept	8
-	move.b	(a0)+,(offset,a1)
+	move.b	(a0)+,d0
+	move.b	d0,(offset,a1)
+	move.b	d0,(offset+BG_SCREEN_PLANE_SIZE,a1)
+	
 	.set	offset,offset+NB_BYTES_PER_ROW
 	.endr
 0:
 	rts
-		
+1:
+	.set	offset,0
+	.rept	8
+	clr.b	(offset,a1)
+	clr.b	(offset+BG_SCREEN_PLANE_SIZE,a1)
+	.set	offset,offset+NB_BYTES_PER_ROW
+	.endr
+	rts
 		
 
 
@@ -1874,6 +1947,7 @@ osd_read_dipswitches_old:
 osd_read_dipswitches:
 	moveq	#-1,d0
 	move.w	#0xC0,d1	| free play: 0xC0, insert coin doesn't work ATM
+	move.w	#0x00,d1	| free play: 0xC0, insert coin doesn't work ATM
 	moveq	#0,d2
 
 	movem.l	a0,-(a7)
@@ -2666,8 +2740,6 @@ graphicsname:
 	.byte	0
 normal_hiscorename:
 	.asciz	"galaxian.high"
-super_hiscorename:
-	.asciz	"super_galaxian.high"
 floppy_file:
 	.ascii	"floppy"
 	.byte	0
@@ -2682,36 +2754,24 @@ palette:
 
 		.align 4
 	
-	.ifne	OPT_ENABLE_LOGGING
-bg_tile_log:
-	ds.b	0x200*64    | there are 128 CLUTs but 1 bit is decided by tile code
-sprite_tile_log:
-	ds.b	320*128    | there are 128 CLUTs
-	.endif
-* using 2 tiles/sprite only
-*scb1_shadow:									ds.w 	128*4*2
-scb3_shadow:									ds.w 	128*2
-scb4_shadow:									ds.w 	128*2
-*scb4_shadow_2:								ds.w	128*2
 
 .align 2
 irq_cnt:											ds.w		1
 		.data
 
-* 36 rows = 288 pixels
+* 32 rows = 256 pixels
 * table of the colors for fg tiles in the copperlist
-_fg_color_table:
-	.set	fgrow_offset,2
-	.long	color_row_0+4+fgrow_offset
-	.rept	28
-	.long	color_row_1+4+fgrow_offset
-	.set	fgrow_offset,fgrow_offset+8
+	.set	row_offset,0
+bg_color_table:
+	.rept	29
+	.long	color_row_0+4+row_offset
+	.set	row_offset,row_offset+16
 	.endr
-	.long	color_row_30+2
-	.set	fgrow_offset,2
+	.long	color_row_30
+	.set	row_offset,0
 	.rept	6
-	.long	color_row_30_plus+fgrow_offset
-	.set	fgrow_offset,fgrow_offset+8
+	.long	color_row_30_plus+row_offset
+	.set	row_offset,row_offset+16
 	.endr
 
 		.bsschip
@@ -2804,49 +2864,37 @@ sprites:
 end_color_copper:
    * dynamic colors for fg tile color each 8 lines
 	.set    beampos,0x1C01
-	.set    fgcol,0X1FE  | temp color+2
-	.set    testcol,0x0
+	.set	start_color,color
 color_row_0:
+	.rept	29
 	dc.w	beampos,0xFFFE
-	dc.w	fgcol,0xfa0    | orange
+	dc.w	start_color+2,0 
+	dc.w	start_color+4,0 
+	dc.w	start_color+6,0   
 	.set	beampos,beampos+0x800
-	.set	testcol,testcol+0x011
-color_row_1:
-	.rept	28
-	dc.w	beampos,0xFFFE
-	dc.w	fgcol,(testcol & 0x0FFF)
-	.set	beampos,beampos+0x800
-	.set	testcol,testcol+0x011
 	.endr
 	* pal limit
-    dc.w  0xFFCF,0xFFFE       | PAL wait (should be 0xFFDF but probably fmode=3 changes it)
+    dc.w  0xFFDF,0xFFFE       | PAL wait (should be 0xFFDF but probably fmode=3 changes it)
     dc.w  0x0401,0xFFFE
 	
 color_row_30:
-	dc.w	fgcol,0xFFF
+	dc.w	start_color+2,0 
+	dc.w	start_color+4,0 
+	dc.w	start_color+6,0   
     dc.w  0x0C01,0xFFFE           
 	.set    testcol,0xF0
 	.set    beampos,0x1401
 	
 color_row_30_plus:
 	.rept	4
-	dc.w	fgcol,(testcol & 0x0FFF)
+	dc.w	color+2,0 
+	dc.w	color+4,0 
+	dc.w	color+6,0   
 	dc.w	beampos,0xFFFE
 	.set	beampos,beampos+0x800
-	.set	testcol,testcol+0x022
 	.endr
-	* last row color is changed 4 pixels earlier
-	* to match the 4 pixel shift hack on the last row for foreground tiles
-	* (else lives and credits don't get displayed fully)
-	dc.w	fgcol,(testcol & 0x0FFF)
-	dc.w	beampos-0x400,0xFFFE
-	.set	testcol,testcol+0x022
-
-	dc.w	fgcol,(testcol & 0x0FFF)
  	dc.w	beampos+0x400,0xFFFE   | wait before interrupt, avoid losing last bobs lines
     dc.w	 intreq,0x8010
-	*dc.w	color,(0xF0F)
-	*dc.w	fgcol,0xF00	| test
     dc.l    -2					
 	
 

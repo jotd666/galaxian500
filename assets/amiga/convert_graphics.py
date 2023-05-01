@@ -13,9 +13,9 @@ def dump_asm_bytes(*args,**kwargs):
 
 black = (0,0,0)
 # brown only used for flagship, in sprite palette
-brown = (195,62,0)
+brown = (0xC3,0x3E,0)
 # white used for shots
-white = (217,217,217)
+white = (0xC3,0xC3,0xD9)
 # cyan for aliens & ship
 cyan = (0,195,217)
 # for ship & flags
@@ -25,14 +25,15 @@ pink = (195,0,217)
 yellow = (224,224,0)
 red = (224,0,0)
 violet = (133,0,217)
+blue = (0,91,217)
 
-deep_blue = (0,0,217)
+deep_blue = (0,0,0xD9)
 # 7 base colors
 base_palette = [black,
 red,
 cyan,
 deep_blue,
-(0,91,217),    # blue
+blue,    # blue
 yellow,
 violet
 ]
@@ -48,22 +49,21 @@ flagship_sprite_palette +   # 4-5: 2 flagships
 [black,pink,pink,pink]    # 6: score, 7: starfield
 )
 
-attribute_palette = [white,
-yellow,
-yellow,
-red,
-red,
-red,
-cyan,
-violet]
+bg_cluts = [(black,)+x for x in (
+(black,black,white),
+(brown,deep_blue,yellow),
+(blue,red,yellow),
+(deep_blue,violet,red),
+(blue,(0,133, 148),red),
+(black,black,red),
+(white,red,cyan),
+(yellow,red,violet))]
 
 palette = tile_palette + bob_palette + sprite_palette
 
 with open(os.path.join(src_dir,"palette.68k"),"w") as f:
     #f.write("palette:\n")
     bitplanelib.palette_dump(palette,f,pformat=bitplanelib.PALETTE_FORMAT_ASMGNU)
-    f.write("* attributes\n")
-    bitplanelib.palette_dump(attribute_palette,f,pformat=bitplanelib.PALETTE_FORMAT_ASMGNU)
 
 # convert fonts
 fonts = Image.open(os.path.join(this_dir,"text.png"))
@@ -93,6 +93,11 @@ for i in range(0,10):
 
 with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
     f.write("\t.global\tcharacters\n")
+    f.write("\t.global\tbg_cluts\n")
+    f.write("bg_cluts:")
+    amiga_cols = [bitplanelib.to_rgb4_color(x) for clut in bg_cluts for x in clut]
+    bitplanelib.dump_asm_bytes(amiga_cols,f,mit_format=True,size=2)
+
     f.write("characters:\n")
     for i,c in enumerate(character_codes):
         if c is not None:
