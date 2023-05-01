@@ -970,7 +970,7 @@ osd_w_bg_videoram:
 	cmp.w	#0x800,d6
 	bcs.b	1f
 	* should not happen
-	**bsr		osd_break
+	bsr		osd_break
 	move.w	#0,d6
 1:
 	lea		bg_videoram,a1

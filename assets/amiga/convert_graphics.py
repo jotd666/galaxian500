@@ -6,6 +6,7 @@ import collections
 
 this_dir = os.path.dirname(__file__)
 src_dir = os.path.join(this_dir,"../../src/amiga")
+ripped_tiles_dir = os.path.join(this_dir,"../tiles")
 dump_dir = os.path.join(this_dir,"dumps")
 
 def dump_asm_bytes(*args,**kwargs):
@@ -62,17 +63,20 @@ bg_cluts = [(black,)+x for x in (
 palette = tile_palette + bob_palette + sprite_palette
 
 with open(os.path.join(src_dir,"palette.68k"),"w") as f:
-    #f.write("palette:\n")
     bitplanelib.palette_dump(palette,f,pformat=bitplanelib.PALETTE_FORMAT_ASMGNU)
+
+# open tiles
+mame_tiles = Image.open(os.path.join(ripped_tiles_dir,"gfxset0 tiles 24x8 colors 8 set 3_0000.png"))
+# for some reason, ripped tile height is x3, reduce size vertically
 
 # convert fonts
 fonts = Image.open(os.path.join(this_dir,"text.png"))
 
 # missing: colon (0xD3), dash (0x91)
 fonts_matrix = [list(range(0x11,0x11+15)),
-list(range(0x11+15,0x11+27))+[5,5,5,5],  # yet unknown codes
-list(range(0,10))+[6,6,6],
-[0xCA,0xCB,0xCC,0xCD,0xCE,0xCF,0x9E,0x9F]  # namco codes
+list(range(0x11+15,0x11+26))+[0xFF,0xFF,0xD1-0x30,0xD2-0x30,0xD3-0x30],  # pts
+list(range(0,10))+[0xFF,0x2B,0xFF],
+[x-0x30 for x in [0xCA,0xCB,0xCC,0xCD,0xCE,0xCF,0x9E,0x9F]]  # namco codes
 ]
 
 character_codes = [None] * 256

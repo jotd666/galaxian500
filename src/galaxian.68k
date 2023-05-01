@@ -913,7 +913,6 @@ galaxian_irq:
 *007C: 11 00 58      ld   de,0x5800            | start of screen attribute RAM
 *007F: 01 80 00      ld   bc,0x0080            | number of bytes to copy from OBJRAM_BACK_BUF 
 *0082: ED B0         ldir                     | update screen & sprites in one go
-	move.l	OBJRAM_BACK_BUF,0x100	| debug
 * read ports and stash values read in RAM
 	move.b	PREV_PREV_PORT_STATE_6000,d0                       	| read previous, previous state of port 6000 (SW0) [ld   a,(0x4015)]
 	move.b	d0,PREV_PREV_PREV_PORT_STATE_6000                       	| and write to PREV_PREV_PREV_PORT_STATE_6000 [ld   (0x4016),a]
@@ -1482,7 +1481,7 @@ SCROLL_ON_CONVOY_CHARGER_POINTS:
 	jbsr	HANDLE_ALIEN_SWARM_SCROLL_RESET
 	jbsr	HANDLE_INFLIGHT_ALIEN_SPRITE_UPDATE
 	jbsr	HANDLE_INFLIGHT_ALIENS
-
+	
 	jbsr	HANDLE_DRAW_CONVOY_CHARGER_POINTS
 	subq.b	#1,TEMP_COUNTER_1
 	beq.b	0f
@@ -1818,53 +1817,60 @@ CLEAR_DEMO_CONVOY_CHARGER_POINTS:
 *
 * Handles the drawing and blinking of the CONVOY CHARGER points values in the demo.
 *
+*
+* Handles the drawing and blinking of the CONVOY CHARGER points values in the demo.
+*
 
 HANDLE_DRAW_CONVOY_CHARGER_POINTS:
-	tst.b	ATTRACT_MODE_SCROLL_ID
+	move.b	ATTRACT_MODE_SCROLL_ID(pc),d0                       	| read ATTRACT_MODE_SCROLL_ID [ld   a,(0x4241)]
 	bne.b	0f
-	rts					| if its zero, not time to scroll anything in yet, return
+	rts                                    	| if its zero, not time to scroll anything in yet, return [ret  z]
 0:
-	subq.b	#1,d0		| JOTD: if its one, seems that it's the same!
-	bne.b	1f
-	rts
-1:
-	move.b	d0,d1
-	move.b	TIMING_VARIABLE(pc),d0
-	move.b	d0,d2				 | save it in C 
-	and.w	#0x3F,d0                 | mask in bits 0..5. Now A is a value from 0..63 decimal.
-	bne.b	2f
-	jbsr	CLEAR_DEMO_CONVOY_CHARGER_POINTS 	| if bits 0..5 are not set, call CLEAR_DEMO_CONVOY_CHARGER_POINTS
-2:
-	cmp.b	#0x20,d0
-	bne.b	3f		| If A is not exactly 0x20 exit
-	rts
-3:
+	subq.b	#1,d0                           	| [dec  a]
+	bne.b	0f
+	rts                                    	| [ret  z]
+0:
 
-* When we get here, we need to compute what flagship scores we are going to draw. 
+	move.b	d0,d1                           	| [ld   b,a]
+	move.b	TIMING_VARIABLE(pc),d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
+	move.b	d0,d2                           	| save it in C [ld   c,a]
+	and.b	#0x3F,d0                         	| mask in bits 0..5. Now A is a value from 0..63 decimal. [and  0x3F]
+	jeq	CLEAR_DEMO_CONVOY_CHARGER_POINTS                             	| if bits 0..5 are not set, call CLEAR_DEMO_CONVOY_CHARGER_POINTS [jr   z,0x03C0]
+
+	cmp.b	#0x20,d0                         	| If A is not exactly 0x20.. [cp   0x20]
+	beq.b	0f
+	rts                                    	| .. exit [ret  nz]
+0:
+
+* When we get here, we need to compute what flagship scores we are going to draw.
 * We basically take the value in TIMING_VARIABLE, AND the value by 3 to give an index value in range of 0..3, then
-* multiply the index by 3 to give an offset into the flagship score table @0x039A.  
+* multiply the index by 3 to give an offset into the flagship score table @0x039A.
 * The end result is cycling flagship values.
+	move.b	d2,d0                           	| A = TIMING_VARIABLE saved in C [ld   a,c]
+	rol.b	#2,d0                            	| [rlca]*2
+	and.b	#0x03,d0                         	| now A is a value from 0..3. A is now an index into table @0x039A [and  0x03]
+	move.b	d0,d2                           	| multiply A... [ld   c,a]
+	add.b	d0,d0                            	| [add  a,a]
+	add.b	d2,d0                            	| .. by 3 [add  a,c]
+	and.w	#0xff,d0                     	| extend A into DE. Now DE is an offset to add to HL
 
-	rol.b	#2,d2		| TIMING_VARIABLE saved in d2
-	and.w	#3,d2		| now d2 is a value from 0..3. d2 is now an index into table @0x039A 
-	move.w	d2,d0
-	add.w	d2,d2
-	add.w	d0,d2		| multiply d2 by 3
-	lea		flagship_table_039A,a0
-	move.w	#0x5193,d3      | address in character RAM
-	jbsr	DRAW_3_CHARACTERS
-	subq.b	#1,d1
-	bne.b	4f
-	rts
-4:
-	subq.b	#1,d1
-	and.w	#0xFF,d1
-* The alien scores are static and don't cycle, so we just draw them straight from the table 
-	lea	alien_table_03A6(pc),a0				| pointer to Alien score table
-5:
-	jbsr	DRAW_3_CHARACTERS
-	dbf		d1,5b
-	rts
+	lea	flagship_table_039A(pc),a0                      	| pointer to Flagship score table [ld   hl,0x039A]
+	add.w	d0,a0
+	move.w	#0x5193,d3                      	| address in character RAM [ld   de,0x5193]
+	jbsr	DRAW_3_CHARACTERS                            	| call DRAW_3_CHARACTERS [call 0x03AF]
+	subq.b	#1,d1                           	| [dec  b]
+	bne.b	0f
+	rts                                    	| [ret  z]
+0:
+
+* The alien scores are static and don't cycle, so we just draw them straight from the table
+	lea	alien_table_03A6(pc),a0                      	| pointer to Alien score table [ld   hl,0x03A6]
+l_0394:
+	jbsr	DRAW_3_CHARACTERS                            	| call DRAW_3_CHARACTERS [call 0x03AF]
+	subq.b	#1,d1                           	| [...]
+	jne	l_0394                             	| [djnz 0x0394]
+	rts                                    	| [ret]
+
 
 
 *
@@ -2278,7 +2284,7 @@ INFLIGHT_ALIEN_CONVOY_CHARGER_START_SCROLL:
 
 	move.b	(IndexInSwarm,a2),d0                    	| read INFLIGHT_ALIEN.IndexInSwarm [ld   a,(ix+0x07)]
 	add.b	#0x4B,d0                         	| set bit 6 to indicate the text needs to be scrolled on [add  a,0x4B]
-	move.w	#0x300,d3		| command is PRINT_TEXT
+	move.w	#0x600,d3		| command is PRINT_TEXT
 	move.b	d0,d3
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
 	addq.b	#1,(StageOfLife,a2)                    	| advance to next stage of alien's life [inc  (ix+0x02)]
@@ -3090,6 +3096,7 @@ DISPLAY_SCORE_COMMAND:
 	cmp.b	#3,d0
 	bcc.b		DISPLAY_ALL_SCORES       	| if A>= #0x03, goto 0x224D, DISPLAY_ALL_SCORES
 	lea			PLAYER_ONE_SCORE+2(pc),a0	| pointer to last 2 BCD digits of PLAYER_ONE_SCORE
+	tst.b	d0
 	beq.b		DECIDE_TO_DISPLAY_PLAYER_ONE_OR_PLAYER_TWO_SCORE	| if A is 0
 	subq.b		#1,d0				    | if A was 1 on entry, then Z flag is now set
 	bne.b		DISPLAY_HIGH_SCORE
@@ -5127,7 +5134,6 @@ l_2228:
 
 
 PRINT_TEXT_COMMAND:
-
 	lea	TEXTPTRS(pc),a0			    	| HL = address of TEXTPTRS [ld   hl,0x235C]
 	and.w	#0xFF,d0
 	add.b	d0,d0						| A = A * 2.   This may affect C and PO flags. [add  a,a]
@@ -5222,23 +5228,23 @@ l_234f:
 
 
 TEXTPTRS:                                     
-	dc.l	TXT_GAME_OVER
-	dc.l	TXT_PUSH_START_BUTTON  
-	dc.l	TXT_PLAYER_ONE 
-	dc.l	TXT_PLAYER_TWO 
-	dc.l	TXT_HIGH_SCORE
-	dc.l	TXT_CREDIT
-	dc.l	TXT_BONUS_GALIXIP_FOR___000_PTS  
-	dc.l	TXT_CONVOY_CHARGER 
-	dc.l	TXT___SCORE_ADVANCE_TABLE__
-	dc.l	TXT_MISSION__DESTROY_ALIENS
-	dc.l	TXT_WE_ARE_THE_GALAXIANS
-	dc.l	TXT_30_______60__PTS 
-	dc.l	TXT_40_______80__PTS
-	dc.l	TXT_50______100__PTS
-	dc.l	TXT_60______300__PTS
-	dc.l	TXT_NAMCO_logo
-	dc.l	TXT_FREE_PLAY
+	dc.l	TXT_GAME_OVER						| 0
+	dc.l	TXT_PUSH_START_BUTTON				| 1  
+	dc.l	TXT_PLAYER_ONE 						| 2
+	dc.l	TXT_PLAYER_TWO						| 3 
+	dc.l	TXT_HIGH_SCORE						| 4
+	dc.l	TXT_CREDIT							| 5
+	dc.l	TXT_BONUS_GALIXIP_FOR___000_PTS     | 6
+	dc.l	TXT_CONVOY_CHARGER                  | 7
+	dc.l	TXT___SCORE_ADVANCE_TABLE__         | 8
+	dc.l	TXT_MISSION__DESTROY_ALIENS         | 9
+	dc.l	TXT_WE_ARE_THE_GALAXIANS            | 10
+	dc.l	TXT_30_______60__PTS                | 11
+	dc.l	TXT_40_______80__PTS                | 12
+	dc.l	TXT_50______100__PTS                | 13
+	dc.l	TXT_60______300__PTS                | 14
+	dc.l	TXT_NAMCO_logo                      | 15
+	dc.l	TXT_FREE_PLAY                       | 16
 
 
 *
@@ -7522,7 +7528,7 @@ TXT_WE_ARE_THE_GALAXIANS:
 TXT_30_______60__PTS:
 	.word	0x52D9
 	.ascii	"@@30@@@@@@@60@@"
-	.byte	0xD1,0xD2,0xD3,0x3F
+	.byte	0xD1,0xD2,0xD3,0x3F	| pts
 	.align	2
 TXT_40_______80__PTS:
 	.word	0x52D7
@@ -7540,7 +7546,7 @@ TXT_60______300__PTS:
 	.byte	0xD1,0xD2,0xD3,0x3F
 	.align	2
 TXT_NAMCO_logo:
-	.word	0x52C7
+	.word	0x527C
 	.byte	0xCA,0xCB,0xCC,0xCD,0xCE,0xCF,0x9E,0x9F,0x3F
 	.align	2
 TXT_FREE_PLAY:
