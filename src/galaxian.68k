@@ -1167,7 +1167,7 @@ HANDLE_ALIEN_SWARM_SCROLL_RESET:
 *
 
 HANDLE_SWARM_MOVEMENT:
-	btst.b	#0,HAS_PLAYER_BULLET_BEEN_FIRED                         	| test bit 0. [bit  0,(hl)]
+	tst.b	HAS_PLAYER_BULLET_BEEN_FIRED                         	| test bit 0. [bit  0,(hl)]
 	jeq	l_093e                             	| If player hasn't fired, goto 0x093E [jr   z,0x093E]
 	move.b	PLAYER_BULLET_X(pc),d0                         	| read X coordinate of bullet [ld   a,(hl)]
 	sub.b	#0x22,d0                         	| [sub  0x22]
@@ -4604,7 +4604,7 @@ DRAW_ALIEN_COMMAND:
 DELETE_ALIEN_COMMAND:
 	jbsr	GET_ALIEN_CHAR_RAM_ADDR                            	| call GET_ALIEN_CHAR_RAM_ADDR [call 0x20E1]
 	tst.b	d7
-	jne	PLOT_CHARACTERS_2_BY_2_ASCENDING                             	| jump to PLOT_CHARACTERS_2_BY_2_ASCENDING [jp   c,0x2583]
+	jne	PLOT_CHARACTERS_2_BY_2_ASCENDING                             	|  [jp   c,0x2583]
 	jra	l_25a7                             	| plot two spaces in the same column [jp   0x25A7]
 
 
@@ -4634,10 +4634,10 @@ HANDLE_SWARM_ANIMATION:
 0:
 
 * animate each alien in the column
-	move.w	#0x10,d2                        	| sizeof a row of aliens in ALIEN_SWARM_FLAGS [ld   c,0x10]
+	*move.w	#0x10,d2                        	| sizeof a row of aliens in ALIEN_SWARM_FLAGS [ld   c,0x10]
 	move.b	#0x06,d1                        	| number of rows of aliens to process. [ld   b,0x06]
 l_207d:
-	movem.w	d2/d3,-(a7)				| [push bc]
+	move.w	d1,-(a7)				| [push bc] we don't care about d2
 	move.l	a0,-(a7)		| [push hl]
 	move.l	a0,d0
 	sub.l	#ALIEN_SWARM_FLAGS,d0         	| [ld   a,l] (adapted, compute alien index in swarm)
@@ -4655,8 +4655,8 @@ l_2089:
 
 l_2094:
 	move.l	(a7)+,a0		| [pop hl]
-	movem.w	(a7)+,d2/d3				| [pop bc]
-	add.w	d2,a0			| HL = HL + 16 decimal. Now HL points to alien above, in same column
+	move.w	(a7)+,d1				| [pop bc]
+	add.w	#0x10,a0			| HL = HL + 16 decimal. Now HL points to alien above, in same column
 	subq.b	#1,d1                           	| [...]
 	jne	l_207d                             	| repeat until all rows of aliens done [djnz 0x207D]
 	rts                                    	| [ret]
@@ -4862,8 +4862,8 @@ CALCULATE_ALIEN_ANIMATION_FRAME_INDEX:
 *
 *
 * Expects:
-* B = animation frame index
-* HL = character RAM address to plot alien
+* B (D1) = animation frame index
+* HL (D6) = character RAM address to plot alien
 * Carry flag (D7) = if set, draw characters on odd row
 
 DRAW_ALIEN:
@@ -4892,7 +4892,7 @@ l_2146:
     move.b	(a0,d0.w),d0                           	| call routine to fetch value @ HL + A [rst  0x20]
 l_214a:
 	| [ex   de,hl]
-	jra	PLOT_CHARACTERS_2_BY_2_ASCENDING                             	| jump to PLOT_CHARACTERS_2_BY_2_ASCENDING [jp   0x2585]
+	jra	PLOT_CHARACTERS_2_BY_2_ASCENDING                             	| jump to  [jp   0x2585]
 
 
 *
@@ -5461,8 +5461,8 @@ l_2583:
 * The next 3 characters are derived automatically by incrementing A after each character drawn.
 *
 * Expects:
-* A = ordinal of first character to poke to character RAM. 
-* HL = pointer to character RAM address
+* A (D0) = ordinal of first character to poke to character RAM. 
+* HL (D6) = pointer to character RAM address
 * 
 * Resulting layout is:
 *

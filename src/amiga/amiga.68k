@@ -24,6 +24,9 @@ SCORE_FILE_SIZE = 16*5
 
 SPRITE_LIFETIME = 2
 
+* debug: no screen dirty update, no scrolling,
+* draws on screen when instructed
+DIRECT_SCREEN_DRAW = 1
 
 	.ifdef	RELEASE
 OPT_ENABLE_PROFILING = 0
@@ -972,7 +975,10 @@ osd_update_graphics:
 	move.w	(a3)+,(10,a4)
 	dbf		d0,0b
 	* update dirty lines
+	.ifndef	DIRECT_SCREEN_DRAW
 	bsr		update_rows
+	.endif
+	
 	movem.l	(a7)+,d0-d2/a0-a6
    .endif | OPT_DISABLE_BG_LAYER
 	rts
@@ -1003,75 +1009,6 @@ osd_w_bg_videoram:
 	rts
 
 	
-.macro	CLEAR_TILE
-	.set	offset,0
-	.rept	8
-	clr.b	(offset,a1)
- 	.set	offset,offset+NB_BYTES_PER_ROW
-	.endr
-	.endm
-.macro	CLEAR_TILE_NO_MIRROR
-	.set	offset,0
-	.rept	8
-	clr.b	(offset,a1)
- 	.set	offset,offset+NB_BYTES_PER_ROW
-	.endr
-	.endm
-.macro	STRAIGHT_BG_TILE
-	.set	offset,0
-	.rept	2
-	move.l	(a0)+,d0
-	move.b	d0,(3*NB_BYTES_PER_ROW+offset,a1)
-	.ifne	BG_MIRROR
-	move.b	d0,(3*NB_BYTES_PER_ROW+offset,a2)
-	.endif
-	lsr.l	#8,d0
-	move.b	d0,(2*NB_BYTES_PER_ROW+offset,a1)
-	.ifne	BG_MIRROR
-	move.b	d0,(2*NB_BYTES_PER_ROW+offset,a2)
-	.endif
-	lsr.l	#8,d0
-	move.b	d0,(1*NB_BYTES_PER_ROW+offset,a1)
-	.ifne	BG_MIRROR
-	move.b	d0,(1*NB_BYTES_PER_ROW+offset,a2)
-	.endif
-	lsr.w	#8,d0
-	move.b	d0,(offset,a1)
-	.ifne	BG_MIRROR
-	move.b	d0,(offset,a2)
-	.endif
-	.set	offset,4*NB_BYTES_PER_ROW
-	.endr
-	.endm
-	
-.macro	FLIPPED_BG_TILE
-	.set	offset,NB_BYTES_PER_ROW*4
-	.rept	2
-	* get all planes at once in d0
-	* then shift bits to get individual bytes
-	move.l	(a0)+,d0
-	move.b	d0,(offset,a1)
-	.ifne	BG_MIRROR
-	move.b	d0,(offset,a2)
-	.endif
-	lsr.l	#8,d0
-	move.b	d0,(1*NB_BYTES_PER_ROW+offset,a1)
-	.ifne	BG_MIRROR
-	move.b	d0,(1*NB_BYTES_PER_ROW+offset,a2)
-	.endif
-	lsr.l	#8,d0
-	move.b	d0,(2*NB_BYTES_PER_ROW+offset,a1)
-	.ifne	BG_MIRROR
-	move.b	d0,(2*NB_BYTES_PER_ROW+offset,a2)
-	.endif
-	lsr.w	#8,d0
-	move.b	d0,(3*NB_BYTES_PER_ROW+offset,a1)
-	.ifne	BG_MIRROR
-	move.b	d0,(3*NB_BYTES_PER_ROW+offset,a2)
-	.endif
-	.set	offset,0
-	.endr
-	.endm
 	
 update_rows:
     movem.l d0-d7/a0-a6,-(a7)
@@ -1088,6 +1025,7 @@ update_rows:
 	* now blit the dirty row
 	moveq	#0,d0
 	move.b	(1,a4,d6.w),d0		| scroll offset
+	moveq	#0,d0		| TEMP no scroll
 	move.w	#NB_BYTES_PER_ROW,d2
 	move.w	d0,d3
 	lsr.w	#3,d3		| divide by 8 to get byte shift
@@ -1165,13 +1103,18 @@ update_bg_tile:
 	st.b	(a1,d3.w)
 	* multiply by 240
 	lea		mulNB_BYTES_PER_ROW_table(pc),a0
+	.ifdef	DIRECT_SCREEN_DRAW
+	lea		bg_screen_data,a1
+	.else
 	lea		bg_screen_backbuffer,a1
+	.endif
 	move.w	(a0,d3.w),d3
 	lsl.w	#3,d3		| times 8
 	add.w	d3,a1
 	add.w	d6,a1
 	cmp.b	#0x10,d0	| empty character
 	jeq	1f
+
 	lea		characters,a0
 	add.w	d0,d0
 	add.w	d0,d0
@@ -2045,7 +1988,7 @@ osd_read_dipswitches_old:
 osd_read_dipswitches:
 	moveq	#-1,d0
 	move.w	#0xC0,d1	| free play: 0xC0, insert coin doesn't work ATM
-	move.w	#0x00,d1	| free play: 0xC0, insert coin doesn't work ATM
+	*move.w	#0x00,d1	| free play: 0xC0, insert coin doesn't work ATM
 	moveq	#0,d2
 
 	movem.l	a0,-(a7)
