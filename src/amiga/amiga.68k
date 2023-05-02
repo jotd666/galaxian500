@@ -206,7 +206,7 @@ w\@:
 		.global osd_calibrate_display		| for debug
 		.global osd_w_bg_videoram
 		.global osd_reset_attributes
-		.global osd_update_attributes
+		.global osd_update_graphics
 		.global osd_update_sprite_shadow
 		.global osd_update_32_sprite_hw
 		.global osd_read_dipswitches
@@ -930,17 +930,25 @@ osd_reset_attributes:
    .endif | OPT_DISABLE_BG_LAYER
 	rts
 
-* < A0: pointer on attributes
+* < A0: pointer on attributes/sprites/bullets
 * 32 couple of values.
 * 2 bytes: offset 0: scroll value, 1: palette clut
+* 5800-583F   01011AAAAAAAAAAA R/W DDDDDDDD   !OBJRAM Screen attributes
+* 5840-585F   01011AAAAAAAAAAA R/W DDDDDDDD   !OBJRAM Sprites
+* 5860-5FFF   01011AAAAAAAAAAA R/W DDDDDDDD   !OBJRAM Bullets
+* so pointer points to
+* - 0x40 bytes of attributes (2 byte per "column" - actually a row)
+* - 0x20 bytes of sprites
+* - 0x20 bytes of bullets
 
-osd_update_attributes:
+osd_update_graphics:
     .ifeq OPT_DISABLE_BG_LAYER
-	movem.l	d0-d2/a0-a5,-(a7)
+	movem.l	d0-d2/a0-a6,-(a7)
 	lea		bg_color_table,a1
 	lea		bg_cluts,a2
 	lea		bg_colorram,a5
-
+	lea		scroll_and_dirty_rows_values(pc),a6
+	
 	move.w	#32-1,d0
 	moveq	#0,d2
 0:
@@ -948,6 +956,14 @@ osd_update_attributes:
 	move.w	d1,(a5)+
 	move.b	d1,d2
 	lsl.w	#3,d2				| offset of clut
+	lsr.w	#8,d1
+	
+	cmp.b	(1,a6),d1			| check previous scroll value
+	beq.b	1f
+	st.b	(a6)				| mark row as dirty
+	move.b	d1,(1,a6)			| store scroll values
+1:
+	addq.w	#2,a6
 	lea		(2,a2,d2.w),a3		| skip first black color
 	* now change copperlist for this line
 	move.l	(a1)+,a4
@@ -955,7 +971,9 @@ osd_update_attributes:
 	move.w	(a3)+,(6,a4)
 	move.w	(a3)+,(10,a4)
 	dbf		d0,0b
-	movem.l	(a7)+,d0-d2/a0-a5
+	* update dirty lines
+	bsr		update_rows
+	movem.l	(a7)+,d0-d2/a0-a6
    .endif | OPT_DISABLE_BG_LAYER
 	rts
 
@@ -978,7 +996,7 @@ osd_w_bg_videoram:
 	cmp.b	(a1),d0
 	beq.b	0f		| already the proper value
 	move.b	d0,(a1)	| update logical grid
-	bsr.b		update_bg_tile
+	jbsr		update_bg_tile
 0:
 	movem.l	(a7)+,d0-d3/d6/a0-a2
     .endif | OPT_DISABLE_BG_LAYER
@@ -1055,6 +1073,81 @@ osd_w_bg_videoram:
 	.endr
 	.endm
 	
+update_rows:
+    movem.l d0-d7/a0-a6,-(a7)
+    lea _custom,A5
+	
+	clr.w	d6
+	lea		scroll_and_dirty_rows_values(pc),a4
+	lea		bg_screen_backbuffer,a3
+	lea		bg_screen_data,a6
+0:
+	tst.b	(a4,d6.w)
+	jeq		5f
+	clr.b	(a4,d6.w)	| ack as clean
+	* now blit the dirty row
+	moveq	#0,d0
+	move.b	(1,a4,d6.w),d0		| scroll offset
+	move.w	#NB_BYTES_PER_ROW,d2
+	move.w	d0,d3
+	lsr.w	#3,d3		| divide by 8 to get byte shift
+	sub.w	d3,d2		| change width depending on scroll offset
+	moveq	#8,d4		| height
+	move.l	a3,a0		| source (current row)
+	move.l	a6,a1		| dest (current row)
+
+    add.w   d3,a1       | X-offset plane position
+    move.l  #0x09f00000,d3    | A->D copy, ascending mode
+
+	move.w	#NB_BYTES_PER_ROW,d1
+
+    sub.w   d2,d1       | blit modulo
+    lsl.w   #6,d4
+    lsr.w   #1,d2
+    add.w   d2,d4       | blit height
+
+	* insert shifting in D3 bltcon config
+	and.w	#0xF,d0		| shifting 0-15
+	* apply to bltcon (destination)
+    swap    d0
+    clr.w   d0
+    lsl.l   #8,d0
+    lsl.l   #4,d0
+    or.l    d0,d3
+	
+    * always the same settings
+
+    * now just wait for blitter ready to write all registers
+	WAIT_BLIT
+    
+    * blitter registers set
+
+	move.l d3,bltcon0(a5)	| sets con0 and con1
+
+    move.w  d1,bltamod(a5)	|D modulo
+    move.w  d1,bltdmod(a5)	|D modulo
+							
+	move.l a0,bltapt(a5)	|source graphic top left corner
+	move.l a1,bltdpt(a5)	|destination top (bottom) left corner
+	move.w  d4,bltsize(a5)	|rectangle size, starts blit
+	
+	add.w	#BG_SCREEN_PLANE_SIZE,a0
+	add.w	#BG_SCREEN_PLANE_SIZE,a1
+	WAIT_BLIT
+	* second bitplane
+	move.l a0,bltapt(a5)	|source graphic top left corner
+	move.l a1,bltdpt(a5)	|destination top (bottom) left corner
+	move.w  d4,bltsize(a5)	|rectangle size, starts blit
+5:
+	add.w	#NB_BYTES_PER_ROW*8,a3	| 2 planes
+	add.w	#NB_BYTES_PER_ROW*8,a6	| 2 planes
+	addq.w	#2,d6
+	cmp.w	#NB_LINES/4,d6
+	jne		0b
+	movem.l	(a7)+,d0-d7/a0-a6
+	rts
+	
+	
 * d6: screen offset
 * d0: tile code
 * d1: attribute
@@ -1066,10 +1159,13 @@ update_bg_tile:
 	neg.w	d6
 	add.w	#32,d6
 	and.w	#0x1F,d3	| this is Y
+	* mark row as dirty
+	lea		scroll_and_dirty_rows_values(pc),a1
+	add.w	d3,d3
+	st.b	(a1,d3.w)
 	* multiply by 240
 	lea		mulNB_BYTES_PER_ROW_table(pc),a0
-	add.w	d3,d3
-	lea		bg_screen_data,a1
+	lea		bg_screen_backbuffer,a1
 	move.w	(a0,d3.w),d3
 	lsl.w	#3,d3		| times 8
 	add.w	d3,a1
@@ -1084,10 +1180,12 @@ update_bg_tile:
 	move.l	d0,a0
 	.set	offset,0
 	.rept	8
-	move.b	(a0)+,d0
-	move.b	d0,(offset,a1)
-	move.b	d0,(offset+BG_SCREEN_PLANE_SIZE,a1)
-	
+	move.b	(a0)+,(offset,a1)	
+	.set	offset,offset+NB_BYTES_PER_ROW
+	.endr
+	.set	offset,0
+	.rept	8
+	move.b	(a0)+,(offset+BG_SCREEN_PLANE_SIZE,a1)
 	.set	offset,offset+NB_BYTES_PER_ROW
 	.endr
 0:
@@ -2158,7 +2256,9 @@ highscore_loaded:
 	
 keyboard_table:
 	ds.b	0x100
-
+scroll_and_dirty_rows_values:
+	ds.w	0x20
+	
 pause_flag:
 	dc.w	0
     
@@ -2729,6 +2829,7 @@ active_hw_sprite_display_table:
 
 active_hw_sprite_lifetime:
 	ds.l	16
+
 	
 	.include	"sound_entries.68k"
 	
@@ -2778,6 +2879,10 @@ bg_color_table:
 	* some space to write tiles slightly outside screen
 	* (scrolling requires it so it's seamless)
 	ds.b	NB_BYTES_PER_ROW*12
+bg_screen_backbuffer:
+	ds.b	BG_SCREEN_SIZE
+	ds.b	NB_BYTES_PER_ROW*12*3
+	.align 0x8		| 8 else fmode=3 makes display wrong
 bg_screen_data:
 	ds.b	BG_SCREEN_SIZE
 	ds.b	NB_BYTES_PER_ROW*12*3

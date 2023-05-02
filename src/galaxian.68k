@@ -906,7 +906,7 @@ CALCULATE_TANGENT:
 
 galaxian_irq:
 	lea	OBJRAM_BACK_BUF(pc),a0
-	jbsr	osd_update_attributes
+	jbsr	osd_update_graphics
 *TODO
 * update screen in one go - IMPORTANT
 *0079: 21 20 40      ld   hl,0x4020            | pointer to OBJRAM_BACK_BUF buffer held in RAM
@@ -5134,6 +5134,10 @@ l_2228:
 
 
 PRINT_TEXT_COMMAND:
+*	cmp.b	#10,d0
+*	bne.b	0f
+*	bsr		osd_break
+*0:
 	lea	TEXTPTRS(pc),a0			    	| HL = address of TEXTPTRS [ld   hl,0x235C]
 	and.w	#0xFF,d0
 	add.b	d0,d0						| A = A * 2.   This may affect C and PO flags. [add  a,a]

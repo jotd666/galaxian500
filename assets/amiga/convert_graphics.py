@@ -26,6 +26,7 @@ pink = (195,0,217)
 yellow = (224,224,0)
 red = (224,0,0)
 violet = (133,0,217)
+pink = (195,0,217)
 blue = (0,91,217)
 
 deep_blue = (0,0,0xD9)
@@ -58,7 +59,36 @@ bg_cluts = [(black,)+x for x in (
 (blue,(0,133, 148),red),
 (black,black,red),
 (white,red,cyan),
-(yellow,red,violet))]
+(yellow,red,pink))]
+
+
+block_dict = {}
+
+# hackish convert of c gfx table to dict of lists
+with open(os.path.join(this_dir,"..","galaxian_gfx.c")) as f:
+    block = []
+    block_name = ""
+    start_block = False
+
+    for line in f:
+        if "uint8" in line:
+            # start group
+            start_block = True
+            if block:
+                txt = "".join(block).strip().strip(";")
+                block_dict[block_name] = {"size":size,"data":ast.literal_eval(txt)}
+                block = []
+            block_name = line.split()[1].split("[")[0]
+            size = int(line.split("[")[2].split("]")[0])
+        elif start_block:
+            line = re.sub("//.*","",line)
+            line = line.replace("{","[").replace("}","]")
+            block.append(line)
+
+    if block:
+        txt = "".join(block).strip().strip(";")
+        block_dict[block_name] = {"size":size,"data":ast.literal_eval(txt)}
+
 
 palette = tile_palette + bob_palette + sprite_palette
 
@@ -69,31 +99,28 @@ with open(os.path.join(src_dir,"palette.68k"),"w") as f:
 mame_tiles = Image.open(os.path.join(ripped_tiles_dir,"gfxset0 tiles 24x8 colors 8 set 3_0000.png"))
 # for some reason, ripped tile height is x3, reduce size vertically
 
-# convert fonts
-fonts = Image.open(os.path.join(this_dir,"text.png"))
 
-# missing: colon (0xD3), dash (0x91)
-fonts_matrix = [list(range(0x11,0x11+15)),
-list(range(0x11+15,0x11+26))+[0xFF,0xFF,0xD1-0x30,0xD2-0x30,0xD3-0x30],  # pts
-list(range(0,10))+[0xFF,0x2B,0xFF],
-[x-0x30 for x in [0xCA,0xCB,0xCC,0xCD,0xCE,0xCF,0x9E,0x9F]]  # namco codes
-]
+##fonts_matrix = [list(range(0x11,0x11+15)),
+##list(range(0x11+15,0x11+26))+[0xFF,0xFF,0xD1-0x30,0xD2-0x30,0xD3-0x30],  # pts
+##list(range(0,10))+[0xFF,0x2B,0xFF],
+##[x-0x30 for x in [0xCA,0xCB,0xCC,0xCD,0xCE,0xCF,0x9E,0x9F]]  # namco codes
 
-character_codes = [None] * 256
-character_codes[0x10] = bytes(8)  # blank
-for j,lst in enumerate(fonts_matrix):
-    y = j * 8
-    for i,e in enumerate(lst):
-        x = i * 8
-        img = Image.new('RGB',(8,8))
-        img.paste(fonts,(-x,-y))
-        #img.save(os.path.join(dump_dir,f"{x}_{y}.png"))
-        p = bitplanelib.palette_extract(img)
-        character_codes[e] = bitplanelib.palette_image2raw(img,None,p,forced_nb_planes=1)
 
-# duplicate digits in 0x90 area
-for i in range(0,10):
-    character_codes[0x90+i] = character_codes[i]
+character_codes = list()
+
+extraction_palette = bg_cluts[2]  # use a 4-color palette with 4 different colors!
+
+for k,chardat in enumerate(block_dict["tile"]["data"]):
+    img = Image.new('RGB',(8,8))
+    d = iter(chardat)
+    for i in range(8):
+        for j in range(8):
+            v = next(d)
+            img.putpixel((j,i),extraction_palette[v])
+    character_codes.append(bitplanelib.palette_image2raw(img,None,extraction_palette))
+    scaled = ImageOps.scale(img,5,0)
+    #scaled.save(os.path.join(dump_dir,f"char_{k:02x}.png"))
+
 
 with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
     f.write("\t.global\tcharacters\n")
