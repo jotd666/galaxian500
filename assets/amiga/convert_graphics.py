@@ -51,20 +51,10 @@ flagship_sprite_palette +   # 4-5: 2 flagships
 [black,pink,pink,pink]    # 6: score, 7: starfield
 )
 
-bg_cluts = [(black,)+x for x in (
-(black,black,white),
-(brown,deep_blue,yellow),
-(blue,red,yellow),
-(deep_blue,violet,red),
-(blue,(0,133, 148),red),
-(black,black,red),
-(white,red,cyan),
-(yellow,red,pink))]
-
-
 block_dict = {}
 
 # hackish convert of c gfx table to dict of lists
+# (Thanks to Mark Mc Dougall for providing the ripped gfx as C tables)
 with open(os.path.join(this_dir,"..","galaxian_gfx.c")) as f:
     block = []
     block_name = ""
@@ -89,21 +79,19 @@ with open(os.path.join(this_dir,"..","galaxian_gfx.c")) as f:
         txt = "".join(block).strip().strip(";")
         block_dict[block_name] = {"size":size,"data":ast.literal_eval(txt)}
 
+bg_cluts = []
+cuclut = []
+for clut in block_dict["clut"]["data"]:
+    cuclut.append(clut)
+    if len(cuclut)==4:
+        bg_cluts.append(cuclut)
+        cuclut = []
+
 
 palette = tile_palette + bob_palette + sprite_palette
 
 with open(os.path.join(src_dir,"palette.68k"),"w") as f:
     bitplanelib.palette_dump(palette,f,pformat=bitplanelib.PALETTE_FORMAT_ASMGNU)
-
-# open tiles
-mame_tiles = Image.open(os.path.join(ripped_tiles_dir,"gfxset0 tiles 24x8 colors 8 set 3_0000.png"))
-# for some reason, ripped tile height is x3, reduce size vertically
-
-
-##fonts_matrix = [list(range(0x11,0x11+15)),
-##list(range(0x11+15,0x11+26))+[0xFF,0xFF,0xD1-0x30,0xD2-0x30,0xD3-0x30],  # pts
-##list(range(0,10))+[0xFF,0x2B,0xFF],
-##[x-0x30 for x in [0xCA,0xCB,0xCC,0xCD,0xCE,0xCF,0x9E,0x9F]]  # namco codes
 
 
 character_codes = list()
@@ -118,9 +106,20 @@ for k,chardat in enumerate(block_dict["tile"]["data"]):
             v = next(d)
             img.putpixel((j,i),extraction_palette[v])
     character_codes.append(bitplanelib.palette_image2raw(img,None,extraction_palette))
-    scaled = ImageOps.scale(img,5,0)
+    #scaled = ImageOps.scale(img,5,0)
     #scaled.save(os.path.join(dump_dir,f"char_{k:02x}.png"))
 
+for k,sprdat in enumerate(block_dict["sprite"]["data"]):
+    for m,spritepal in enumerate(bg_cluts):
+        d = iter(sprdat)
+        img = Image.new('RGB',(16,16))
+        for i in range(16):
+            for j in range(16):
+                v = next(d)
+                img.putpixel((j,i),spritepal[v])
+
+        scaled = ImageOps.scale(img,5,0)
+        scaled.save(os.path.join(dump_dir,f"sprite_{k:02x}_{m}.png"))
 
 with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
     f.write("\t.global\tcharacters\n")

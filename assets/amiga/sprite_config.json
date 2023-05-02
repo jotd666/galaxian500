@@ -1,0 +1,364 @@
+{
+  "14": {
+    "cluts": [
+      2,
+      3,
+      4
+    ],
+    "name": "alien",
+    "mirror": true,
+    "clip_right": false
+  },
+  "15": {
+    "cluts": [
+      2,
+      3,
+      4
+    ],
+    "name": "alien",
+    "mirror": true,
+    "clip_right": false
+  },
+  "16": {
+    "cluts": [
+      2,
+      3,
+      4
+    ],
+    "name": "alien",
+    "mirror": true,
+    "clip_right": false
+  },
+  "17": {
+    "cluts": [
+      2,
+      3,
+      4
+    ],
+    "name": "alien",
+    "mirror": true,    "clip_right": false
+  },
+  "18": {
+    "cluts": [
+      2,
+      3,
+      4
+    ],
+    "name": "alien",
+    "mirror": true,    "clip_right": false
+  },
+  "19": {
+    "cluts": [
+      2,
+      3,
+      4
+    ],
+    "name": "alien",
+    "mirror": true,
+    "clip_right": false
+  },
+  "20": {
+    "cluts": [
+      2,
+      3,
+      4
+    ],
+    "name": "alien",
+    "mirror": true,
+    "clip_right": false
+  },
+  "21": {
+    "cluts": [
+      2,
+      3,
+      4
+    ],
+    "name": "alien",
+    "mirror": true,
+    "clip_right": false
+  },
+  "22": {
+    "cluts": [
+      2,
+      3,
+      4
+    ],
+    "name": "alien",
+    "mirror": true,
+    "clip_right": false
+  },
+  "23": {
+    "cluts": [
+      2,
+      3,
+      4
+    ],
+    "name": "alien",
+    "mirror": true,
+    "clip_right": false
+  },
+  "24": {
+    "cluts": [
+      6
+    ],
+    "name": "ship",
+    "mirror": false,
+    "clip_right": false
+  },
+  "25": {
+    "cluts": [
+      6
+    ],
+    "name": "ship_life",
+    "mirror": false,
+    "clip_right": false
+  },
+  "26": {
+    "cluts": [
+      6
+    ],
+    "name": "10_flag",
+    "mirror": false,
+    "clip_right": false
+  },
+  "27": {
+    "cluts": [
+      6
+    ],
+    "name": "flag",
+    "mirror": false,
+    "clip_right": true
+  },
+  "28": {
+    "cluts": [
+      7
+    ],
+    "name": "explosion_1",
+    "mirror": false,
+    "clip_right": false
+  },
+  "29": {
+    "cluts": [
+      7
+    ],
+    "name": "explosion_2",
+    "mirror": false,
+    "clip_right": false
+  },
+  "30": {
+    "cluts": [
+      7
+    ],
+    "name": "explosion_3",
+    "mirror": false,
+    "clip_right": false
+  },
+  "31": {
+    "cluts": [
+      7
+    ],
+    "name": "explosion_4",
+    "mirror": false,
+    "clip_right": false
+  },
+  "32": {
+    "cluts": [
+      7
+    ],
+    "name": "score_150",
+    "mirror": false,
+    "clip_right": false
+  },
+  "33": {
+    "cluts": [
+      7
+    ],
+    "name": "score_200",
+    "mirror": false,
+    "clip_right": false
+  },
+  "34": {
+    "cluts": [
+      7
+    ],
+    "name": "score_300",
+    "mirror": false,
+    "clip_right": false
+  },
+  "35": {
+    "cluts": [
+      7
+    ],
+    "name": "score_800",
+    "mirror": false,
+    "clip_right": false
+  },
+  "41": {
+    "cluts": [
+      1
+    ],
+    "name": "flagship",
+    "mirror": true,
+    "clip_right": false
+  },
+  "42": {
+    "cluts": [
+      1
+    ],
+    "name": "flagship",
+    "mirror": true,
+    "clip_right": false
+  },
+  "43": {
+    "cluts": [
+      1
+    ],
+    "name": "flagship",
+    "mirror": true,
+    "clip_right": false
+  },
+  "44": {
+    "cluts": [
+      1
+    ],
+    "name": "flagship",
+    "mirror": true,
+    "clip_right": false
+  },
+  "45": {
+    "cluts": [
+      1
+    ],
+    "name": "flagship",
+    "mirror": true,
+    "clip_right": false
+  },
+  "46": {
+    "cluts": [
+      1
+    ],
+    "name": "flagship",
+    "mirror": true,
+    "clip_right": false
+  },
+  "47": {
+    "cluts": [
+      1
+    ],
+    "name": "flagship",
+    "mirror": true,
+    "clip_right": false
+  },
+  "48": {
+    "cluts": [
+      7
+    ],
+    "name": "ship_explosion",
+    "mirror": false,
+    "clip_right": false
+  },
+  "49": {
+    "cluts": [
+      7
+    ],
+    "name": "ship_explosion",
+    "mirror": false,
+    "clip_right": false
+  },
+  "50": {
+    "cluts": [
+      7
+    ],
+    "name": "ship_explosion",
+    "mirror": false,
+    "clip_right": false
+  },
+  "51": {
+    "cluts": [
+      7
+    ],
+    "name": "ship_explosion",
+    "mirror": false,
+    "clip_right": false
+  },
+  "52": {
+    "cluts": [
+      7
+    ],
+    "name": "ship_explosion",,
+    "mirror": false,
+    "clip_right": false
+  },
+  "53": {
+    "cluts": [
+      7
+    ],
+    "name": "ship_explosion",,
+    "mirror": false,
+    "clip_right": false
+  },
+  "54": {
+    "cluts": [
+      7
+    ],
+    "name": "ship_explosion",
+    "mirror": false,
+    "clip_right": false
+  },
+  "55": {
+    "cluts": [
+      7
+    ],
+    "name": "ship_explosion",
+    "mirror": false,
+    "clip_right": false
+  },
+  "56": {
+    "cluts": [
+      7
+    ],
+    "name": "ship_explosion",
+    "mirror": false,
+    "clip_right": false
+  },
+  "57": {
+    "cluts": [
+      7
+    ],
+    "name": "ship_explosion",
+    "mirror": false,
+    "clip_right": false
+  },
+  "58": {
+    "cluts": [
+      7
+    ],
+    "name": "ship_explosion",
+    "mirror": false,
+    "clip_right": false
+  },
+  "59": {
+    "cluts": [
+      7
+    ],
+    "name": "ship_explosion",
+    "mirror": false,
+    "clip_right": false
+  },
+  "62": {
+    "cluts": [
+      7
+    ],
+    "name": "ship_explosion",
+    "mirror": false,
+    "clip_right": false
+  },
+  "63": {
+    "cluts": [
+      7
+    ],
+    "name": "ship_explosion",
+    "mirror": false,
+    "clip_right": false
+  }
+}
