@@ -137,9 +137,10 @@ for k,data in sprite_config.items():
 
         outname = f"{k:02x}_{clut_index}_{data['name']}.png"
         if hw_sprite is None:
-            left = bitplanelib.palette_image2raw(img,None,bob_palette)
+            kwargs = {"output_filename":None,"palette":bob_palette,"generate_mask":True,"blit_pad":True}
+            left = bitplanelib.palette_image2raw(img,**kwargs)
             if data["mirror"]:
-                right = bitplanelib.palette_image2raw(ImageOps.mirror(img),None,bob_palette)
+                right = bitplanelib.palette_image2raw(ImageOps.mirror(img),**kwargs)
         else:
             entry["palette"]=spritepal
             entry["hw_sprite"]=hw_sprite
@@ -151,18 +152,18 @@ for k,data in sprite_config.items():
         entry.update({"left":left,"right":right})
 
 
-##        scaled = ImageOps.scale(img,5,0)
-##        scaled.save(os.path.join(dump_dir,outname))
+        scaled = ImageOps.scale(img,5,0)
+        scaled.save(os.path.join(dump_dir,outname))
 
 with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
-    f.write("\t.global\tcharacters\n")
-    f.write("\t.global\tsprites\n")
+    f.write("\t.global\tcharacter_table\n")
+    f.write("\t.global\tsprite_table\n")
     f.write("\t.global\tbg_cluts\n")
     f.write("bg_cluts:")
     amiga_cols = [bitplanelib.to_rgb4_color(x) for clut in bg_cluts for x in clut]
     bitplanelib.dump_asm_bytes(amiga_cols,f,mit_format=True,size=2)
 
-    f.write("characters:\n")
+    f.write("character_table:\n")
     for i,c in enumerate(character_codes):
         if c is not None:
             f.write(f"\t.long\tchar_{i}\n")
@@ -172,7 +173,7 @@ with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
         if c is not None:
             f.write(f"char_{i}:")
             bitplanelib.dump_asm_bytes(c,f,mit_format=True)
-    f.write("sprites:\n")
+    f.write("sprite_table:\n")
 
     sprite_names = [None]*256
     for i in range(256):

@@ -21,6 +21,7 @@ STATE_DO_NOT_UPDATE_SHADOW = 1
 STATE_INACTIVE = 0
 
 SCORE_FILE_SIZE = 16*5
+BOB_16X16_PLANE_SIZE = 16*NB_PLAYFIELD_PLANES
 
 SPRITE_LIFETIME = 2
 
@@ -87,8 +88,8 @@ BG_SCREEN_SIZE =  BG_SCREEN_PLANE_SIZE*NB_PLAYFIELD_PLANES
 FG_SCREEN_PLANE_SIZE = NB_BYTES_PER_ROW*(NB_LINES+32)
 FG_SCREEN_SIZE =  FG_SCREEN_PLANE_SIZE*NB_PLAYFIELD_PLANES
 
-NB_SPRITES_TO_UPDATE = 32
-NB_SPRITES_TOTAL = 64
+NB_SPRITES_TO_UPDATE = 8
+NB_SPRITES_TOTAL = 8
 
 BLANK_FG_TILE_ID = 0x24
 
@@ -945,8 +946,8 @@ osd_reset_attributes:
 * - 0x20 bytes of bullets
 
 osd_update_graphics:
+	movem.l	d0-d7/a0-a6,-(a7)
     .ifeq OPT_DISABLE_BG_LAYER
-	movem.l	d0-d2/a0-a6,-(a7)
 	lea		bg_color_table,a1
 	lea		bg_cluts,a2
 	lea		bg_colorram,a5
@@ -978,10 +979,134 @@ osd_update_graphics:
 	.ifndef	DIRECT_SCREEN_DRAW
 	bsr		update_rows
 	.endif
-	
-	movem.l	(a7)+,d0-d2/a0-a6
    .endif | OPT_DISABLE_BG_LAYER
+	
+	* load previous sprite state base
+	* (depending on screen buffer, double buffering)
+	
+	move.l		previous_sprite_state_ptr(pc),a5
+
+	* delete previous sprites
+	bsr		delete_previous_sprites
+	
+	* now A0 contains sprite data
+	lea		test_sprite_data(pc),a0
+	
+	bsr		draw_sprites
+	
+	* now A0 contains bullet data
+	
+	movem.l	(a7)+,d0-d7/a0-a6
 	rts
+
+draw_sprites:
+	movem.l	a0/a5,-(a7)
+	move.w	#NB_SPRITES_TOTAL-1,d3
+	moveq	#0,d0
+	moveq	#0,d1
+	moveq	#0,d6
+	moveq	#0,d5
+2:
+	* get sprite x,y,clut,index
+	move.l	(a0)+,d4
+	* save in previous
+	move.l	d4,(a5)+
+	move.l	d4,d7
+	and.l	#0xFF0000FF,d7
+	cmp.l	#0xF80000F8,d7	| X=Y=0xF8: means disabled
+	beq.w	11f
+	bsr		decode_sprite_data
+	lea		sprite_table,a1
+	add.w	d6,d6
+	add.w	d6,d6
+	move.l	(a1,d6.w),d7
+	beq.b	11f			| invalid sprite
+	move.l	d7,a1
+	* todo check attributes (flip X/Y)
+	and.w	#7,d5		| mask attributes
+	add.w	d5,d5
+	add.w	d5,d5
+	move.l	(a1,d5.w),d7
+	beq.b	11f			| invalid clut index
+	move.l	d7,a1
+	move.w	(a1)+,d7	| type
+	bne.b	11f			| sprite: ATM not supported
+	* BOB
+	* ATM no attributes choose left
+	move.l	(a1),a0		| BOB data
+	moveq	#0,d2
+	move.w	#16,d3
+* < D2: bit 2: 0: direct, 1: flip
+* < D3: height
+
+	bsr		blit_16x_bob
+	
+11:
+	dbf		d3,2b
+	movem.l	(a7)+,a0/a5
+	rts
+
+delete_previous_sprites:
+	movem.l	a0-a2/a5,-(a7)
+
+	move.w	#NB_SPRITES_TOTAL-1,d3
+	moveq	#0,d0
+	moveq	#0,d1
+	moveq	#0,d6
+	moveq	#0,d5
+2:
+	move.l	(a5)+,d4
+	move.l	d4,d7
+	and.l	#0xFF0000FF,d7
+	cmp.l	#0xF80000F8,d7	| X=Y=0xF8: means disabled
+	beq.w	11f
+	* get data
+	bsr		decode_sprite_data
+
+	
+*	move.b	(2,a5),d0    | sprite tile code (8 first bits)
+
+*	tst.b	(a6,d0.w)
+*	bne.w	11f		| real sprite: skip erase
+	* erase previous sprite position (but not if sprite type
+	* is hardware sprite)
+
+	move.w	#4,d2	| width
+	* depending on double height/width properties, double amounts
+
+    move.w  #16,d4		| max single size height
+
+	movem.l	d3/a5,-(a7)
+    lea _custom,a5
+	move.l	fg_drawed_screen_ptr(pc),a1
+	moveq	#4,d3
+	bsr		clear_planes_any_blitter_internal
+	movem.l	(a7)+,d3/a5
+11:
+	dbf		d3,2b
+	movem.l	(a7)+,a0-a2/a5
+	rts
+	
+* < D4: sprite properties
+* > D0,D1: X,Y.B
+* > D5: clut index
+* > D6: sprite index
+* 
+decode_sprite_data:
+	move.b	d4,d0	| sprite X
+	lsr.l	#8,d4
+	move.b	d4,d5	| clut index
+	lsr.l	#8,d4
+	move.b	d4,d6	| sprite index
+	lsr.l	#8,d4	
+	move.b	d4,d1	| sprite Y
+	rts
+	
+* sprite structure: 4 bytes: X,sprite_id (with attributes),clut_index,Y
+
+test_sprite_data:
+	.byte	0xF8,0x00,0x00,0xF8,0xF8,0x00,0x00,0xF8,0xF8,0x00,0x00,0xF8,0xF8,0x00,0x00,0xF8
+	.byte	0x2F,0x11,0x04,0xC4,0x2F,0x11,0x03,0xB4,0x2F,0x11,0x02,0xA4,0x2F,0x29,0x01,0x94
 
 * d6=screen address (preserved), d0=tile (preserved)
 * d6 starts at 0x5000 ends at 0x57FF
@@ -1121,7 +1246,7 @@ update_bg_tile:
 	cmp.b	#0x30,d0
 	jcs	1f
 0:
-	lea		characters,a0
+	lea		character_table,a0
 	add.w	d0,d0
 	add.w	d0,d0
 	move.l	(a0,d0.w),d0
@@ -1165,246 +1290,6 @@ update_bg_tile:
 is_hw_sprite_table:
 	ds.b	256
 
-osd_update_32_sprite_hw:
-	move.w	d0,d7
-	bne.b	0f
-	* reset number of active bobs only at first call
-	clr.w	nb_active_bobs
-	* clear first plane (fg tiles) prior to sprite draw. Because we're going to
-	* apply blitted OR in the end, so if something changes, we need to remove it
-	* also, if a tile is cleared, it's cleared here, and not redrawn
-	*
-	* we can clobber all registers here (we're going to need them)
-0:
-	.ifeq		OPT_DISABLE_SPRITES
-	lea		current_sprite_state(pc),a4
-	.ifne	OPT_ENABLE_LOGGING
-	move.l	a4,0x140
-	.endif
-	
-	** S sprite_log <address> !12*!64
-	**lea		ag_sprites(pc),a4
-	move.l		previous_sprite_state_ptr(pc),a5
-	lea			is_hw_sprite_table,a6
-	
-	* first clear playfield behind the previous
-	* positions of the previously active objects
-	* only if D0=0 (ground objects pass)
-	tst.w	d7
-	bne.w	12f
-	movem.l	d2-d5/a0-a2/a5,-(a7)
-	move.w	#NB_SPRITES_TOTAL-1,d3
-2:
-	cmp.b	#STATE_INACTIVE,(a5)
-	beq.w	11f
-	clr		d0
-	move.b	(2,a5),d0    | sprite tile code (8 first bits)
-	tst.b		(1,a5)   | sprite attributes	
-	bpl.b	222f
-	* second bank: add 256 to sprite tile code
-	bset	#8,d0
-222:
-	tst.b	(a6,d0.w)
-	bne.w	11f		| real sprite: skip erase
-	* erase previous sprite position (but not if sprite type
-	* is hardware sprite)
-	move.w	(4,a5),d1   | Y
-	* 32 first Y pos aren't displayed
-	* also add -2 y offset to allow proper erase too
-	sub.w	#4*8+2,d1
-	bpl.b		3f
-	moveq	#0,d1		| fix issues with non deleted objects at top	
-3:
-	
-	move.w	#4,d2	| width
-	* depending on double height/width properties, double amounts
-	move.b	(1,a5),d0	| attributes
-	* it's better to optimize erase height
-	* but doing that when d1 = 0 causes issues so skip
-	* the height change in that case (and also if double width
-	* and height)
-	*
-	* the erase optimization is already very efficient with
-	* solvalou shots and enemy bullets which have a small height
-	*
-	tst.w	d1
-	beq.b	30f
-	and.b	#3,d0
-	beq.b	310f	| not double height, not double width: can optimize height
-30:
-    move.w  #16,d4		| max single size height
-	
-	btst	#0,d0		| double width (height on rotated display)
-	beq.b	31f
-	* add to max height (add 1 to make up for remaining pixels not
-	* erased at the bottom when solvalou explodes, not sure
-	* why it's needed, probably doesn't hurt...)
-	add.w	#17,d4
-31:
-	btst	#1,d0		| double height (width on rotated display)
-	beq.b	32f
-	add.w	#2,d2
-	bra.b	32f
-	* simple width & height
-	* we optimize height & y-start
-310:
-	* add Y-offset (possibly 0, but > 0 for shots & small object)
-	add.w	(8,a5),d1
-	* set exact height (may be smaller than 16)
-	move.w	(10,a5),d4
-	addq.w	#2,d4
-32:
-	move.w	(6,a5),d0
-	subq.w	#8,d0		| sprite X offset
-
-	movem.l	d3/a5,-(a7)
-    lea _custom,a5
-
-	move.l	fg_drawed_screen_ptr(pc),a1
-	moveq	#4,d3
-	bsr		clear_planes_any_blitter_internal
-	movem.l	(a7)+,d3/a5
-11:
-	lea		(SPRITE_MEM_SIZE.W,a5),a5
-	dbf		d3,2b
-	movem.l	(a7)+,d2-d5/a0-a2/a5
-12:
-	* then update the active sprites
-	**lea		sprite_picbase,a3
-	move.l	a4,-(a7)
-	move.w	#NB_SPRITES_TO_UPDATE-1,d4
-	tst		d7
-	beq.b	4f
-	* second half
-	lea		(SPRITE_MEM_SIZE*NB_SPRITES_TO_UPDATE.W,a4),a4
-	* sprite loop
-4:
-	cmp.b	#STATE_INACTIVE,(a4)
-	beq		2f
-41:
-	move.w	(6,a4),d5	| prepare X
-	cmp.w	#31*8,d5
-	jcc		2f			| too much on the right
-	
-	move.w	(4,a4),d1
-	sub.w	#4*8,d1		| apply Y offset
-	bpl.b	42f
-	* explosion too high on screen, probably game
-	* bug which reuses previous slot, don't show
-	* explosion tiles (113 to 127)
-	cmp.w	#113,d0
-	bcs.b	42f
-	cmp.w	#128,d0
-	jcs	2f
-42:
-	* at this point, Y can be negative, but
-	* we allow this as blitter routine is able
-	* to perform Y-clipping in that case
-	moveq	#0,d3			| clear D3 MSB
-	move.w	d1,d3			| save y
-	moveq	#0,d0
-	move.b	(2,a4),d0	    | sprite code
-	move.b	(3,a4),d1	    | sprite color
-	move.b		(1,a4),d2   | sprite attributes	
-	bpl.b	5f
-	* second bank
-	bset	#8,d0
-5:
-* to test a given tile, replace solvalou by that sprite
-*	cmp.w	#80,d0
-*	bne.b	666f
-*	move.w	#248,d0  | tank
-*	moveq	#2,d1    | clut 2
-*666:
-	* fixes glitch: sometimes sprite code + 256 > 320
-	* ex: code = 0x7C, attribute = 0x80, X = 0xC0, Y = 0
-	* which triggers strange behaviour afterwards
-	* like andor quickly flashing...
-	cmp.w	#320,d0
-	jcc		2f		| bug: second bank but sprite too high
-	clr.w	d6
-	* tile type (bob, sprite and which sprite type)
-	move.b	(a6,d0.w),d6
-	
-
-
-60:
-	* BOB or 16x16 sprite (not a special hardware sprite)
-	cmp.w	#NB_LINES-15,d3
-	bgt.w	2f		| too low
-
-	move.w	(6,a4),d5	| prepare X
-	move.w	d2,d6
-	and.w	#3,d6
-	lea		sprite_draw_jump_table(pc),a0
-	.ifdef	NO68020
-	add.w	d6,d6
-	add.w	d6,d6
-	move.l	(a0,d6.w),a0
-	jsr		(a0)
-	.else
-	jsr		([a0,d6.w*4])
-	.endif
-	
-2:
-	lea		(SPRITE_MEM_SIZE.W,a4),a4		| next sprite
-	dbf		d4,4b
-
-	* now restore all foreground tiles behind the previous
-	* positions of the previously active objects
-		
-	* then back up current object state (X,Y,STATE) for next update
-	move.l	(a7)+,a4
-	move.w	#NB_SPRITES_TO_UPDATE-1,d0	| 32*SPRITE_MEM_SIZE bytes
-	* d7 is 0 or 32
-	tst.w	d7
-	beq.b	3f
-	* second half of sprite data (*8 bytes, /2)
-	lea		(NB_SPRITES_TO_UPDATE*SPRITE_MEM_SIZE.W,a4),a4
-	lea		(NB_SPRITES_TO_UPDATE*SPRITE_MEM_SIZE.W,a5),a5
-3:
-	* copy one sprite backup structure (multiple of 4 bytes) 32 times
-	** | 12/4 change if SPRITE_MEM_SIZE changes!!
-	movem.l	(a4)+,d1/d2/d3
-	movem.l	d1/d2/d3,(a5)
-	lea		(12,a5),a5
-
-	dbf		d0,3b
-	tst.w	d7
-	bne.b	31f
-	rts
-	
-31:
-	lea		active_hw_sprite_lifetime(pc),a0
-	moveq	#7,d7
-6:
-	move.w	(a0),d0
-	beq.b	9f
-	subq	#1,d0
-	move.w	d0,(a0)
-	bne.b	9f
-	* sprite lifetime elapsed: hide it
-	move.l	(2,a0),a1	| sprite tile number
-	* end of life for that sprite
-	bsr		hide_sprite
-9:
-	addq.w	#8,a0
-	dbf		d7,6b
-	
-	
-	* after displaying real hardware sprite, we scan the possible sprites
-	* and decrease the life counter.
-	* if the life counter is zero, clear the sprite positions
-	* this is required because we cannot rely on the previous state to know that
-
-
-	.endif  | OPT_DISABLE_SPRITES
-	*clr.w	_custom+color
-	
-	rts
-zzz:
-			blitz
-			rts
 
 
 * show sprite, supports clipping (y offset)
@@ -1552,147 +1437,6 @@ hide_sprite:
 	movem.l	(a7)+,d0/a2-a3
 	rts
 
-	
-* < D3: Y-offset (for clipping in the top area)
-* < D4: Y
-* < D5: X
-* < A3: graphical object structure (sprites)
-	
-sprite_draw_jump_table:
-	dc.l	draw_sprite_part
-	dc.l	sprite_draw_double_width
-	dc.l	sprite_draw_double_height
-	dc.l	sprite_draw_double_width_and_height
-	
-* < D0: tile index
-* < D1: color table index
-* < D2: attributes
-* < D3: Y
-* < D5: X
-* < A3: bitplane pointer list
-* < A4: sprite structure (to update height & y-offset)
-* trashed registers: A0
-sprite_draw_double_width:
-	and.w	#3,d2			| cancel attributes others than double width/height
-	bsr		draw_sprite_part
-	add.w	#16,d3
-	addq.w	#1,d0	| neighbour tile
-	bra		draw_sprite_part
-	
-sprite_draw_double_width_and_height:
-	move.w	#3,d2			| cancel attributes others than double width/height
-	and.w	#0x1FC,d0	| mask 2 lower bits
-	add.w	#16,d3		| Y += 16
-	addq	#3,d0
-	bsr		draw_sprite_part
-	subq	#2,d0
-	add.w	#16,d5
-	bsr		draw_sprite_part
-	sub.w	#16,d3
-	sub.w	#16,d5
-	addq	#1,d0
-	bsr		draw_sprite_part
-	subq	#2,d0
-	add.w	#16,d5
-	bra		draw_sprite_part
-	
-sprite_draw_double_height:
-	and.w	#3,d2			| cancel attributes others than double width/height
-	add.w	#16,d5
-	bsr		draw_sprite_part
-	sub.w	#16,d5
-	addq	#2,d0
-	bra		draw_sprite_part
-	
-* internal routine to draw sprites
-* either by blitting (BOBs) or positionning sprites (HW sprites)
-*
-* < D0: sprite index
-* < D1: color table index
-* < D2: attributes (ignored if HW sprite)
-* < D3: Y
-* < D5: X
-* < A3: graphical object structure (bobs or sprites)
-* < A4: sprite structure (to update height & y-offset)
-
-* trashed registers: A0
-
-draw_sprite_part:
-	movem.w	d0-d4,-(a7)
-
-	* d0 is the tile index
-	* d0 times 128*2 (<<8) is the row start pointer
-	lsl.l	#8,d0
-	beq.b	2f			| code 0 is all transparent: nothing drawn
-	* compute clut index in d1
-	and.w	#0x7F,d1	| significant color bits
-	beq.b	2f			| CLUT 0 is all transparent: nothing drawn
-	
-	* now d1 is the index, mul by 4 to get row pointer offset
-	* (there are 2 versions of the sprite normal,mirror for each
-	* color configuration)
-	add.w	d1,d1
-
-	**lea		_sprite_tile,a0
-
-	add.l	d0,a0		| row offset
-	move.w	(a0,d1.w),d1	| col offset
-	bne.b	7f
-
-	bra.b	2f
-7:
-
-	cmp.w	#1,d1		| test blankptr
-	beq.b	2f			| skip
-
-	
-	move.w	(a3,d1.w),d4	| object type
-	**cmp.w	#BT_SPRITE,d4
-	**beq.b	4f
-
-	* count a BOB sprite
-	addq.w	#1,nb_active_bobs
-
-	btst	#3,d2			| X-flip? (Y-flip in spec, but screen is rotated!!)
-	beq.b	3f
-	* mostly pointless as most of sprites aren't shown flipped
-	* and the ones which are flipped are mostly symmetric (WTF?)
-	* in the end, the explosions are reportedly flipped. Not removing that
-	* feature, as it saves 130kb only, and we have a lot of memory left anyway
-	addq.w	#4,d1		| pointer to mirror planes
-3:
-	move.l	(2,a3,d1.w),a0		| get pointer on bitplane pointer list
-	move.w	d5,d0		| restore x
-	subq.w	#8,d0		| sprite X offset
-	* bob: get params
-	move.w	d3,d1		| restore y
-	move.w	(a0)+,d4	| y offset
-	move.w	(a0)+,d3	| height
-	* update sprite structure (to optimize single width/height
-	* sprite erases)
-	move.w	d4,(8,a4)
-	move.w	d3,(10,a4)
-	add.w	d4,d1		| apply Y offset
-	* attributes remain in d2
-	bsr	blit_16x_bob
-2:
-	movem.w	(a7)+,d0-d4
-	rts	
-4:
-	* case of hardware sprite
-	* D0 contains sprite tile code times 256
-	* we could have backuped the register somewhere else
-	* but anyways we need tile code times 32
-	*
-	* (damn it's time that this project ends, the code is trickier
-	* and trickier!)
-	
-	lsr.l	#8-ACTIVE_SPRITE_STRUCT_BITS,d0
-	move.w	#16,d2		| 16 height (standard 16x16)
-	move.w	d3,d4
-	moveq	#0,d3		| no clipping
-	bsr		draw_hw_sprite
-	bra.b	2b
 	
 * < D0: sprite index times 64 (for lifetime table)
 * < D1: color table index
@@ -1993,8 +1737,8 @@ osd_read_dipswitches_old:
 *    bits 0-1: Values for BONUS GALIXIP. 7 = 7000, 10 = 10000, 12 =12000, 20 = 20000
 osd_read_dipswitches:
 	moveq	#-1,d0
-	move.w	#0xC0,d1	| free play: 0xC0, insert coin doesn't work ATM
-	*move.w	#0x00,d1	| free play: 0xC0, insert coin doesn't work ATM
+	*move.w	#0xC0,d1	| free play: 0xC0, insert coin doesn't work ATM
+	move.w	#0x00,d1	| free play: 0xC0, insert coin doesn't work ATM
 	moveq	#0,d2
 
 	movem.l	a0,-(a7)
@@ -2312,80 +2056,10 @@ clear_planes_any_blitter_internal:
 
 
 
-* what: clears a plane of any width (not using blitter, no shifting, start is multiple of 8), 16 height
-* args:
-* < A1: dest (must be even)
-* < D0: X (multiple of 8)
-* < D1: Y
-* < D2: blit width in bytes (even, 2 must be added same interface as blitter)
-* trashes: none
-
-clear_plane_any_cpu_16x16:
-    move.w  d3,-(a7)
-    move.w  #18,d3
-    bsr     clear_plane_any_cpu_any_height
-    move.w  (a7)+,d3
-    rts
-    
-clear_plane_any_cpu_any_height:
-    movem.l d0-D3/a0-a2,-(a7)
-    subq.w  #1,d3
-    bmi.b   5f
-    add.w   d1,d1
-    beq.b   1f		| optim
-	bmi.b	5f
-    lea mulNB_BYTES_PER_ROW_table(pc),a2
-    move.w  (a2,d1.w),d1
-    add.w   d1,a1
-1:
-
-    lsr.w   #3,d0
-    add.w   d0,a1
-	move.l	a1,d1
-    btst    #0,d1
-    bne.b   2f
-    cmp.w   #4,d2
-    bcs.b   2f
-	btst	#0,d2
-	bne.b	2f
-	btst	#1,d2
-	beq.b	6f
-2:  
-    * odd address
-    move.w  d3,d0
-    subq.w  #1,d2
-3:
-    move.l  a1,a0
-    move.w  d2,d1   | reload d1
-4:
-    clr.b   (a0)+
-    dbf d1,4b
-    * next line
-    add.w   #NB_BYTES_PER_ROW,a1
-    dbf d0,3b
-5:
-    movem.l (a7)+,d0-D3/a0-a2
-    rts
-
-6:
-    * even address, big width: can use longword erase
-    move.w  d3,d0
-    lsr.w   #2,d2
-    subq.w  #1,d2
-7:
-    move.l  a1,a0
-    move.w  d2,d1
-8:
-    clr.l   (a0)+
-    dbf d1,8b
-    * next line
-    add.w   #NB_BYTES_PER_ROW,a1
-    dbf d0,7b
-    bra.b   5b
 	
 * what: blits 16x?? data on fg planes, cookie cut
 * args:
-* < A0: data (16 pixels wide, 4+1 planes)
+* < A0: data (16 pixels wide, 2+1 planes)
 * < D0: X
 * < D1: Y
 * < D2: bit 2: 0: direct, 1: flip
@@ -2417,109 +2091,15 @@ blit_16x_bob:
 	beq.b	0f
 	lea		blit_planes_cookie_cut_16x_flipped(pc),a5	
 0:
-	moveq	#NB_PLAYFIELD_PLANES-1,d5
 	moveq	#-1,d2
-	move.l	a0,a4		| pointers on planes
-	move.l	(NB_PLAYFIELD_PLANES*4,a4),a3		| mask is the last plane
-
-	move.l	a4,a0     | next plane list	
+	lea		(4*BOB_16X16_PLANE_SIZE,a0),a3		| mask is the last plane
 	move.l	a1,a2
-	move.w	d6,d2	| y offset for source planes
 	jsr		(a5)
 
 2:
 	movem.l	(a7)+,d2-d6/a0-a5
 	rts
 	
-* what: blits parts of fg layer attract mode title
-* A0: data
-* D0: start X
-* D1: start Y
-* D2: width in bytes
-* D3: height
-
-blit_fg_layer:
-    movem.l d0-d7/a1-a5,-(a7)
-    lea _custom,A5
-	move.w	d3,d4		| height
-	
-	move.l	fg_drawed_screen_ptr(pc),a1
-    * pre-compute the maximum of shit here
-
-	tst	d1
-    beq.b   2f    | optim
-    lea		mulNB_BYTES_PER_ROW_table,a4
-	.ifdef	NO68020
-	add.w	d1,d1
-    add.w  (a4,d1.w),d1	| y times 40
-	.else
-    move.w  (a4,d1.w*2),d1	| y times 40
-	.endif
-    add.w   d1,a1       | plane position (D1 < 0x7FFF, 288*40=0x2D00)
-2:
-    move.l  #0x0fca0000,d3    | B+C-A->D cookie cut   
-
-	move.w	#NB_BYTES_PER_ROW,d0
-
-    sub.w   d2,d0       | blit modulo
-    lsl.w   #6,d4
-    lsr.w   #1,d2
-    add.w   d2,d4       | blit height
-
-    * always the same settings
-
-    * now just wait for blitter ready to write all registers
-	WAIT_BLIT
-    
-    * blitter registers set
-
-	move.l d3,bltcon0(a5)	| sets con0 and con1
-
-    move.w  d0,bltcmod(a5)	|C modulo
-    move.w  d0,bltdmod(a5)	|D modulo
-							
-	move.l a0,bltapt(a5)	|source graphic top left corner (mask)
-	move.l a0,bltbpt(a5)	|source graphic top left corner
-	move.l a1,bltcpt(a5)	|pristine background top (bottom) left corner
-	move.l a1,bltdpt(a5)	|destination top (bottom) left corner
-	move.w  d4,bltsize(a5)	|rectangle size, starts blit
-	
-	* now cut the rest of the planes
-	lea		(FG_SCREEN_PLANE_SIZE,a1),a1
-
-    move.l  #0x0bca0000,d3    | C-A->D cookie cut   
-
-    * now just wait for blitter ready to write all registers
-	WAIT_BLIT
-    
-    * blitter registers set
-
-	move.l d3,bltcon0(a5)	| sets con0 and con1
-
- 	clr.w	bltbdat(a5)	|B word is zero
-	move.w  d0,bltcmod(a5)	|C modulo
-    move.w  d0,bltdmod(a5)	|D modulo
-
-	.rept	2
-	move.l a0,bltapt(a5)	|source graphic top left corner (mask)
-	move.l a1,bltcpt(a5)	|pristine background top (bottom) left corner
-	move.l a1,bltdpt(a5)	|destination top (bottom) left corner
-	move.w  d4,bltsize(a5)	|rectangle size, starts blit		
-	lea		(FG_SCREEN_PLANE_SIZE.W,a1),a1
-	WAIT_BLIT
-	.endr
-	
-	move.l a0,bltapt(a5)	|source graphic top left corner (mask)
-	move.l a1,bltcpt(a5)	|pristine background top (bottom) left corner
-	move.l a1,bltdpt(a5)	|destination top (bottom) left corner
-	move.w  d4,bltsize(a5)	|rectangle size, starts blit
-    
-    movem.l (a7)+,d0-d7/a1-a5
-	rts
-
-
-
-
 
 * what: blits 16x16 data on one plane, cookie cut, flip
 * args:
@@ -2529,16 +2109,14 @@ blit_fg_layer:
 * < A3: source mask for cookie cut (16x16)
 * < D0: X
 * < D1: Y
-* < D2: source y-offset
 * < D3: height
 * trashes: a lot!
 
 blit_planes_cookie_cut_16x_flipped:
     lea _custom,A5
-	move.w	d2,d5
 	move.w	d3,d4
 	neg.w	d4
-	moveq	#4,d3		| 4 planes
+	moveq	#NB_PLAYFIELD_PLANES,d3		| 4 planes
     moveq  #4,d2       | 16 pixels + 2 shift bytes
     jra blit_planes_any_internal_cookie_cut
 
@@ -2555,20 +2133,19 @@ blit_planes_cookie_cut_16x_flipped:
 * trashes: D0-D1
 
 blit_planes_cookie_cut_16x:
+	clr.w	0x100
     lea _custom,A5
-	move.w	d2,d5
 	move.w	d3,d4
-	moveq	#4,d3		| 4 planes
+	moveq	#NB_PLAYFIELD_PLANES,d3		| 4 planes
     moveq  #4,d2       | 16 pixels + 2 shift bytes
 * < A5: custom
 * < D0.W,D1.W: x,y
-* < A0: source (pointer on array of planes)
+* < A0: source
 * < A1: destination fg plane, also background to mix with cookie cut fg plane
 * < A3: source mask for cookie cut
 * < D2: width in bytes (inc. 2 extra for shifting)
 * < D3: number of planes
 * < D4: height. If negative, source is copied with negative modulo (flip)
-* < D5: y offset for source planes
 * < D7: blit mask (not considered, optim, -1 all through the game)
        
 * blit mask set
@@ -2593,8 +2170,7 @@ blit_planes_any_internal_cookie_cut:
     move.w  (a4,d1.w*2),d1	| y times 40
 	.endif
 2:
-	move.w	d5,-(a7)
-    move.l  #0x0fca0000,d5    | B+C-A->D cookie cut   
+	move.l  #0x0fca0000,d5    | B+C-A->D cookie cut   
 
     move    d0,d6
     beq.b   4f
@@ -2642,31 +2218,26 @@ blit_planes_any_internal_cookie_cut:
 	clr.w bltbmod(a5)		|B modulo=bytes to skip between lines
 	.endif
 	move.l d5,bltcon0(a5)	| sets con0 and con1
-	move.w	(a7)+,d5
 	
     move.w  d0,bltcmod(a5)	|C modulo
     move.w  d0,bltdmod(a5)	|D modulo
 					
-	add.w	d5,a3			| apply to mask too
 	subq	#1,d3
 	beq.b	7f
 	subq	#1,d3
 6:
-	move.l a3,bltapt(a5)	|source graphic top left corner (mask)
-	move.l (a0)+,a4
-	add.w	d5,a4
-	move.l	a4,bltbpt(a5)	|source graphic top left corner
+	move.l	a3,bltapt(a5)	|source graphic top left corner (mask)
+	move.l	a0,bltbpt(a5)	|source graphic top left corner
 	move.l	a1,bltcpt(a5)	|pristine background top (bottom) left corner
 	move.l	a1,bltdpt(a5)	|destination top (bottom) left corner
 	move.w  d4,bltsize(a5)	|rectangle size, starts blit
 	lea		(FG_SCREEN_PLANE_SIZE,a1),a1
+	add.w	#BOB_16X16_PLANE_SIZE,a0
 	WAIT_BLIT
 	dbf		d3,6b
 7:
-	move.l a3,bltapt(a5)	|source graphic top left corner (mask)
-	move.l (a0),a4
-	add.w	d5,a4
-	move.l	a4,bltbpt(a5)	|source graphic top left corner
+	move.l	a3,bltapt(a5)	|source graphic top left corner (mask)
+	move.l	a0,bltbpt(a5)	|source graphic top left corner
 	move.l	a1,bltcpt(a5)	|pristine background top (bottom) left corner
 	move.l	a1,bltdpt(a5)	|destination top (bottom) left corner
 	move.w  d4,bltsize(a5)	|rectangle size, starts blit
@@ -2679,7 +2250,7 @@ blit_planes_any_internal_cookie_cut:
 	MUL_TABLE	NB_BYTES_PER_ROW,512
 	MUL_TABLE	NB_PLAYFIELD_PLANES,512
 
-SPRITE_MEM_SIZE = 12
+SPRITE_MEM_SIZE = 4
 current_sprite_state:
 	ds.b	SPRITE_MEM_SIZE*NB_SPRITES_TOTAL
 previous_sprite_state_ptr:
@@ -2730,8 +2301,6 @@ sound_muted:
 	.word	0
 intro_music_counter:
 	.word	0
-nb_active_bobs:
-	.word	0
 vbl_counter:
 	.word	0
 _resload:
@@ -2755,6 +2324,7 @@ fg_displayed_screen_ptr:
 	.long	fg_screen_data_1
 	.endif
 
+
 * table accounting for amiga hardware sprites that the engine
 * asked to display. Holds y-offset (for andor) & line backup
 * (when y-offset is non-zero). Also holds pointers on sprite start
@@ -2766,10 +2336,9 @@ fg_displayed_screen_ptr:
 * each entry can hold up to 2 sprites (6-colored sprites)
 *
 * a lot of entries are unused, as only a few sprites are hardware ones
-* (andor, solvalo, title spark, and bragza)
 
 active_hw_sprite_display_table:
-	ds.l	320*(1<<ACTIVE_SPRITE_STRUCT_BITS)
+	ds.l	256*(1<<ACTIVE_SPRITE_STRUCT_BITS)
 
 * simple structure 1 per hw sprite
 * word: life (0: not active)
