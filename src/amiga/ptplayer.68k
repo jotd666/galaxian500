@@ -251,7 +251,7 @@ n_reserved2 = 75
 	.else
 n_reserved2 = 76
 	.endif
-n_sizeof = 79
+n_sizeof = 80
 
 
 	.ifdef	SDATA
@@ -3186,7 +3186,6 @@ MasterVolTab64:
 	.ifdef	SDATA
 
 	section	__MERGED,bss
-
 mt_chan1:
 	ds.b	n_sizeof
 mt_chan2:

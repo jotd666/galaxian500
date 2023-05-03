@@ -81,11 +81,11 @@ NB_BYTES_PER_ROW = 40
 NB_BYTES_PER_FG_ROW = 32
 NB_LINES = 256
 Y_MAX = NB_LINES
-NB_PLAYFIELD_LINES = NB_LINES
+NB_PLAYFIELD_LINES = NB_LINES+32
 * scrollable planes
 BG_SCREEN_PLANE_SIZE = NB_BYTES_PER_ROW*NB_PLAYFIELD_LINES
 BG_SCREEN_SIZE =  BG_SCREEN_PLANE_SIZE*NB_PLAYFIELD_PLANES
-FG_SCREEN_PLANE_SIZE = NB_BYTES_PER_ROW*(NB_LINES+32)
+FG_SCREEN_PLANE_SIZE = BG_SCREEN_PLANE_SIZE
 FG_SCREEN_SIZE =  FG_SCREEN_PLANE_SIZE*NB_PLAYFIELD_PLANES
 
 NB_SPRITES_TO_UPDATE = 8
@@ -259,7 +259,7 @@ _user:
 	
     * open dos library, graphics library
     move.l  0x4.W,a6
-    lea dosname(pc),a1
+    lea dosname,a1
     moveq.l #0,d0
     jsr _LVOOpenLibrary(a6)
     move.l  d0,_dosbase
@@ -319,7 +319,7 @@ _user:
 	move.l	a0,cop1lc(a5)
 
 	move.l	4.W,A6
-	lea graphicsname(pc),a1
+	lea graphicsname,a1
     moveq.l #0,d0
     jsr _LVOOpenLibrary(a6)
     move.l  d0,_gfxbase
@@ -403,7 +403,7 @@ eye_catcher:
 		rts
 
 get_hiscore_name:
-    lea normal_hiscorename(pc),a0
+    lea normal_hiscorename,a0
 	rts
 	
 load_highscores:
@@ -571,10 +571,6 @@ osd_calibrate_display:
 	st.b	(8,a0,d0.W)
 	st.b	(9,a0,d0.W)
 	st.b	(10,a0,d0.W)
-	st.b	(9+BG_SCREEN_PLANE_SIZE,a0,d0.W)
-	st.b	(10+BG_SCREEN_PLANE_SIZE,a0,d0.W)
-	lea		(BG_SCREEN_PLANE_SIZE,a0),a1
-	st.b	(10+BG_SCREEN_PLANE_SIZE,a1)
 	
 	add.w	#NB_BYTES_PER_ROW,d0
 	dbf		D1,0b
@@ -587,7 +583,6 @@ osd_calibrate_display:
 0:
 	st.b	(14,a0,d0.W)
 	st.b	(15,a0,d0.W)
-	st.b	(15+FG_SCREEN_PLANE_SIZE,a0,d0.W)
 	add.w	#NB_BYTES_PER_ROW,d0
 	dbf		D1,0b
 	movem.l	(a7)+,a0/d0-d1
@@ -620,7 +615,7 @@ osd_sound_start:
 0:
 	lea		_custom,a6
 	lsl.w	#3,d0
-	lea		sound_table(pc),a0
+	lea		sound_table,a0
 	move.w	(a0,d0.w),d1	| sound type
 	beq.b	1f		| no sound
 
@@ -722,7 +717,7 @@ store_system:
 	move.w	AttnFlags(a6),d0
 	btst	#AFB_68010,d0
 	beq.b	1f
-	lea	zero_vbr(pc),a5
+	lea	zero_vbr,a5
 	jsr		_LVOSupervisor(a6)
 1:
 
@@ -758,8 +753,8 @@ restore_system:
 	move.w	AttnFlags(a0),d0
 	btst	#AFB_68010,d0
 	beq.b	1f
-	move.l	old_vbr,d0
-	movec	D0,vbr
+	jsr		restore_vbr
+
 1:
 
 	lea	_custom,a6
@@ -802,12 +797,6 @@ quit_to_os:
 	moveq	#0,d0
 	rts
 	
-zero_vbr:
-	movec	vbr,d0
-	move.l	d0,old_vbr
-	moveq	#0,d0
-	movec	D0,vbr
-	rte
 
 platform_init:
 	bsr		store_system
@@ -882,7 +871,7 @@ platform_init:
 	
 load_palette_in_copperlist:
 	movem.l	d0-d1/a1,-(a7)
-	lea		palette(pc),a0
+	lea		palette,a0
 	move.w	#TOTAL_NB_COLORS-1,d0
 	lea		copperlist_colors+2,a1
 1:
@@ -990,7 +979,7 @@ osd_update_graphics:
 	bsr		delete_previous_sprites
 	
 	* now A0 contains sprite data
-	lea		test_sprite_data(pc),a0
+	**lea		test_sprite_data(pc),a0
 	
 	bsr		draw_sprites
 	
@@ -1000,15 +989,16 @@ osd_update_graphics:
 	rts
 
 draw_sprites:
-	movem.l	a0/a5,-(a7)
+	movem.l	a2/a5,-(a7)
 	move.w	#NB_SPRITES_TOTAL-1,d3
 	moveq	#0,d0
 	moveq	#0,d1
 	moveq	#0,d6
 	moveq	#0,d5
+	move.l	a0,a2
 2:
 	* get sprite x,y,clut,index
-	move.l	(a0)+,d4
+	move.l	(a2)+,d4
 	* save in previous
 	move.l	d4,(a5)+
 	move.l	d4,d7
@@ -1043,7 +1033,8 @@ draw_sprites:
 	
 11:
 	dbf		d3,2b
-	movem.l	(a7)+,a0/a5
+	move.l	a2,a0
+	movem.l	(a7)+,a2/a5
 	rts
 
 delete_previous_sprites:
@@ -1308,7 +1299,7 @@ show_sprite:
 	* add a lifetime of 2 updates each time called, we'll
 	* update with the pointer on the sprite structure later
 	
-	lea		active_hw_sprite_lifetime(pc),a0
+	lea		active_hw_sprite_lifetime,a0
 	lsl.w	#3,d6
 	add.w	d6,a0
 	move.w	#SPRITE_LIFETIME,(a0)+
@@ -2092,7 +2083,7 @@ blit_16x_bob:
 	lea		blit_planes_cookie_cut_16x_flipped(pc),a5	
 0:
 	moveq	#-1,d2
-	lea		(4*BOB_16X16_PLANE_SIZE,a0),a3		| mask is the last plane
+	lea		(NB_PLAYFIELD_PLANES*BOB_16X16_PLANE_SIZE,a0),a3		| mask is the last plane
 	move.l	a1,a2
 	jsr		(a5)
 
@@ -2133,7 +2124,6 @@ blit_planes_cookie_cut_16x_flipped:
 * trashes: D0-D1
 
 blit_planes_cookie_cut_16x:
-	clr.w	0x100
     lea _custom,A5
 	move.w	d3,d4
 	moveq	#NB_PLAYFIELD_PLANES,d3		| 4 planes
@@ -2141,7 +2131,7 @@ blit_planes_cookie_cut_16x:
 * < A5: custom
 * < D0.W,D1.W: x,y
 * < A0: source
-* < A1: destination fg plane, also background to mix with cookie cut fg plane
+* < A1: destination plane, also background to mix with cookie cut fg plane
 * < A3: source mask for cookie cut
 * < D2: width in bytes (inc. 2 extra for shifting)
 * < D3: number of planes
@@ -2214,10 +2204,10 @@ blit_planes_any_internal_cookie_cut:
 
 	.ifdef	VARIABLE_BLITTER_MASKS_AND_MODS
     move.l  d7,bltafwm(a5)
-	clr.w bltamod(a5)		|A modulo=bytes to skip between lines
-	clr.w bltbmod(a5)		|B modulo=bytes to skip between lines
 	.endif
 	move.l d5,bltcon0(a5)	| sets con0 and con1
+	clr.w bltamod(a5)		|A modulo=bytes to skip between lines
+	clr.w bltbmod(a5)		|B modulo=bytes to skip between lines
 	
     move.w  d0,bltcmod(a5)	|C modulo
     move.w  d0,bltdmod(a5)	|D modulo

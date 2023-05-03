@@ -151,9 +151,8 @@ for k,data in sprite_config.items():
 
         entry.update({"left":left,"right":right})
 
-
-        scaled = ImageOps.scale(img,5,0)
-        scaled.save(os.path.join(dump_dir,outname))
+        #scaled = ImageOps.scale(img,5,0)
+        #scaled.save(os.path.join(dump_dir,outname))
 
 with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
     f.write("\t.global\tcharacter_table\n")

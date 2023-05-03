@@ -797,7 +797,6 @@ INFLIGHT_ALIENS:                     |  $42B0
 INFLIGHT_ALIENS_END:                 |  $43B0
 VARIABLES_END:
 
-	.align	0x100
 bg_videoram:
 CHARACTER_RAM:						| $5000
 	ds.b	0x800
@@ -1272,7 +1271,7 @@ l_0988:
 *
 
 HANDLE_TEXT_SCROLL:
-	tst.b	IS_COLUMN_SCROLLING(pc)                       	| read IS_COLUMN_SCROLLING flag [ld   a,(0x40B0)]
+	tst.b	IS_COLUMN_SCROLLING                       	| read IS_COLUMN_SCROLLING flag [ld   a,(0x40B0)]
 	bne.b	0f
 	rts                                    	| return if flag was not set [ret  nc]
 0:
@@ -6370,7 +6369,7 @@ l_131c:
 * Draws player explosion, stops player hit sound when done.
 
 HANDLE_PLAYER_DYING:
-	tst.b	IS_PLAYER_DYING(pc)                       	| read IS_PLAYER_DYING flag [ld   a,(0x4201)]
+	tst.b	IS_PLAYER_DYING                       	| read IS_PLAYER_DYING flag [ld   a,(0x4201)]
 	bne.b	0f
 	rts                                    	| return if player is not dying. [ret  nc]
 0:
@@ -6417,7 +6416,7 @@ HANDLE_PLAYER_DYING:
 *
 
 HANDLE_SINGLE_ALIEN_ATTACK:
-	tst.b	CAN_ALIEN_ATTACK(pc)                       	| read CAN_ALIEN_ATTACK flag [ld   a,(0x4228)]
+	tst.b	CAN_ALIEN_ATTACK                       	| read CAN_ALIEN_ATTACK flag [ld   a,(0x4228)]
 	bne.b	0f
 	rts                                    	| return if flag is not set [ret  nc]
 0:
