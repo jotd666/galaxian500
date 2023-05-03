@@ -4604,7 +4604,7 @@ DRAW_ALIEN_COMMAND:
 DELETE_ALIEN_COMMAND:
 	jbsr	GET_ALIEN_CHAR_RAM_ADDR                            	| call GET_ALIEN_CHAR_RAM_ADDR [call 0x20E1]
 	tst.b	d7
-	jne	PLOT_CHARACTERS_2_BY_2_ASCENDING                             	|  [jp   c,0x2583]
+	jne	l_2583                             	|  [jp   c,0x2583]
 	jra	l_25a7                             	| plot two spaces in the same column [jp   0x25A7]
 
 
