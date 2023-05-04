@@ -154,6 +154,11 @@ for k,data in sprite_config.items():
         #scaled = ImageOps.scale(img,5,0)
         #scaled.save(os.path.join(dump_dir,outname))
 
+##grid = Image.open(os.path.join(this_dir,"grid.png"))
+##p = bitplanelib.palette_extract(grid)
+##grid_bitplanes = bitplanelib.palette_image2raw(grid,None,p,
+##                                        generate_mask=True,blit_pad=True)
+
 with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
     f.write("\t.global\tcharacter_table\n")
     f.write("\t.global\tsprite_table\n")

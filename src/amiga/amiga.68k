@@ -21,7 +21,7 @@ STATE_DO_NOT_UPDATE_SHADOW = 1
 STATE_INACTIVE = 0
 
 SCORE_FILE_SIZE = 16*5
-BOB_16X16_PLANE_SIZE = 16*NB_PLAYFIELD_PLANES
+BOB_16X16_PLANE_SIZE = 4*16
 
 SPRITE_LIFETIME = 2
 
@@ -75,10 +75,8 @@ _custom = 0xDFF000
 
 
 NB_PLAYFIELD_PLANES = 3
-FG_DIRTY_TILES_SIZE = 0x800
 TOTAL_NB_COLORS = 32   | 8+8+16
 NB_BYTES_PER_ROW = 40
-NB_BYTES_PER_FG_ROW = 32
 NB_LINES = 256
 Y_MAX = NB_LINES
 NB_PLAYFIELD_LINES = NB_LINES+32
@@ -806,8 +804,6 @@ platform_init:
 	* set blitter parameters once and for all
 	.ifndef	VARIABLE_BLITTER_MASKS_AND_MODS
     move.l  #-1,bltafwm(a5)
-	clr.w	bltamod(a5)		|A modulo=bytes to skip between lines
-	clr.w	bltbmod(a5)		|B modulo=bytes to skip between lines
 	.endif
 	
 	* restrict borders: we don't see bobs on the borders!
@@ -1025,11 +1021,7 @@ draw_sprites:
 	* ATM no attributes choose left
 	move.l	(a1),a0		| BOB data
 	moveq	#0,d2
-	move.w	#16,d3
-* < D2: bit 2: 0: direct, 1: flip
-* < D3: height
-
-	bsr		blit_16x_bob
+	bsr		blit_16x16_bob
 	
 11:
 	dbf		d3,2b
@@ -1070,7 +1062,7 @@ delete_previous_sprites:
 	movem.l	d3/a5,-(a7)
     lea _custom,a5
 	move.l	fg_drawed_screen_ptr(pc),a1
-	moveq	#4,d3
+	moveq	#2,d3
 	bsr		clear_planes_any_blitter_internal
 	movem.l	(a7)+,d3/a5
 11:
@@ -1084,19 +1076,20 @@ delete_previous_sprites:
 * > D6: sprite index
 * 
 decode_sprite_data:
-	move.b	d4,d0	| sprite X
+	move.b	d4,d1	| sprite X (aka Y on amiga)
 	lsr.l	#8,d4
 	move.b	d4,d5	| clut index
 	lsr.l	#8,d4
 	move.b	d4,d6	| sprite index
 	lsr.l	#8,d4	
-	move.b	d4,d1	| sprite Y
+	move.b	d4,d0	| sprite Y (aka X on amiga)
 	rts
 	
 * sprite structure: 4 bytes: X,sprite_id (with attributes),clut_index,Y
 
 test_sprite_data:
 	.byte	0xF8,0x00,0x00,0xF8,0xF8,0x00,0x00,0xF8,0xF8,0x00,0x00,0xF8,0xF8,0x00,0x00,0xF8
+	.byte	0x40,0x11,0x04,0x10,0xF8,0x00,0x00,0xF8,0xF8,0x00,0x00,0xF8,0xF8,0x00,0x00,0xF8
 	.byte	0x2F,0x11,0x04,0xC4,0x2F,0x11,0x03,0xB4,0x2F,0x11,0x02,0xA4,0x2F,0x29,0x01,0x94
 
 * d6=screen address (preserved), d0=tile (preserved)
@@ -1178,7 +1171,7 @@ update_rows:
 
 	move.l d3,bltcon0(a5)	| sets con0 and con1
 
-    move.w  d1,bltamod(a5)	|D modulo
+    move.w  d1,bltamod(a5)	|A modulo
     move.w  d1,bltdmod(a5)	|D modulo
 							
 	move.l a0,bltapt(a5)	|source graphic top left corner
@@ -2048,17 +2041,17 @@ clear_planes_any_blitter_internal:
 
 
 	
-* what: blits 16x?? data on fg planes, cookie cut
+* what: blits 16x16 data on fg planes, cookie cut
 * args:
 * < A0: data (16 pixels wide, 2+1 planes)
 * < D0: X
 * < D1: Y
 * < D2: bit 2: 0: direct, 1: flip
-* < D3: height
 * trashes: D0-D1
 
-blit_16x_bob:
+blit_16x16_bob:
 	movem.l	d2-d6/a0-a5,-(a7)
+	move.w	#16,d3		| height = 16 (fixed)
 	* first check if Y is positive
 	moveq	#0,d6	| bitmap offset
 	tst		d1
@@ -2070,10 +2063,11 @@ blit_16x_bob:
 	beq.b	2f		| no need to blit if height <= 0
 	* compute offset to add to bitmap
 	neg		d1    | make it positive
-	* add a 4-byte offset per line
-	move.w	d1,d6
-	add.w	d6,d6
-	add.w	d6,d6
+	* add a 4-byte offset per line (16 pixels = 32 bits)
+	move.w	d1,d3
+	add.w	d3,d3
+	add.w	d3,d3
+	add.w	d3,a0
 	moveq	#0,d1	| draw from Y=0
 10:
 	move.l	fg_drawed_screen_ptr(pc),a1
@@ -2082,9 +2076,7 @@ blit_16x_bob:
 	beq.b	0f
 	lea		blit_planes_cookie_cut_16x_flipped(pc),a5	
 0:
-	moveq	#-1,d2
-	lea		(NB_PLAYFIELD_PLANES*BOB_16X16_PLANE_SIZE,a0),a3		| mask is the last plane
-	move.l	a1,a2
+	lea		(3*BOB_16X16_PLANE_SIZE,a0),a3		| mask is the last plane, only 2 planes for BOBs
 	jsr		(a5)
 
 2:
@@ -2095,8 +2087,7 @@ blit_16x_bob:
 * what: blits 16x16 data on one plane, cookie cut, flip
 * args:
 * < A0: data (16x16)
-* < A1: plane  (40 rows)
-* < A2: background (40 rows) to mix with cookie cut
+* < A1: plane  (40 rows) & background (40 rows) to mix with cookie cut
 * < A3: source mask for cookie cut (16x16)
 * < D0: X
 * < D1: Y
@@ -2107,26 +2098,24 @@ blit_planes_cookie_cut_16x_flipped:
     lea _custom,A5
 	move.w	d3,d4
 	neg.w	d4
-	moveq	#NB_PLAYFIELD_PLANES,d3		| 4 planes
+	moveq	#3,d3		| 3 planes
     moveq  #4,d2       | 16 pixels + 2 shift bytes
     jra blit_planes_any_internal_cookie_cut
 
 * what: blits 16x16 data on one plane, cookie cut
 * args:
 * < A0: data (16x16)
-* < A1: plane  (40 rows)
-* < A2: background (40 rows) to mix with cookie cut
+* < A1: plane  (40 rows)& background (40 rows) to mix with cookie cut
 * < A3: source mask for cookie cut (16x16)
 * < D0: X
 * < D1: Y
-* < D2: source y-offset
 * < D3: height
 * trashes: D0-D1
 
 blit_planes_cookie_cut_16x:
     lea _custom,A5
 	move.w	d3,d4
-	moveq	#NB_PLAYFIELD_PLANES,d3		| 4 planes
+	moveq	#3,d3		| 3 planes
     moveq  #4,d2       | 16 pixels + 2 shift bytes
 * < A5: custom
 * < D0.W,D1.W: x,y
@@ -2139,11 +2128,10 @@ blit_planes_cookie_cut_16x:
 * < D7: blit mask (not considered, optim, -1 all through the game)
        
 * blit mask set
-* returns: start of destination in A1 (computed from old A1+X,Y)
-* trashes: a1
 
 blit_planes_any_internal_cookie_cut:
-    movem.l d0-d7/a2/a4,-(a7)
+    movem.l d0-d7/a0-a6,-(a7)
+	
     * pre-compute the maximum of shit here
 	tst.w	d4
 	bpl.b	1f
@@ -2152,7 +2140,7 @@ blit_planes_any_internal_cookie_cut:
 1:	
 	tst	d1
     beq.b   2f    | optim
-    lea		mulNB_BYTES_PER_ROW_table,a4
+    lea		mulNB_BYTES_PER_ROW_table(pc),a4
 	.ifdef	NO68020
 	add.w	d1,d1
     add.w  (a4,d1.w),d1	| y times 40
@@ -2164,7 +2152,7 @@ blit_planes_any_internal_cookie_cut:
 
     move    d0,d6
     beq.b   4f
-    asr.w   #3,d0
+    lsr.w   #3,d0
 	bclr	#0,d0
     and.w   #0xF,d6
 	beq.b	3f
@@ -2232,13 +2220,12 @@ blit_planes_any_internal_cookie_cut:
 	move.l	a1,bltdpt(a5)	|destination top (bottom) left corner
 	move.w  d4,bltsize(a5)	|rectangle size, starts blit
     
-    movem.l (a7)+,d0-d7/a2/a4
+    movem.l (a7)+,d0-d7/a0-a6
     rts
 
 
 	
-	MUL_TABLE	NB_BYTES_PER_ROW,512
-	MUL_TABLE	NB_PLAYFIELD_PLANES,512
+	MUL_TABLE	NB_BYTES_PER_ROW,256
 
 SPRITE_MEM_SIZE = 4
 current_sprite_state:
