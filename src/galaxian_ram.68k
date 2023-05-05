@@ -264,6 +264,7 @@ DIP_SWITCH_5_STATE:                  |  $401F         ; holds cached state of di
 * From $4080 - 409F: alien bullets and player bullet sprite state. Maps directly to $5860 - $587F. 
 
 	ds.b	0x01
+	.align	2
 OBJRAM_BACK_BUF:                     |  $4020            
 	ds.b	0x40
 OBJRAM_BACK_BUF_SPRITES:             |  $4060 

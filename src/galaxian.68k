@@ -1319,17 +1319,15 @@ INIT_CONVOY_CHARGER_SPRITE:
 	subq.b	#1,d0		| convert A into a 0-based index 
 	move.b	d0,d1
 	
-	lsr.w	#5,d0		| multiply A by 32 (which is sizeof(INFLIGHT_ALIEN))
-	lea		INFLIGHT_ALIENS,a0	  | HL = address of INFLIGHT_ALIENS[3]
+	lsl.w	#5,d0		| multiply A by 32 (which is sizeof(INFLIGHT_ALIEN))
+	lea		INFLIGHT_ALIENS+4*inflight_alien_size,a0	  | HL = address of INFLIGHT_ALIENS[3]
 	add.w	d0,a0					   | Add offset to HL. HL now points to INFLIGHT_ALIEN record we're using to scroll sprite on with
-	move.b	#1,(a0)+            | set INFLIGHT_ALIEN.IsActive to 1 
-	clr.b	(a0)+				| reset INFLIGHT_ALIEN.IsDying 
-	move.b	#0xD,(a0)+			| set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_CONVOY_CHARGER_SET_COLOUR_POS_ANIM
-	addq.w	#1,a0
-	clr.b	(a0)+               | set INFLIGHT_ALIEN.Y to position offscreen
-	move.b	#0xC,(a0)+		        | set INFLIGHT_ALIEN.AnimationFrame
-	addq.w	#1,a0
-	move.b	d1,(a0)				     | set INFLIGHT_ALIEN.IndexInSwarm 
+	move.b	#1,(IsActive,a0)            | set INFLIGHT_ALIEN.IsActive to 1 
+	clr.b	(IsDying,a0)				| reset INFLIGHT_ALIEN.IsDying 
+	move.b	#0xD,(StageOfLife,a0)			| set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_CONVOY_CHARGER_SET_COLOUR_POS_ANIM
+	clr.b	(inf_alien_Y,a0)               | set INFLIGHT_ALIEN.Y to position offscreen
+	move.b	#0xC,(AnimationFrame,a0)		        | set INFLIGHT_ALIEN.AnimationFrame
+	move.b	d1,(IndexInSwarm,a0)				     | set INFLIGHT_ALIEN.IndexInSwarm 
 	rts
 
 
@@ -1412,13 +1410,12 @@ l_21F8: move.w	#0x5241,d6            | character RAM address where HIGH SCORE wi
 
 HANDLE_INFLIGHT_ALIENS:
 	lea		INFLIGHT_ALIENS,a2           | load IX with address of 
-    move.w	#inflight_alien_size,d2                         | sizeof(INFLIGHT_ALIEN)
 	move.w	#8-1,d1							| 1 misc + 7 attacking aliens to process
 0:
-	movem.l	d1/d2,-(a7)
+	move.l	d1,-(a7)
 	jbsr	HANDLE_INFLIGHT_ALIEN_STAGE_OF_LIFE
-	movem.l	(a7)+,d1/d2
-	add.w	d2,a2		        | bump IX to point to next INFLIGHT_ALIEN structure
+	move.l	(a7)+,d1
+	add.w	#inflight_alien_size,a2		        | bump IX to point to next INFLIGHT_ALIEN structure
 	dbf		d1,0b               | do while b!=0
 	rts
 
@@ -1726,13 +1723,15 @@ INFLIGHT_ALIEN_CONVOY_CHARGER_START_SCROLL:
 *
 
 INFLIGHT_ALIEN_CONVOY_CHARGER_DO_SCROLL:
-	move.b	(0x04,a2),d0                    	| read INFLIGHT_ALIEN.Y [ld   a,(ix+0x04)]
+	move.b	(inf_alien_Y,a2),d0                    	| read INFLIGHT_ALIEN.Y [ld   a,(ix+0x04)]
 	sub.b	#0xC8,d0                         	| [sub  0xC8]
 	cmp.b	#0x05,d0                         	| [cp   0x05]
 	bcc.b	0f
+	move.b	D0,0x104
+	* alien reached leftmost scroll: don't move anymore
 	rts                                    	| [ret  c]
 0:
-	addq.b	#1,(0x04,a2)                    	| update INFLIGHT_ALIEN.Y [inc  (ix+0x04)]
+	addq.b	#1,(inf_alien_Y,a2)                    	| update INFLIGHT_ALIEN.Y [inc  (ix+0x04)]
 	rts                                    	| [ret]
 
 
@@ -1744,11 +1743,11 @@ INFLIGHT_ALIEN_CONVOY_CHARGER_DO_SCROLL:
 * IX = pointer to INFLIGHT_ALIEN structure
 
 INFLIGHT_ALIEN_DYING_SETUP_ANIM_AND_SOUND:
-	move.b	#0x04,(0x10,a2)                 	| set INFLIGHT_ALIEN.TempCounter1 to speed of death animation (lower = faster) [ld   (ix+0x10),0x04]
-	move.b	#0x04,(0x11,a2)                 	| set INFLIGHT_ALIEN.TempCounter2 to number of times to repeat death animation [ld   (ix+0x11),0x04]
-	move.b	#0x1C,(0x12,a2)                 	| set INFLIGHT_ALIEN.DyingAnimFrameCode [ld   (ix+0x12),0x1C]
-	addq.b	#1,(0x02,a2)                    	| bump INFLIGHT_ALIEN.StageOfLife to next stage [inc  (ix+0x02)]
-	move.b	(0x07,a2),d0                    	| read INFLIGHT_ALIEN.IndexInSwarm [ld   a,(ix+0x07)]
+	move.b	#0x04,(TempCounter1,a2)                 	| set INFLIGHT_ALIEN.TempCounter1 to speed of death animation (lower = faster) [ld   (ix+0x10),0x04]
+	move.b	#0x04,(TempCounter2,a2)                 	| set INFLIGHT_ALIEN.TempCounter2 to number of times to repeat death animation [ld   (ix+0x11),0x04]
+	move.b	#0x1C,(DyingAnimFrameCode,a2)                 	| set INFLIGHT_ALIEN.DyingAnimFrameCode [ld   (ix+0x12),0x1C]
+	addq.b	#1,(StageOfLife,a2)                    	| bump INFLIGHT_ALIEN.StageOfLife to next stage [inc  (ix+0x02)]
+	move.b	(IndexInSwarm,a2),d0                    	| read INFLIGHT_ALIEN.IndexInSwarm [ld   a,(ix+0x07)]
 	cmp.b	#0x70,d0                         	| is this a flagship? [cp   0x70]
 	jcc	l_110c                             	| yes, goto 0x110C to play flagship hit sound [jr   nc,0x110C]
 	move.b	#0x07,d0                        	| [ld   a,0x07]
@@ -3036,7 +3035,7 @@ PLAYER_ONE_INIT:
 l_05e2:
 	move.b	#2,d3								| command: DISPLAY_SCORE_COMMAND, parameter: 2  (invokes DISPLAY_HIGH_SCORE)
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
-	addq.b	#1,d3                            	| command: PRINT_TEXT, parameter: 2 (index of "PLAYER ONE") [inc  d]
+	move.w	#0x602,d3                            	| command: PRINT_TEXT, parameter: 2 (index of "PLAYER ONE") [inc  d]
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
 	move.b	#4,d3						| command: PRINT_TEXT, parameter: 4 (index of "HIGH SCORE")
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]

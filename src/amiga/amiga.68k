@@ -1003,6 +1003,8 @@ draw_sprites:
 	beq.w	11f
 	bsr		decode_sprite_data
 	lea		sprite_table,a1
+	move.b	d6,d2		| save attributes xflip/yflip
+	and.w	#0x3F,d6	| mask attributes
 	add.w	d6,d6
 	add.w	d6,d6
 	move.l	(a1,d6.w),d7
@@ -1018,11 +1020,13 @@ draw_sprites:
 	move.w	(a1)+,d7	| type
 	bne.b	11f			| sprite: ATM not supported
 	* BOB
-	* ATM no attributes choose left
+	btst	#7,d2
+	beq.b	3f
+	* YFlip: get mirrored version
+	addq.w	#4,a1
+3:
 	move.l	(a1),a0		| BOB data
-	moveq	#0,d2
 	bsr		blit_16x16_bob
-	
 11:
 	dbf		d3,2b
 	move.l	a2,a0
@@ -1722,7 +1726,7 @@ osd_read_dipswitches_old:
 osd_read_dipswitches:
 	moveq	#-1,d0
 	*move.w	#0xC0,d1	| free play: 0xC0, insert coin doesn't work ATM
-	move.w	#0x00,d1	| free play: 0xC0, insert coin doesn't work ATM
+	move.w	#0x00,d1	| 1 coin 1 credit
 	moveq	#0,d2
 
 	movem.l	a0,-(a7)
@@ -1754,15 +1758,7 @@ osd_read_coin:
 	move.b	#0,d0
 	move.l	_joypad_state(pc),d1
 	move.l	_previous_joypad_state(pc),d2
-	tst.b	ingame_palette_loaded
-	bne.b	2f
-	* we're in menu, we allow fire to insert
-	* coin and start the game
 
-	btst	#JPB_BTN_BLU,d1
-	beq.b	2f
-	btst	#JPB_BTN_BLU,d2	
-	beq.b	0f
 2:
 	btst	#JPB_BTN_GRN,d1	
 	beq.b	1f
@@ -1775,15 +1771,9 @@ osd_read_coin:
 1:
 	move.l	d1,_previous_joypad_state
 	movem.l	(a7)+,a0/d1/d2
-	tst.b		d0	| required as API needs CCR!
 	rts
 		
 		
-
-	bne.b	1f		| was already pressed
-	bclr	#4,d0	| first time fire press
-1:
-	*
 		* D0 bit0=P1, bit1=P2.
 osd_read_start:
 	move.l	d1,-(a7)
@@ -1795,11 +1785,7 @@ osd_read_start:
 	bra.b	2f
 0:
 	move.l	_joypad_state(pc),d1
-	tst.b	ingame_palette_loaded
-	bne.b	3f
-	btst	#JPB_BTN_RED,d1
-	bne.b	2f
-3:
+
 	btst	#JPB_BTN_YEL,d1
 	beq.b	1f
 2:
@@ -2046,7 +2032,7 @@ clear_planes_any_blitter_internal:
 * < A0: data (16 pixels wide, 2+1 planes)
 * < D0: X
 * < D1: Y
-* < D2: bit 2: 0: direct, 1: flip
+* < D2: bit 6: 0: direct, 1: flip
 * trashes: D0-D1
 
 blit_16x16_bob:
@@ -2072,7 +2058,7 @@ blit_16x16_bob:
 10:
 	move.l	fg_drawed_screen_ptr(pc),a1
 	lea		blit_planes_cookie_cut_16x(pc),a5
-	btst	#2,d2
+	btst	#6,d2
 	beq.b	0f
 	lea		blit_planes_cookie_cut_16x_flipped(pc),a5	
 0:
