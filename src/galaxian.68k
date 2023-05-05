@@ -3957,6 +3957,7 @@ jmp_2000:
 	lea		PLAYER_ONE_SCORE,a0
 	move.l	#CIRC_CMD_QUEUE_START,d0
 	sub.l	a0,d0
+	lsr.w	#1,d0
 	subq	#1,d0
 0:
 	clr.w	(a0)+

@@ -2143,7 +2143,7 @@ blit_planes_any_internal_cookie_cut:
     lea		mulNB_BYTES_PER_ROW_table(pc),a4
 	.ifdef	NO68020
 	add.w	d1,d1
-    add.w  (a4,d1.w),d1	| y times 40
+    move.w  (a4,d1.w),d1	| y times 40
 	.else
     move.w  (a4,d1.w*2),d1	| y times 40
 	.endif
