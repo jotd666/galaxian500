@@ -800,7 +800,7 @@ HANDLE_UNPROCESSED_COINS:
 	move.b	(a0),d0                         	| Read value [ld   a,(hl)]
 	tst.b	d0                               	| test if zero. Zero means we process unprocessed coins [and  a]
 	jne	l_1974                             	| if non-zero goto 0x1974 - don't bother processing coins. [jr   nz,0x1974]
-	or.b	(a0),d0                           	| Do we have any coins left unprocessed? [or   (hl)]
+	or.b	UNPROCESSED_COINS,d0                           	| Do we have any coins left unprocessed? [or   (hl)]
 	bne.b	0f
 	rts                                    	| Return if no coins left to be processed. [ret  z]
 0:
@@ -843,6 +843,7 @@ l_1964:
 	btst.b	#0,(a0)                         	| Have we only inserted one coin? [bit  0,(hl)]
 	jeq	l_1971                             	| if bit test fails, we've not inserted any coins yet, goto 0x1971 [jr   z,0x1971]
 	clr.b	(a0)                             	| reset COIN_COUNT to say we've acknowledged coins and awarded extra credit [ld   (hl),0x00]
+	lea	NUM_CREDITS,a0 						| bump HL to point to NUM_CREDITS     
 	jra	l_194f                             	| call routine to add a credit [jp   0x194F]
 
 * Called to reset COIN_COUNT to 1.
@@ -4843,28 +4844,27 @@ DISPLAY_LEVEL_FLAGS:
     jbsr	l_259E               | plot spaces to overwrite any existing flags
     bra.b	5b
 
-
 DISPLAY_PLAYER_SHIPS_REMAINING:
-	move.w	#0x539E,d6          | address in character RAM
-	move.w	#5,d2
-	move.b	HAS_PLAYER_SPAWNED,d0
-    beq.b	0f                       
-    subq.b	#1,d1
-	beq.b	1f
-	and.w	#0xFF,d1
-	subq.b	#1,d1
+	move.w	#0x539E,d6          | address in character RAM [ld   hl,0x539E]
+	move.b	#0x05,d2                        	| [ld   c,0x05]
+	tst.b	HAS_PLAYER_SPAWNED                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
+	                           	| test if flag is set [and  a]
+	jeq	l_22c1                             	| [jr   z,0x22C1]
+	subq.b	#1,d1                           	| [dec  b]
+	jeq	l_22c9                             	| [jr   z,0x22C9]
+l_22c1:
+	move.b	#0x66,d0                        	| [ld   a,0x66]
+	jbsr	l_2593                            	| plot 2X2 characters [call 0x2593]
+	subq.b	#1,d2                           	| [dec  c]
+	subq.b	#1,d1                           	| [...]
+	jne	l_22c1                             	| [djnz 0x22C1]
+l_22c9:
+	subq.b	#1,d2                           	| [dec  c]
+	bpl.b	0f
+	rts                                    	| [ret  m]
 0:
-    move.b	#0x66,d3
-    jbsr l_2593               | plot 2X2 characters
-    subq.b	#1,d2
-    dbf		d1,0b
-1:
-	subq.b	#1,d2
-	bpl.b	2f
-	rts
-2:
-	jbsr PLOT_CHARACTERS_2_BY_2_DESCENDING               | plot spaces to screen
-	bra.b	1b
+	jbsr	PLOT_CHARACTERS_2_BY_2_DESCENDING     	| plot spaces to screen [call 0x2591]
+	jra	l_22c9                             	| [jr   0x22C9]
 	
 	
 
