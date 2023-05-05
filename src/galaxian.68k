@@ -225,6 +225,14 @@ PivotYValueAdd        = 0x19           | Signed number which is added to INFLIGH
 
 inflight_alien_size   = 0x20
 
+* struct ENEMY_BULLET
+
+*IsActive = 0
+*XL = 1
+YL = 2                                       | low byte of the Y coordinate. Used to represent "fractional part" of Y coordinate
+YH = 3                                       | high byte of the Y coordinate.  
+YDelta = 4                                   | packed delta to add to YH *and* YL. Bit 7 = sign bit. Bits 0-6 = delta. See @$0AA1.                                  
+* - sizeof(ENEMY_BULLET) is 5 bytes
 
 * sound
 RESET_SOUND:
@@ -326,26 +334,26 @@ CALCULATE_TANGENT:
 	rts
 
 galaxian_irq:
-	lea	OBJRAM_BACK_BUF,a0
+	lea	OBJRAM_BACK_BUF,a0		| pointer to OBJRAM_BACK_BUF buffer held in RAM [ld   hl,0x4020]
+	* update screen in one go - IMPORTANT
 	jbsr	osd_update_graphics
-*TODO
-* update screen in one go - IMPORTANT
-*0079: 21 20 40      ld   hl,0x4020            | pointer to OBJRAM_BACK_BUF buffer held in RAM
+          
 *007C: 11 00 58      ld   de,0x5800            | start of screen attribute RAM
 *007F: 01 80 00      ld   bc,0x0080            | number of bytes to copy from OBJRAM_BACK_BUF 
 *0082: ED B0         ldir                     | update screen & sprites in one go
 * read ports and stash values read in RAM
-	move.b	PREV_PREV_PORT_STATE_6000,d0                       	| read previous, previous state of port 6000 (SW0) [ld   a,(0x4015)]
-	move.b	d0,PREV_PREV_PREV_PORT_STATE_6000                       	| and write to PREV_PREV_PREV_PORT_STATE_6000 [ld   (0x4016),a]
-	move.b	PREV_PORT_STATE_6000,d0                       	| read previous state of port 6000 (SW0) [ld   a,(0x4013)]
-	move.b	d0,PREV_PREV_PORT_STATE_6000                       	| and write to PREV_PREV_PORT_STATE_6000 [ld   (0x4015),a]
-	move.w	PORT_STATE_6000,d0                   	| read state of 6000 (SW0) and 6800 (SW1 & SOUND) [ld   hl,(0x4010)]
-	move.b	d0,PREV_PORT_STATE_6000                       	| and write to previous state value [ld   (0x4013),hl]
+	move.b	PREV_PREV_PORT_STATE_6000,PREV_PREV_PREV_PORT_STATE_6000                       	| read previous, previous state of port 6000 (SW0) [ld   a,(0x4015)]
+																							| and write to PREV_PREV_PREV_PORT_STATE_6000 [ld   (0x4016),a]
+	move.b	PREV_PORT_STATE_6000,PREV_PREV_PORT_STATE_6000                       	| read previous state of port 6000 (SW0) [ld   a,(0x4013)]
+																					| and write to PREV_PREV_PORT_STATE_6000 [ld   (0x4015),a]
+	move.b	PORT_STATE_6800,PREV_PORT_STATE_6800                   	| read state of 6800 (SW0) and 6800 (SW1 & SOUND) [ld   hl,(0x4010)]
+	move.b	PORT_STATE_6000,PREV_PORT_STATE_6000                   	| read state of 6000 (SW0) and 6800 (SW1 & SOUND) [ld   hl,(0x4010)]
+																| and write to previous state value [ld   (0x4013),hl]
 	jbsr		osd_read_dipswitches                       	| read state of DIPSW [ld   a,(0x7000)]
 	move.b	d2,PORT_STATE_7000                       	| and write to PORT_STATE_7000 holder [ld   (0x4012),a]
-	*move.b	l_6800,d0                       	| read start button, p2 control, dipsw 1/2 state [ld   a,(0x6800)]
+														| read start button, p2 control, dipsw 1/2 state [ld   a,(0x6800)]
 	move.b	d1,PORT_STATE_6800                       	| and write to PORT_STATE_6800 holder [ld   (0x4011),a]
-	*move.b	l_6000,d0                       	| read coin, p1 control, test & service state [ld   a,(0x6000)]
+														| read coin, p1 control, test & service state [ld   a,(0x6000)]
 	move.b	d0,PORT_STATE_6000                       	| and write to PORT_STATE_6000 holder [ld   (0x4010),a]
 
 		subq.b	#1,TIMING_VARIABLE             | decrement value

@@ -678,14 +678,6 @@ TIMING_VARIABLE:                     |  $425F         ; Perpetually decremented 
 * As an ENEMY_BULLET record only requires 5 bytes, this means that there's room for 14 enemy bullets in the array.
 *
 
-* struct ENEMY_BULLET
-
-*IsActive = 0
-*XL = 1
-YL = 2                                       | low byte of the Y coordinate. Used to represent "fractional part" of Y coordinate
-YH = 3                                       | high byte of the Y coordinate.  
-YDelta = 4                                   | packed delta to add to YH *and* YL. Bit 7 = sign bit. Bits 0-6 = delta. See @$0AA1.                                  
-* - sizeof(ENEMY_BULLET) is 5 bytes
 
 	ds.b	0x01
 ENEMY_BULLETS:                       |  $4260
