@@ -1062,7 +1062,7 @@ delete_previous_sprites:
 	movem.l	d3/a5,-(a7)
     lea _custom,a5
 	move.l	fg_drawed_screen_ptr(pc),a1
-	moveq	#2,d3
+	moveq	#3,d3
 	bsr		clear_planes_any_blitter_internal
 	movem.l	(a7)+,d3/a5
 11:

@@ -523,11 +523,7 @@ HIDE_SWARM_AND_PREPARE_TO_CLEAR_SCREEN:
     clr.b	TIMING_VARIABLE          
     clr.b   HAVE_AGGRESSIVE_ALIENS 		| reset HAVE_AGGRESSIVE_ALIENS flag
 	move.w	#0x5002,TEMP_CHAR_RAM_PTR       | address of column 2 in character RAM
-	.ifdef	FAST_INTRO_TEXT
-    move.b	#1,TEMP_COUNTER_2
-	.else
-    move.b	#0x20,TEMP_COUNTER_2
-	.endif
+    move.b	#0x20,TEMP_COUNTER_2			| tells to clear 32 rows in next script stage!
     addq.b	#1,SCRIPT_STAGE                | advance to next part of script.
 	rts
 	
@@ -537,13 +533,11 @@ HIDE_SWARM_AND_PREPARE_TO_CLEAR_SCREEN:
 
 CLEAR_SCREEN_BEFORE_WE_ARE_THE_GALAXIANS_INTRO:
 	move.w	TEMP_CHAR_RAM_PTR,d6  | load HL with contents of TEMP_CHAR_RAM_PTR
-     move.w	#0x1C-1,d1               | We want to clear #0x1C (28 characters) on this row 
+     move.w	#0x1C,d1               | We want to clear #0x1C (28 characters) on this row 
      move.b	#0x10,d0               | ordinal for empty character
-0:
-	 jbsr	osd_w_bg_videoram
-	 dbf		D1,0b         | Clear 28 characters from row
+	 bsr	rst_10_video       | Clear 28 characters from row
                               | As a row is 32 characters wide, to get to start of next row...
-     add.w	#4,d6              | ... we need to add 4 characters.
+     addq.w	#4,d6              | ... we need to add 4 characters.
      move.w	d6,TEMP_CHAR_RAM_PTR         | write to TEMP_CHAR_RAM_PTR
 	 subq.b	#1,TEMP_COUNTER_2     | decrement value of counter
      beq.b	1f                  | if value is not zero then exit 
@@ -4041,7 +4035,7 @@ DELETE_ALIEN_COMMAND:
 *
 * Animates the alien swarm.
 *
-* Can,0xbe disabled by setting 0x4238 (DISABLE_SWARM_ANIMATION) flag to 1.
+* Can be disabled by setting 0x4238 (DISABLE_SWARM_ANIMATION) flag to 1.
 *
 * Note:
 * The WE ARE THE GALAXIANS attract mode screen requires the DISABLE_SWARM_ANIMATION flag set

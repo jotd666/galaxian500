@@ -5,10 +5,7 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 
 PROGRESS:
 
-- empty shell copied from Xevious
-- *TODO
-- 1226: handle_scroll_text looks wrong: vrais pointeurs? adresses ecran?
-  relie a l_2323?
+-
 
 FEATURES:
 
