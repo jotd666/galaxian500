@@ -1727,7 +1727,6 @@ INFLIGHT_ALIEN_CONVOY_CHARGER_DO_SCROLL:
 	sub.b	#0xC8,d0                         	| [sub  0xC8]
 	cmp.b	#0x05,d0                         	| [cp   0x05]
 	bcc.b	0f
-	move.b	D0,0x104
 	* alien reached leftmost scroll: don't move anymore
 	rts                                    	| [ret  c]
 0:

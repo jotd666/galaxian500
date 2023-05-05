@@ -61,16 +61,6 @@ ONE_TICK = 1
 * to race the beam and flicker is very frequent
 OPT_ENABLE_DOUBLE_BUFFERING = 1
 
-* empiric values of number of 16x16 bob objects
-* currently displayed. Allows to adapt framerate
-* and avoid flicker/slowdowns
-* >= 64 is useless as 64 sprites are updated per frame
-*MEDIUM_SPRITES_THRESHOLD = 24
-*HIGH_SPRITES_THRESHOLD = 48
-
-MEDIUM_SPRITES_THRESHOLD = 36
-HIGH_SPRITES_THRESHOLD = 50
-
 _custom = 0xDFF000
 
 
@@ -975,6 +965,7 @@ osd_update_graphics:
 	bsr		delete_previous_sprites
 	
 	* now A0 contains sprite data
+	move.l	a0,0x100
 	**lea		test_sprite_data(pc),a0
 	
 	bsr		draw_sprites

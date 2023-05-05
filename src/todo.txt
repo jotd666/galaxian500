@@ -1,0 +1,15 @@
+transcode:
+- startup: swarm is active when it should not
+- SCORE ADVANCE TABLE: missing dashes
+- intro: flagship bob not displayed (displayed in test sprites!)
+- player controls
+- design sound & control api
+
+amiga:
+- emulate stars with sprites
+- scrolling is wrong
+- double buffering for background planes too
+- draw bullets
+- game should run at 60Hz
+
+- rip sounds
