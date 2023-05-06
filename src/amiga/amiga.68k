@@ -1098,27 +1098,33 @@ update_rows:
 	move.l	a3,a0		| source (current row)
 	move.l	a6,a1		| dest (current row)
 	move.b	(1,a4,d6.w),d0	| scroll offset: as signed byte
-	bpl.b	1f
-	moveq	#0,d0
-	bra.b	2f		| temp
+	bpl.b	2f
 	* negative: for instance for player ship pseudosprite
 	* at startup, value is 0xFF (-1)
 	* <0 is half left of the screen
 	* >0 is half right of the screen
 	* make up for that in the source & width
-	neg.b	d0			| absolute value
-	and.w	#0xF,d0		| shifting 0-15
-	add.b	#0x10,d0	| make up for shift
-	move.b	d0,d3
+	
+	move.w	d0,d3
+	and.w	#0xF,d0		| shifting 0-15 is not signed
+	neg.b	d3			| absolute value of bytes to shift to source
 	lsr.w	#3,d3		| divide by 8 to get source byte shift
-	add.w	d3,a0		| X-offset source plane position
-	bra.b	2f
+	tst		d0
+	beq.b	1f
+	* if there's some shifting we need to make up for it
+	addq.w	#2,d3
 1:
+	* round on even byte
+	bclr	#0,d3
+	add.w	d3,a0		| X-offset source plane position
+	bra.b	3f
+2:
 	* positive
 	move.w	d0,d3
 	lsr.w	#3,d3		| divide by 8 to get destination byte shift
+	bclr	#0,d3
     add.w   d3,a1       | X-offset destination plane position
-2:
+3:
 	sub.w	d3,d2		| change width depending on scroll offset
 	moveq	#8,d4		| height
 
