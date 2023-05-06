@@ -5707,12 +5707,6 @@ HANDLE_GAME_START_MELODY:
 
 
 
-182D: 32 CF 41      ld   (0x41CF),a
-1830: 32 D6 41      ld   (0x41D6),a
-1833: 21 BD 1E      ld   hl,0x1EBD
-1836: 22 D3 41      ld   (0x41D3),hl
-
-
 *
 * TODO: Wondering if I should change this label to HANDLE_MONOPHONIC_SOUNDS... maybe best to KISS. 
 *

@@ -648,13 +648,9 @@ osd_sound_start:
 	bra.b	1b
 
 	
-* sound stop is only called on sounds that are
-* actually tunes. It's also called on bomb but we'll skip it
-* that since it's harmful to music replay
+
 osd_sound_stop:
 	movem.l	d0/a6,-(a7)
-	cmp.w	#BOMB_SND,d0
-	beq.b	0f		| stop bomb sound makes no sense and stops the music!!
 	lea		_custom,a6
     clr.w   music_tick   | not playing anymore
 	clr.b	music_playing
@@ -2199,7 +2195,6 @@ blit_planes_any_internal_cookie_cut:
     
     movem.l (a7)+,d0-d7/a0-a6
     rts
-
 
 	
 	MUL_TABLE	NB_BYTES_PER_ROW,256

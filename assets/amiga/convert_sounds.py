@@ -21,23 +21,9 @@ hq_sample_rate = 24000
 
 
 sound_dict = {
-"MAIN_THEME_SND"          :{"index":0x01,"pattern":0,"ticks":324,"loops":False,"volume":32},
-"HIGHEST_SCORE_SND"      :{"index":0x02,"pattern":3,"loops":True,"volume":32},
-"HIGH_SCORE_SND"         :{"index":0x03,"pattern":2,"loops":True,"volume":32},
-"EXTRA_SOLVALOU_SND"     :{"index":0x04,"channel":3,"sample_rate":hq_sample_rate,"priority":10},
-"FLYING_ENEMY_HIT_SND"   :{"index":0x05,"channel":2,"sample_rate":hq_sample_rate},
-"GARU_ZAKATO_SND"        :{"index":0x06,"channel":3,"sample_rate":hq_sample_rate},
-"ANDOR_GENESIS_SND"      :{"index":0x07,"channel":3,"sample_rate":hq_sample_rate},
-"SHEONITE_SND"           :{"index":0x08,"channel":3,"sample_rate":hq_sample_rate},
-"TELEPORT_SND"           :{"index":0x09,"channel":2,"sample_rate":hq_sample_rate},
-"BACURA_HIT_SND"         :{"index":0x0a,"channel":1,"sample_rate":hq_sample_rate},
-"SHOT_SND"               :{"index":0x0b,"channel":1,"sample_rate":hq_sample_rate},
-"BOMB_SND"               :{"index":0x0c,"channel":1,"sample_rate":hq_sample_rate},
-"BONUS_FLAG_SND"         :{"index":0x0d,"channel":3,"sample_rate":hq_sample_rate},
-"SOLVALOU_SND"           :{"index":0x0e,"pattern":1,"loops":True,"volume":12},
-"COIN_SND"               :{"index":0x10,"channel":1,"sample_rate":hq_sample_rate},
-"GROUND_EXPLOSION_SND"   :{"index":0x11,"channel":3,"sample_rate":hq_sample_rate},
-"SOLVALOU_EXPLOSION_SND"   :{"index":0x12,"channel":3,"sample_rate":hq_sample_rate},
+#"EXTRA_SOLVALOU_SND"     :{"index":0x04,"channel":3,"sample_rate":hq_sample_rate,"priority":10},
+"SHOOT_SND"              :{"index":1,"channel":1,"sample_rate":hq_sample_rate},
+"CREDIT_SND"               :{"index":0,"channel":1,"sample_rate":hq_sample_rate},
 }
 
 max_sound = max(x["index"] for x in sound_dict.values())+1
@@ -78,14 +64,12 @@ def write_asm(contents,fw):
         n += 1
     fw.write("\n")
 
-music_module_label = "xevious_tunes"
 
 raw_file = os.path.join(tempfile.gettempdir(),"out.raw")
 with open(sndfile,"w") as fst,open(outfile,"w") as fw:
     fst.write(snd_header)
 
     fw.write("\t.datachip\n")
-    fw.write("\t.global\t{}\n".format(music_module_label))
 
     for wav_file,details in sound_dict.items():
         wav_name = os.path.basename(wav_file).lower()[:-4]
@@ -150,12 +134,7 @@ with open(sndfile,"w") as fst,open(outfile,"w") as fw:
         if len(contents)>65530:
             raise Exception(f"Sound {wav_entry} is too long")
         write_asm(contents,fw)
-    # make sure next section will be aligned
-    with open(os.path.join(sound_dir,"xevious_conv.mod"),"rb") as f:
-        contents = f.read()
-    fw.write("{}:".format(music_module_label))
-    write_asm(contents,fw)
-    fw.write("\t.align\t8\n")
+
     fst.writelines(sound_table)
     fst.write("\n\t.global\t{0}\n\n{0}:\n".format("sound_table"))
     for i,st in enumerate(sound_table_simple):

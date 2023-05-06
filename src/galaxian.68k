@@ -236,11 +236,343 @@ YDelta = 4                                   | packed delta to add to YH *and* Y
 
 * sound
 RESET_SOUND:
+	jsr		osd_sound_stop
 	rts
 HANDLE_SOUND:
-	rts
+	clr.b	d0                               	| [xor  a]
+	move.b	d0,SOUND_VOL                       	| clear SOUND_VOL [ld   (0x41C0),a]
+	subq.b	#1,d0                           	| [dec  a]
+	move.b	d0,PITCH_SOUND_FX_BASE_FREQ                       	| set PITCH_SOUND_FX_BASE_FREQ value [ld   (0x41C1),a]
+	jbsr	HANDLE_GAME_START_MELODY    | [call 0x1747]
+	jbsr	HANDLE_ALIEN_ATTACK_SOUND    |  [call 0x17D0]
+	jbsr	HANDLE_ALIEN_DEATH_SOUND    |  [call 0x1819]
+	jbsr	HANDLE_COMPLEX_SOUNDS    |  [call 0x175D]
+	jbsr	HANDLE_EXTRA_LIFE_SOUND     | [call 0x184F]
+	jbsr	HANDLE_COIN_INSERT_SOUND     | [call 0x1876]
+	jbsr	HANDLE_PLAYER_SHOOTING_SOUND     | [call 0x1723]
+	move.b	SOUND_VOL,d0                       	| load A with value of SOUND_VOL [ld   a,(0x41C0)]
+	*move.b	d0,l_6806                       	| Write to !SOUND Vol of F1 [ld   (0x6806),a]
+	ror.b	#1,d0                            	| [rrca]
+	*move.b	d0,l_6807                       	| Write to !SOUND Vol of f2 [ld   (0x6807),a]
+	move.b	PITCH_SOUND_FX_BASE_FREQ,d0                       	| read PITCH_SOUND_FX_BASE_FREQ value [ld   a,(0x41C1)]
+	*move.b	d0,l_7800                       	| Write to !Pitch Sound FX base frequency [ld   (0x7800),a]
+	rts                                    	| [ret]
+
+
+
+HANDLE_PLAYER_SHOOTING_SOUND:
+	move.b	PLAY_PLAYER_SHOOT_SOUND,d0                       	| read PLAY_PLAYER_SHOOT_SOUND flag [ld   a,(0x41CC)]
+	subq.b	#1,d0                           	| decrement value [dec  a]
+	jne	l_1733                             	| if the value is nonzero now then it wasn't set to 1 before, so don't play the sound. Goto 0x1733 [jp   nz,0x1733]
+	move.b	d0,PLAY_PLAYER_SHOOT_SOUND                       	| a is zero, so this sets the shoot flag to false. [ld   (0x41CC),a]
+	move.b	#0x08,d0                        	| this value here appears to affect the length of the shoot sound. Higher value = longer [ld   a,0x08]
+	move.b	d0,PLAYER_SHOOT_SOUND_COUNTER                       	| set PLAYER_SHOOT_SOUND_COUNTER [ld   (0x41CE),a]
+	rts                                    	| [ret]
+
+l_1733:
+	move.b	PLAYER_SHOOT_SOUND_COUNTER,d0                       	| read PLAYER_SHOOT_SOUND_COUNTER [ld   a,(0x41CE)]
+	tst.b	d0                               	| test if zero [and  a]
+	jeq	l_1743                             	| if it is zero, goto 0x1743, which will turn the player shoot sound off [jp   z,0x1743]
+	subq.b	#1,d0                           	| reduce counter value by 1. [dec  a]
+	move.b	d0,PLAYER_SHOOT_SOUND_COUNTER                       	| and write updated count back. [ld   (0x41CE),a]
+	move.b	IS_GAME_OVER,d0                       	| read IS_GAME_OVER flag [ld   a,(0x4007)]
+	eor.b	#0x01,d0                         	| [xor  0x01]
+l_1743:
+	*move.b	d0,l_6805                       	| !SOUND shoot on/off [ld   (0x6805),a]
+	rts                                    	| [ret]
+
+
+*
+* Plays the GAME START tune.
+*
+
+HANDLE_GAME_START_MELODY:
+	move.b	PLAY_GAME_START_MELODY,d0                       	| read PLAY_GAME_START_MELODY flag [ld   a,(0x41D1)]
+	subq.b	#1,d0                           	| if was set to 1, this dec will set zero flag [dec  a]
+	beq.b	0f
+	rts                                    	| return if PLAY_GAME_START_MELODY wasn't set [ret  nz]
+0:
+	move.b	d0,PLAY_GAME_START_MELODY                       	| clear PLAY_GAME_START_MELODY flag [ld   (0x41D1),a]
+	addq.b	#1,d0                           	| [inc  a]
+	move.b	d0,PLAY_GAME_START_MELODY+1                       	| [ld   (0x41D2),a]
+	move.b	d0,DELAY_BEFORE_NEXT_SOUND                       	| [ld   (0x41D6),a]
+	* play game start tune
+	*lea	l_1E68(pc),a0                      	| [ld   hl,0x1E68]
+	*move.b	a0,COMPLEX_SOUND_POINTER                       	| set COMPLEX_SOUND_POINTER [ld   (0x41D3),hl]
+	rts                                    	| [ret]
+
+
+
+
+*
+* TODO: Wondering if I should change this label to HANDLE_MONOPHONIC_SOUNDS... maybe best to KISS.
+*
+*
+
+HANDLE_COMPLEX_SOUNDS:
+	lea	PLAY_GAME_START_MELODY+1,a0                      	| [ld   hl,0x41D2]
+	jbsr	l_176c                            	| [call 0x176C]
+	lea	PLAYER_SHOOT_SOUND_COUNTER+1,a0                      	| [ld   hl,0x41CF]
+	jbsr	l_176c                            	| [call 0x176C]
+	lea	IS_COMPLEX_SOUND_PLAYING,a0                      	| pointer to address of IS_COMPLEX_SOUND_PLAYING [ld   hl,0x41CD]
+l_176c:
+	move.b	(a0),d0                         	| read flag [ld   a,(hl)]
+	tst.b	d0                               	| is flag set? [and  a]
+	bne.b	0f
+	rts                                    	| No, a complex sound isn't playing, so return [ret  z]
+0:
+                            	| OK, now DE = 0x41CD
+	move.b	#0x02,d0                        	| [ld   a,0x02]
+	move.b	d0,SOUND_VOL                       	| Set value of SOUND_VOL [ld   (0x41C0),a]
+	move.b	COMPLEX_SOUND_POINTER,d0                       	| [ld   a,(0x41D5)]
+	move.b	d0,PITCH_SOUND_FX_BASE_FREQ                       	| Set PITCH_SOUND_FX_BASE_FREQ [ld   (0x41C1),a]
+
+* wait until counter has hit 0 before getting next musical note or sound effect to play.
+	move.b	DELAY_BEFORE_NEXT_SOUND,d0                       	| read DELAY_BEFORE_NEXT_SOUND [ld   a,(0x41D6)]
+	subq.b	#1,d0                           	| decrement countdown [dec  a]
+	jne	l_17a2                             	| if count hasn't hit zero, then goto 0x17A2 [jp   nz,0x17A2]
+	*TODO
+	nop
+* OK, counter is zero, we get musical note or sound effect to play.
+*	move.w	COMPLEX_SOUND_POINTER,a0                   	| read COMPLEX_SOUND_POINTER [ld   hl,(0x41D3)]
+*	move.b	(a0),d0                         	| read sound to play [ld   a,(hl)]
+*	cmp.b	#0xE0,d0                         	| is this the end of sound marker? [cp   0xE0]
+*	jeq	l_17a6                             	| if so, then we've finished playing our sounds, goto 0x17A6 [jr   z,0x17A6]
+*	addq.w	#1,a0                           	| bump HL to point to next sound [inc  hl]
+*	move.b	a0,l_41D3                       	| update COMPLEX_SOUND_POINTER [ld   (0x41D3),hl]
+*	move.b	d0,d1                           	| [ld   b,a]
+*	and.b	#0x1F,d0                         	| [and  0x1F]
+*	lea	l_17A9(pc),a0                      	| [ld   hl,0x17A9]
+*rst  0x20                               	| call routine to fetch value @ HL + A
+*	move.b	d0,COMPLEX_SOUND_POINTER+2                       	| [ld   (0x41D5),a]
+*	move.b	d1,d0                           	| [ld   a,b]
+*	and.b	#0xE0,d0                         	| [and  0xE0]
+*	rol.b	#3,d0                            	| [rlca]
+*	lea	l_17C8(pc),a0                      	| [ld   hl,0x17C8]
+*rst  0x20                               	| call routine to fetch value @ HL + A
+l_17a2:
+	move.b	d0,DELAY_BEFORE_NEXT_SOUND                       	| set DELAY_BEFORE_NEXT_SOUND [ld   (0x41D6),a]
+	rts                                    	| [ret]
+
+*,0xDE = 0x41CD
+l_17a6:
+	clr.b	d0                               	| [xor  a]
+	move.b	d0,(a1)                         	| Indicate free to play more sounds [ld   (de),a]
+	rts                                    	| [ret]
+
+l_17C8:
+	.byte	0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x00
+
+
+*
+* This routine is responsible for making the "Wheeew" noise as the alien attackers fly down the screen.
+* No, I'm not going to call this routine "HANDLE_WHEEW_SOUND" although I was tempted	|)
+*
+
+HANDLE_ALIEN_ATTACK_SOUND:
+	move.b	IS_GAME_IN_PLAY,d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	ror.b	#1,d0                            	| move bit 0 into carry. If game is in play, carry is set [rrca]
+	bcs.b	0f
+	rts                                    	| if carry is not set, game's not in play, return [ret  nc]
+0:
+	lea	ENABLE_ALIEN_ATTACK_SOUND,a0                      	| [ld   hl,0x41C2]
+	move.b	(a0),d0                         	| [ld   a,(hl)]
+	subq.b	#1,d0                           	| [dec  a]
+	jne	l_17e5                             	| [jp   nz,0x17E5]
+	move.b	d0,(a0)                         	| [ld   (hl),a]
+	*lea	l_A002(pc),a0                      	| [ld   hl,0xA002]
+	*move.b	a0,l_41C3                       	| [ld   (0x41C3),hl]
+	move.b	#0x02,UNKNOWN_SOUND_41C3
+	move.b	#0xA0,UNKNOWN_SOUND_41C3
+	
+	rts                                    	| [ret]
+
+l_17e5:
+	move.b	HAVE_NO_INFLIGHT_ALIENS,d0                       	| read HAVE_NO_INFLIGHT_ALIENS [ld   a,(0x4226)]
+	ror.b	#1,d0                            	| move flag into carry [rrca]
+	bcc.b	0f
+	rts                                    	| return if there are no aliens in flight [ret  c]
+0:
+	lea		UNKNOWN_SOUND_41C3,a0                           	| bump HL to point to UNKNOWN_SOUND_41C3 [inc  hl]
+	move.b	TIMING_VARIABLE,d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
+	ror.b	#1,d0                            	| move bit 0 into carry [rrca]
+	jcs	l_1801                             	| [jr   c,0x1801]
+	move.b	UNKNOWN_SOUND_41C4,d0                       	| [ld   a,(0x41C4)]
+	cmp.b	#0x60,d0                         	| [cp   0x60]
+	jcc	l_17f9                             	| [jr   nc,0x17F9]
+	addq.b	#1,(a0)                         	| [inc  (hl)]
+l_17f9:
+	tst.b	d0                               	| [and  a]
+	jeq	l_1801                             	| [jp   z,0x1801]
+	subq.b	#1,d0                           	| [dec  a]
+	move.b	d0,UNKNOWN_SOUND_41C4                       	| [ld   (0x41C4),a]
+l_1801:
+	move.b	(a0),d0                         	| [ld   a,(hl)]
+	and.b	#0x03,d0                         	| [and  0x03]
+	jne	l_180c                             	| [jp   nz,0x180C]
+	move.b	#0x60,d0                        	| [ld   a,0x60]
+	jra	l_1815                             	| [jp   0x1815]
+l_180c:
+	ror.b	#1,d0                            	| [rrca]
+	move.b	UNKNOWN_SOUND_41C4,d0                       	| [ld   a,(0x41C4)]
+	jcc	l_1815                             	| [jr   nc,0x1815]
+	add.b	#0x60,d0                         	| [add  a,0x60]
+	roxr.b	#1,d0                           	| [rra]
+l_1815:
+	move.b	d0,PITCH_SOUND_FX_BASE_FREQ                       	| Set PITCH_SOUND_FX_BASE_FREQ [ld   (0x41C1),a]
+	rts                                    	| [ret]
+
+
+*
+* Plays the sound of an alien or a flagship when hit.
+*
+* No death sound will,0xbe played if either of the IS_GAME_IN_PLAY or IS_COMPLEX_SOUND_PLAYING flags are set.
+*
+
+HANDLE_ALIEN_DEATH_SOUND:
+	move.b	IS_GAME_IN_PLAY,d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	ror.b	#1,d0                            	| move flag into carry [rrca]
+	bcs.b	0f
+	rts                                    	| if game is not in play, we won't play sound. [ret  nc]
+0:
+
+	move.b	ALIEN_DEATH_SOUND,d0                       	| [ld   a,(0x41DF)]
+	cmp.b	#0x06,d0                         	| Do we want to play the ALIEN DEATH sound? [cp   0x06]
+	jne	l_183a                             	| no, goto 0x183A [jp   nz,0x183A]
+
+	move.b	IS_COMPLEX_SOUND_PLAYING,d0                       	| read IS_COMPLEX_SOUND_PLAYING flag [ld   a,(0x41CD)]
+	ror.b	#1,d0                            	| move [rrca]
+	bcc.b	0f
+	rts                                    	| [ret  c]
+0:
+
+	move.b	#0x01,d0                        	| [ld   a,0x01]
+	move.b	d0,PLAYER_SHOOT_SOUND_COUNTER+1                       	| [ld   (0x41CF),a]
+	move.b	d0,DELAY_BEFORE_NEXT_SOUND                       	| [ld   (0x41D6),a]
+	* play alien death sound *TODO
+	*lea	l_1EBD(pc),a0                      	| [ld   hl,0x1EBD]
+	*move.b	a0,COMPLEX_SOUND_POINTER                       	| [ld   (0x41D3),hl]
+	rts                                    	| [ret]
+
+l_183a:
+	cmp.b	#0x16,d0                         	| Do we want to play the FLAGSHIP DEATH sound? [cp   0x16]
+	beq.b	0f
+	rts                                    	| if not, return [ret  nz]
+0:
+	clr.b	d0                               	| [xor  a]
+	move.b	d0,PLAYER_SHOOT_SOUND_COUNTER+1                       	| [ld   (0x41CF),a]
+	addq.b	#1,d0                           	| [inc  a]
+	move.b	d0,IS_COMPLEX_SOUND_PLAYING                       	| [ld   (0x41CD),a]
+	move.b	d0,DELAY_BEFORE_NEXT_SOUND                       	| [ld   (0x41D6),a]
+	* play flagship death soundeffect
+	*lea	l_1EDF(pc),a0                      	| [ld   hl,0x1EDF]
+	*move.b	a0,COMPLEX_SOUND_POINTER                       	| [ld   (0x41D3),hl]
+	rts                                    	| [ret]
+
+*
+*
+*
+*
+*
+
+HANDLE_EXTRA_LIFE_SOUND:
+	tst.b	PLAY_EXTRA_LIFE_SOUND                            	| read PLAY_EXTRA_LIFE_SOUND flag. [bit  0,l]
+	jeq	l_185e                             	| if flag is not set, goto 0x185E. [jp   z,0x185E]
+	             	| store 0 in PLAY_EXTRA_LIFE_SOUND and 0x80 in EXTRA_LIFE_SOUND_COUNTER [ld   hl,0x8000]
+	move.b	#0,PLAY_EXTRA_LIFE_SOUND                       	| [ld   (0x41C7),hl]
+	move.b	#0x80,EXTRA_LIFE_SOUND_COUNTER                       	| [ld   (0x41C7),hl]
+	rts                                    	| [ret]
+
+* play the extra life sound
+l_185e:
+	move.b	EXTRA_LIFE_SOUND_COUNTER,d0                           	| read EXTRA_LIFE_SOUND_COUNTER [ld   a,h]
+	tst.b	d0                               	| test if value is 0. [and  a]
+	bne.b	0f
+	rts                                    	| return if value is indeed 0. [ret  z]
+0:
+	subq.b	#1,d0                           	| decrement counter [dec  a]
+	move.b	d0,EXTRA_LIFE_SOUND_COUNTER                       	| update EXTRA_LIFE_SOUND_COUNTER [ld   (0x41C8),a]
+	and.b	#0x04,d0                         	| [and  0x04]
+	jeq	l_186c                             	| [jp   z,0x186C]
+	move.b	#0x81,d0                        	| [ld   a,0x81]
+l_186c:
+	subq.b	#1,d0                           	| [dec  a]
+	move.b	d0,PITCH_SOUND_FX_BASE_FREQ                       	| Set PITCH_SOUND_FX_BASE_FREQ [ld   (0x41C1),a]
+	move.b	#0x01,d0                        	| [ld   a,0x01]
+	move.b	d0,SOUND_VOL                       	| set SOUND_VOL [ld   (0x41C0),a]
+	rts                                    	| [ret]
+
+
+
+
+HANDLE_COIN_INSERT_SOUND:
+	lea	PLAY_PLAYER_CREDIT_SOUND,a0                      	| address of PLAY_PLAYER_CREDIT_SOUND flag [ld   hl,0x41C9]
+	move.b	(a0),d0                         	| read flag [ld   a,(hl)]
+	subq.b	#1,d0                           	| [dec  a]
+	jne	l_1886                             	| if PLAY_PLAYER_CREDIT_SOUND was not set to 1, goto 0x1886 [jp   nz,0x1886]
+	move.b	d0,(a0)                         	| clear flag. [ld   (hl),a]
+	move.b	#0x20,PLAYER_CREDIT_SOUND_COUNTER                      	| duration to play sound [ld   hl,0x0020]
+	move.b	#0,PLAYER_CREDIT_SOUND_COUNTER+1                      	| [ld   (0x41CA),hl]
+	rts                                    	| [ret]
+
+* play the credit sound
+l_1886:
+	lea		PLAYER_CREDIT_SOUND_COUNTER,a0                           	| bump HL to 0x41CA, which is address of PLAYER_CREDIT_SOUND_COUNTER [inc  hl]
+	move.b	(a0),d0                         	| read value of count [ld   a,(hl)]
+	tst.b	d0                               	| test if its zero [and  a]
+	bne.b	0f
+	rts                                    	| if its zero, return [ret  z]
+0:
+	subq.b	#1,(a0)                         	| reduce counter [dec  (hl)]
+	addq.w	#1,a0                           	| bump HL to 0x41CB [inc  hl]
+	move.b	(a0),d0                         	| [ld   a,(hl)]
+	addq.b	#0x04,d0                        	| [add  a,0x04]
+	move.b	d0,(a0)                         	| [ld   (hl),a]
+	move.b	d0,PITCH_SOUND_FX_BASE_FREQ                       	| Set PITCH_SOUND_FX_BASE_FREQ [ld   (0x41C1),a]
+	clr.b	d0                               	| [xor  a]
+	move.b	d0,SOUND_VOL                       	| set SOUND_VOL [ld   (0x41C0),a]
+	rts                                    	| [ret]
+
+*
+*
+* This piece of code is used to make the sound of the swarm "angrier" as the level goes on.
+* The longer the level takes to complete, the faster and angrier the swarm is.
+*
+*
+
 HANDLE_SWARM_SOUND:
-	rts
+	move.b	RESET_SWARM_SOUND_TEMPO,d0                       	| read RESET_SWARM_SOUND_TEMPO flag [ld   a,(0x41D0)]
+	tst.b	d0                               	| test if zero [and  a]
+	jeq	l_18a6                             	| if zero, goto 0x18A6 [jr   z,0x18A6]
+	clr.b	d0                               	| clear A [xor  a]
+	move.b	d0,RESET_SWARM_SOUND_TEMPO                       	| reset RESET_SWARM_SOUND_TEMPO flag [ld   (0x41D0),a]
+	move.b	#0x0F,d0                        	| Maximum (slowest) Tempo setting [ld   a,0x0F]
+	jra	l_18b2                             	| [jr   0x18B2]
+
+l_18a6:
+	move.b	TIMING_VARIABLE,d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
+	addq.b	#0x01,d0                        	| add 1 to it [add  a,0x01]
+	bcs.b	0f
+	rts                                    	| return if no carry. This means the following code will only fire when A == #0xFF (255 decimal) [ret  nc]
+0:
+	move.b	LFO_FREQ_BITS,d0                       	| read LFO_FREQ_BITS [ld   a,(0x421F)]
+	tst.b	d0                               	| test if zero [and  a]
+	bne.b	0f
+	rts                                    	| return if zero [ret  z]
+0:
+	subq.b	#1,d0                           	| otherwise reduce by 1 [dec  a]
+l_18b2:
+	move.b	d0,LFO_FREQ_BITS                       	| and update LFO_FREQ_BITS [ld   (0x421F),a]
+*	move.b	#0x04,d1                        	| We're writing to 4 ports [ld   b,0x04]
+*	lea	l_6004(pc),a0                      	| !DRIVER Background lfo freq bit0 [ld   hl,0x6004]
+*l_18ba:
+*	move.b	d0,(a0)                         	| write to port. Only bit 0 of register A matters [ld   (hl),a]
+*	addq.w	#1,a0                           	| bump to next port [inc  hl]
+*	ror.b	#1,d0                            	| shift all bits in A one place to right [rrca]
+*	subq.b	#1,d1                           	| [...]
+*	jne	l_18ba                             	| [djnz 0x18BA]
+	rts                                    	| [ret]
+
 	
 * JOTD: added utility functions to emulate rst 10 & ldir
 

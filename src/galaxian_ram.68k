@@ -467,6 +467,7 @@ RESET_SWARM_SOUND_TEMPO:             |  $41D0         ; When set to 1, resets th
 PLAY_GAME_START_MELODY:              |  $41D1         ; When set to 1, plays the game start tune.: 
                                      |  $41D2         ; sound related
 	ds.b	0x02
+	.align	2
 COMPLEX_SOUND_POINTER:               |  $41D3         ; If music or complex sound effect is playing, this points to the current sound/musical note being played. See $1782:
                                      |  $41D5         ; Used to set !Pitch Sound FX base frequency
 	ds.b	0x03
