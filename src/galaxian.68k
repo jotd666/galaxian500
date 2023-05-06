@@ -3029,12 +3029,10 @@ INIT_0408:
 	move.b	#0x50,d1                        	| [ld   b,0x50]
 	jbsr	rst_10                               	| Fill B bytes of memory from HL with value in A.
 
-	move.b	d0,DISABLE_SWARM_ANIMATION                       	| clear DISABLE_SWARM_ANIMATION [ld   (0x4238),a]
-	move.b	d0,IS_COLUMN_SCROLLING                       	| clear IS_COLUMN_SCROLLING [ld   (0x40B0),a]
-	move.w	#0x5002,d6                      	| point to address in character RAM (3rd character of top row) [ld   hl,0x5002]
-	move.w	d6,TEMP_CHAR_RAM_PTR                       	| set TEMP_CHAR_RAM_PTR [ld   (0x400B),hl]
-	lea	TEMP_COUNTER_2,a0                      	| load HL with address of TEMP_COUNTER_2 [ld   hl,0x4009]
-	move.b	#0x10,(a0)                      	| set countdown to 0x10 (16 decimal) [ld   (hl),0x10]
+	clr.b	DISABLE_SWARM_ANIMATION                       	| clear DISABLE_SWARM_ANIMATION [ld   (0x4238),a]
+	clr.b	IS_COLUMN_SCROLLING                       	| clear IS_COLUMN_SCROLLING [ld   (0x40B0),a]
+	move.w	#0x5002,TEMP_CHAR_RAM_PTR                       	| set TEMP_CHAR_RAM_PTR [ld   (0x400B),hl]
+	move.b	#0x10,TEMP_COUNTER_2                      	| set countdown to 0x10 (16 decimal) [ld   (hl),0x10]
 	addq.b	#1,SCRIPT_STAGE                         	| advance to next stage of script [inc  (hl)]
 	rts                                    	| [ret]
 
@@ -4274,6 +4272,15 @@ INITIALISE_SYSTEM:  | 1A55
 0:
 	clr.b	(a0)+
 	dbf		d0,0b
+
+	* some important variable sets were lost in diagnostic code
+	* without this, the alien swarm appears at startup (which is great to
+	* test it immediately, but not great to be accurate :))
+	moveq	#1,d0
+	move.b	d0,DIAGNOSTIC_MESSAGE_TYPE
+	move.b	d0,HAVE_NO_INFLIGHT_ALIENS
+	move.b	d0,TIMING_VARIABLE
+	move.b	d0,DISABLE_SWARM_ANIMATION
 	
 	* message queue set to all invalid (negative)
 	lea		CIRC_CMD_QUEUE_START,a0

@@ -6622,9 +6622,9 @@ OBJRAM_TEST:
 1C0F: 32 00 60      ld   (0x6000),a           | write to !DRIVER lamp 1
 1C12: 32 01 60      ld   (0x6001),a           | write to !DRIVER lamp 2
 1C15: 32 02 60      ld   (0x6002),a           | write to !DRIVER lamp 3
-1C18: 32 26 42      ld   (0x4226),a
+1C18: 32 26 42      ld   (0x4226),a           | set HAVE_NO_INFLIGHT_ALIENS
 1C1B: 32 5F 42      ld   (0x425F),a           | set TIMING_VARIABLE
-1C1E: 32 38 42      ld   (0x4238),a
+1C1E: 32 38 42      ld   (0x4238),a			| set DISABLE_SWARM_ANIMATION
 1C21: 3E 1F         ld   a,0x1F
 1C23: 32 13 52      ld   (0x5213),a           | write "O" to screen
 1C26: 3E 1B         ld   a,0x1B
