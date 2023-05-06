@@ -296,6 +296,10 @@ HANDLE_GAME_START_MELODY:
 	addq.b	#1,d0                           	| [inc  a]
 	move.b	d0,PLAY_GAME_START_MELODY+1                       	| [ld   (0x41D2),a]
 	move.b	d0,DELAY_BEFORE_NEXT_SOUND                       	| [ld   (0x41D6),a]
+	
+	move.w	#INTRO_SND,d0
+	jsr		osd_sound_start
+	
 	* play game start tune
 	*lea	l_1E68(pc),a0                      	| [ld   hl,0x1E68]
 	*move.b	a0,COMPLEX_SOUND_POINTER                       	| set COMPLEX_SOUND_POINTER [ld   (0x41D3),hl]
@@ -511,12 +515,18 @@ HANDLE_COIN_INSERT_SOUND:
 	subq.b	#1,d0                           	| [dec  a]
 	jne	l_1886                             	| if PLAY_PLAYER_CREDIT_SOUND was not set to 1, goto 0x1886 [jp   nz,0x1886]
 	move.b	d0,(a0)                         	| clear flag. [ld   (hl),a]
+	
+	move.w	#CREDIT_SND,d0
+	jbsr	osd_sound_start
+	
 	move.b	#0x20,PLAYER_CREDIT_SOUND_COUNTER                      	| duration to play sound [ld   hl,0x0020]
 	move.b	#0,PLAYER_CREDIT_SOUND_COUNTER+1                      	| [ld   (0x41CA),hl]
 	rts                                    	| [ret]
 
-* play the credit sound
+* play the credit sound (disabled)
 l_1886:
+	rts
+	
 	lea		PLAYER_CREDIT_SOUND_COUNTER,a0                           	| bump HL to 0x41CA, which is address of PLAYER_CREDIT_SOUND_COUNTER [inc  hl]
 	move.b	(a0),d0                         	| read value of count [ld   a,(hl)]
 	tst.b	d0                               	| test if its zero [and  a]
@@ -1291,6 +1301,8 @@ HANDLE_INFLIGHT_ALIEN_SPRITE_UPDATE:
 	addq.w	#0x4,a3
 	dbf		d1,0b
 	rts
+
+
 *
 * Extract the colour, position, animation frame information from an INFLIGHT_ALIEN structure
 * and project it into a INFLIGHT_ALIEN_SPRITE.
@@ -1302,78 +1314,83 @@ HANDLE_INFLIGHT_ALIEN_SPRITE_UPDATE:
 *
 
 SET_SPRITE_STATE:
-	tst.b	(IsActive,a2)       | test INFLIGHT_ALIEN.IsActive
-	jeq		SET_INACTIVE_OR_DYING_SPRITE_STATE   | if alien is not active, goto 
-	move.b	(Colour,a2),(2,a3)		| read INFLIGHT_ALIEN.Colour, write to INFLIGHT_ALIEN_SPRITE.Colour
-	move.b	(inf_alien_X,a2),d0          | read INFLIGHT_ALIEN.X
-	subq.b	#8,d0
-	move.b	d0,(3,a3)    | write to INFLIGHT_ALIEN_SPRITE.X
-	move.b	(inf_alien_Y,a2),d0    | read INFLIGHT_ALIEN.Y 
-	not.b	d0          | flip bits  
-    sub.b	d2,d0                 | subtract pixel adjustment
-    move.b	d0,(a3)          | write to INFLIGHT_ALIEN_SPRITE.Y 
+	tst.b	(IsActive,a2)                    	| test INFLIGHT_ALIEN.IsActive [bit  0,(ix+0x00)]
+	jeq	SET_INACTIVE_OR_DYING_SPRITE_STATE                             	| if alien is not active, goto SET_INACTIVE_OR_DYING_SPRITE_STATE [jp   z,0x0C98]
+	move.b	(Colour,a2),(2,a3)                    	| write to INFLIGHT_ALIEN_SPRITE.Colour [ld   (iy+0x02),a]
+	move.b	(inf_alien_X,a2),d0                    	| read INFLIGHT_ALIEN.X [ld   a,(ix+0x03)]
+	sub.b	#0x08,d0                         	| [sub  0x08]
+	move.b	d0,(0x03,a3)                    	| write to INFLIGHT_ALIEN_SPRITE.X [ld   (iy+0x03),a]
+	move.b	(inf_alien_Y,a2),d0                    	| read INFLIGHT_ALIEN.Y [ld   a,(ix+0x04)]
+	not.b	d0                               	| flip bits [cpl]
+	sub.b	d2,d0                            	| subtract pixel adjustment [sub  c]
+	move.b	d0,(a3)                    	| write to INFLIGHT_ALIEN_SPRITE.Y [ld   (iy+0x00),a]
+
+* Determine what way the alien is facing and set the sprite XFlip/YFlip/Code properties accordingly
 *
-** Determine what way the alien is facing and set the sprite XFlip/YFlip/Code properties accordingly
-**
-** Important point to remember: non-flagship aliens are like bats. They hang upside down in the swarm.
-** If you want to see what the sprites look like before being flipped, refer to my sprite grabs @ 
-** http://seanriddle.com/galaxiansprites.html
-*
-	move.b	(AnimationFrame,a2),d0       | read INFLIGHT_ALIEN.AnimationFrame
-l_C40:
-	bpl.b	0f
-	cmp.b   #0xFA,d0                 | compare to -6 
-	bmi.b	1f
+* Important point to remember: non-flagship aliens are like bats. They hang upside down in the swarm.
+* If you want to see what the sprites look like before being flipped, refer to my sprite grabs @
+* http://seanriddle.com/galaxiansprites.html
 
-** alien is between an angle of 90 and 180 degrees (as player sees it)
-	not.b	d0
-	add.b  #0x12,d0
-	or.b	#0x40,d0                           | set X-Flip bit for sprite
-	add.b	d0,(AnimFrameStartCode,a2)         | add in INFLIGHT_ALIEN.AnimFrameStartCode
-	move.b	d0,(1,a3)                          | write to INFLIGHT_ALIEN_SPRITE.Code
-    addq.b	#1,(3,a3)           			   | increment INFLIGHT_ALIEN_SPRITE.X
-	rts
-0:
-	cmp.b	#6,d0
-	bpl.b	2f
+	move.b	(AnimationFrame,a2),d0                    	| read INFLIGHT_ALIEN.AnimationFrame [ld   a,(ix+0x05)]
+l_0c40:
+			                            	| set flags [and  a]
+	jpl	l_0c58                             	| [jp   p,0x0C58]
 
-** alien is between an angle of 180 and 270 degrees (as player sees it)
-	add.b	#0x11,d0
-	or.b	#0xC0,d0        | set X-Flip and Y-Flip bits for sprite
-	add.b	d0,(AnimFrameStartCode,a2)          | add in INFLIGHT_ALIEN.AnimFrameStartCode
-	move.b	d0,(1,a3)        				   | write to INFLIGHT_ALIEN_SPRITE.Code
-    addq.b	#1,(3,a3)           			   | increment INFLIGHT_ALIEN_SPRITE.X
-    addq.b	#1,(a3)           			       | increment INFLIGHT_ALIEN_SPRITE.Y
-	rts
-2:
-	cmp.b	#0xC,d0
-	bpl.b	3f
+	cmp.b	#0xFA,d0                         	| compare to -6 [cp   0xFA]
+	jmi	l_0c82                             	| [jp   m,0x0C82]
 
-** alien is between an angle of 270-360 degrees (as player sees it)
-	not.b	d0
-	add.b	#0x1E,d0
-	bset	#7,d0                               | set Y-Flip bit for sprite
-	add.b	d0,(AnimFrameStartCode,a2)          | add in INFLIGHT_ALIEN.AnimFrameStartCode
-	move.b	d0,(1,a3)        				   | write to INFLIGHT_ALIEN_SPRITE.Code
-    addq.b	#1,(a3)           			       | increment INFLIGHT_ALIEN_SPRITE.Y
-	rts
+* alien is between an angle of 90 and 180 degrees (as player sees it)
+	not.b	d0                               	| [cpl]
+	add.b	#0x12,d0                         	| [add  a,0x12]
+	or.b	#0x40,d0                          	| set X-Flip bit for sprite [or   0x40]
+	add.b	(AnimFrameStartCode,a2),d0                     	| add in INFLIGHT_ALIEN.AnimFrameStartCode [add  a,(ix+0x0f)]
+	move.b	d0,(0x01,a3)                    	| write to INFLIGHT_ALIEN_SPRITE.Code [ld   (iy+0x01),a]
+	addq.b	#1,(0x03,a3)                    	| increment INFLIGHT_ALIEN_SPRITE.X [inc  (iy+0x03)]
+	rts                                    	| [ret]
 
-1:
-	cmp.b	#0xF4,d0
-	bmi.b	4f
+l_0c58:
+	cmp.b	#0x06,d0                         	| [cp   0x06]
+	jpl	l_0c6e                             	| [jp   p,0x0C6E]
 
-** alien is between an angle of 0-90 degrees (as player sees it)
-	add.w	#0x1D,d0
-	add.b	d0,(AnimFrameStartCode,a2)          | add in INFLIGHT_ALIEN.AnimFrameStartCode
-	move.b	d0,(1,a3)        				   | write to INFLIGHT_ALIEN_SPRITE.Code
-	rts
-*
-3:
-	sub.b	#0x18,d0
-	bra.b	l_C40
-4:
-	add.b	#0x18,d0
-	bra.b	l_C40
+* alien is between an angle of 180 and 270 degrees (as player sees it)
+	add.b	#0x11,d0                         	| [add  a,0x11]
+	or.b	#0xC0,d0                          	| set X-Flip and Y-Flip bits for sprite [or   0xC0]
+	add.b	(AnimFrameStartCode,a2),d0                     	| add in INFLIGHT_ALIEN.AnimFrameStartCode [add  a,(ix+0x0f)]
+	move.b	d0,(0x01,a3)                    	| write to INFLIGHT_ALIEN_SPRITE.Code [ld   (iy+0x01),a]
+	addq.b	#1,(0x03,a3)                    	| increment INFLIGHT_ALIEN_SPRITE.X [inc  (iy+0x03)]
+	addq.b	#1,(0x00,a3)                    	| increment INFLIGHT_ALIEN_SPRITE.Y [inc  (iy+0x00)]
+	rts                                    	| [ret]
+
+l_0c6e:
+	cmp.b	#0x0C,d0                         	| [cp   0x0C]
+	jpl	l_0c90                             	| [jp   p,0x0C90]
+
+* alien is between an angle of 270-360 degrees (as player sees it)
+	not.b	d0                               	| [cpl]
+	add.b	#0x1E,d0                         	| [add  a,0x1E]
+	bset	#7,d0                          	| set Y-Flip bit for sprite [or   0x80]
+	add.b	(AnimFrameStartCode,a2),d0                     	| add in INFLIGHT_ALIEN.AnimFrameStartCode [add  a,(ix+0x0f)]
+	move.b	d0,(0x01,a3)                    	| write to INFLIGHT_ALIEN_SPRITE.Code [ld   (iy+0x01),a]
+	addq.b	#1,(0x00,a3)                    	| increment INFLIGHT_ALIEN_SPRITE.Y [inc  (iy+0x00)]
+	rts                                    	| [ret]
+
+l_0c82:
+	cmp.b	#0xF4,d0                         	| [cp   0xF4]
+	jmi	l_0c94                             	| [jp   m,0x0C94]
+
+* alien is between an angle of 0-90 degrees (as player sees it)
+	add.b	#0x1D,d0                         	| [add  a,0x1D]
+	add.b	(AnimFrameStartCode,a2),d0                     	| add in INFLIGHT_ALIEN.AnimFrameStartCode [add  a,(ix+0x0f)]
+	move.b	d0,(0x01,a3)                    	| write to INFLIGHT_ALIEN_SPRITE.Code [ld   (iy+0x01),a]
+	rts                                    	| [ret]
+
+l_0c90:
+	sub.b	#0x18,d0                         	| [sub  0x18]
+	jra	l_0c40                             	| [jr   0x0C40]
+
+l_0c94:
+	add.b	#0x18,d0                         	| [add  a,0x18]
+	jra	l_0c40                             	| [jr   0x0C40]
 
 
 *
@@ -1385,28 +1402,29 @@ l_C40:
 * IY = pointer to INFLIGHT_ALIEN_SPRITE structure
 
 SET_INACTIVE_OR_DYING_SPRITE_STATE:
-	tst.b	(IsDying,a2)		| test INFLIGHT_ALIEN.IsDying flag
-	beq.b	0f					| if the alien has finally expired, goto 0x0CBA
+l_0c98:
+	tst.b	(IsDying,a2)                    	| test INFLIGHT_ALIEN.IsDying flag [bit  0,(ix+0x01)]
+	jeq	l_0cba                             	| if the alien has finally expired, goto 0x0CBA [jp   z,0x0CBA]
 
 * alien is dying
-	move.b	#7,(2,a3)        | set INFLIGHT_ALIEN_SPRITE.Colour
-	move.b	(inf_alien_X,a2),d0		   | read INFLIGHT_ALIEN.X
-	subq.b	#8,d0
-	move.b	d0,(3,a3)     | set INFLIGHT_ALIEN_SPRITE.X
-	move.b	(inf_alien_Y,a2),d0		  | read INFLIGHT_ALIEN.Y 
-	not.b	d0
-	sub.b	d2,d0		       | subtract pixel adjustment value
-	move.b	d0,(a3)			 | set INFLIGHT_ALIEN_SPRITE.Y 
+	move.b	#0x07,(0x02,a3)                 	| set INFLIGHT_ALIEN_SPRITE.Colour [ld   (iy+0x02),0x07]
+	move.b	(inf_alien_X,a2),d0                    	| read INFLIGHT_ALIEN.X [ld   a,(ix+0x03)]
+	sub.b	#0x08,d0                         	| [sub  0x08]
+	move.b	d0,(0x03,a3)                    	| set INFLIGHT_ALIEN_SPRITE.X [ld   (iy+0x03),a]
+	move.b	(inf_alien_Y,a2),d0                    	| read INFLIGHT_ALIEN.Y [ld   a,(ix+0x04)]
+	not.b	d0                               	| [cpl]
+	sub.b	d2,d0                            	| subtract pixel adjustment value [sub  c]
+	move.b	d0,(0x00,a3)                    	| set INFLIGHT_ALIEN_SPRITE.Y [ld   (iy+0x00),a]
+	move.b	(DyingAnimFrameCode,a2),(0x01,a3)                    	| set INFLIGHT_ALIEN_SPRITE.Code [ld   (iy+0x01),a]
+	rts                                    	| [ret]
 
-	move.b	(DyingAnimFrameCode,a2),(1,a3)	| read INFLIGHT_ALIEN.DyingAnimFrameCode
-											| and set INFLIGHT_ALIEN_SPRITE.Code 
-	rts
-0:
 * This alien has died. Move sprite off-screen
-	move.b	#0xF8,(3,a3)     | set INFLIGHT_ALIEN_SPRITE.X to value offscreen
-	move.b	#0xF8,(0,a3)     | set INFLIGHT_ALIEN_SPRITE.Y to value offscreen
-	rts
-	
+l_0cba:
+	move.b	#0xF8,(0x03,a3)                 	| set INFLIGHT_ALIEN_SPRITE.X to value offscreen [ld   (iy+0x03),0xF8]
+	move.b	#0xF8,(0x00,a3)                 	| set INFLIGHT_ALIEN_SPRITE.Y to value offscreen [ld   (iy+0x00),0xF8]
+	rts                                    	| [ret]
+
+
 
 DISPLAY_NAMCO_LOGO:
 	jbsr	HANDLE_ALIEN_SWARM_SCROLL_RESET

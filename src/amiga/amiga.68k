@@ -25,10 +25,6 @@ BOB_16X16_PLANE_SIZE = 4*16
 
 SPRITE_LIFETIME = 2
 
-* debug: no screen dirty update, no scrolling,
-* draws on screen when instructed
-*DIRECT_SCREEN_DRAW = 1
-
 	.ifdef	RELEASE
 OPT_ENABLE_PROFILING = 0
 OPT_ENABLE_LOGGING = 0
@@ -487,24 +483,7 @@ _vblank:
 	bsr		toggle_pause
 0:
 
-	* if music loops, no need to play it again and again
-	* ticks aren't important either
-	tst.b	music_loops
-	bne.b	13f
-	* here music doesn't loop. We have to stop it when it ends
-	move.w	music_tick(pc),d1
-	beq.b	13f
-	subq.w	#1,d1
-	move.w	d1,music_tick
-	bne.b	13f
-	* only music that doesn't loop: intro music
-	* now it's over so let other tunes play
-	clr.b	sound_lock
 
-	* don't play in-game loop
-	move.w	#SOLVALOU_SND,d0
-	bsr		osd_sound_stop
-13:
 	move.w	#0x20,_custom+intreq	
 	bra.b	3f
 1:
@@ -552,7 +531,7 @@ osd_break:
 	
 osd_calibrate_display:
 	movem.l	a0/d0-d1,-(a7)
-	lea		bg_screen_data,a0
+	move.l	bg_drawed_screen_ptr,a0
 	move.w	#NB_LINES-1,d1
 	clr		d0
 0:
@@ -585,38 +564,14 @@ osd_sound_unmute:
 	rts
 	
 osd_sound_start:
-	movem.l	d0/a0/a6,-(a7)
-	cmp.w	#SOLVALOU_EXPLOSION_SND,d0
-	bne.b	0f
-	* remove music locking all sounds when player
-	* is hit while music is playing
-	clr.b	sound_lock
-0:
-	tst.b	sound_lock
-	bne.b	1f
-	* coin sound overrides muted sound
-	* (but not locked sound when start music is playing)
-	cmp.w	#COIN_SND,d0
-	beq.b	0f
-	tst.b	sound_muted
-	bne.b	1f
-0:
+	movem.l	d0/d1/a0/a6,-(a7)
+
 	lea		_custom,a6
 	lsl.w	#3,d0
 	lea		sound_table,a0
 	move.w	(a0,d0.w),d1	| sound type
 	beq.b	1f		| no sound
 
-
-	* andor genesis is also special, we need to workaround
-	* the constant replay and let the replayer "loop"
-
-	cmp.w	#MAIN_THEME_SND*8,d0
-	bne.b	2f
-	* special case: we have to lock solvalou
-	* looped music (and all other sounds!!)
-	* until this one has ended
-	st.b	sound_lock
 2:
 	cmp.w	#1,d1
 	bne.b	3f		| music module
@@ -624,7 +579,7 @@ osd_sound_start:
 	lea		_custom,a6
 	jsr		_mt_playfx
 1:
-	movem.l	(a7)+,d0/a0/a6
+	movem.l	(a7)+,d0/d1/a0/a6
 	rts
 3:
 	* don't play if already playing
@@ -668,7 +623,24 @@ osd_kick_wdog:
     rts
 	.ifne	OPT_ENABLE_DOUBLE_BUFFERING
 switch_screen_buffers:	
-	* let's switch screen buffers
+	* let's switch screen buffers, background (chars)
+	* toggle fg planes (double buffering)
+	lea		bg_drawed_screen_ptr(pc),a0
+	lea		bg_displayed_screen_ptr(pc),a4
+	lea		bg_screen_data_1,a1
+	lea		bg_screen_data_2,a5
+	* also switch previous state memory
+	cmp.l	(a0),a1
+	bne.b	2f
+	* screen data 1 is displayed screen
+	* set it to drawn screen
+	exg		a1,a5
+2:
+	move.l	a1,(a0)
+	move.l	a5,(a4)
+	jbsr		set_bg_bitplanes
+	
+	* let's switch screen buffers, foreground (sprites)
 	* toggle fg planes (double buffering)
 	lea		fg_drawed_screen_ptr(pc),a0
 	lea		fg_displayed_screen_ptr(pc),a4
@@ -947,9 +919,7 @@ osd_update_graphics:
 	move.w	(a3)+,(10,a4)
 	dbf		d0,0b
 	* update dirty lines
-	.ifndef	DIRECT_SCREEN_DRAW
 	bsr		update_rows
-	.endif
    .endif | OPT_DISABLE_BG_LAYER
 	
 	* load previous sprite state base
@@ -991,6 +961,7 @@ draw_sprites:
 	bsr		decode_sprite_data
 	lea		sprite_table,a1
 	move.b	d6,d2		| save attributes xflip/yflip
+	move.b	#1,0x104
 	and.w	#0x3F,d6	| mask attributes
 	add.w	d6,d6
 	add.w	d6,d6
@@ -1117,11 +1088,11 @@ update_rows:
 	clr.w	d6
 	lea		scroll_and_dirty_rows_values(pc),a4
 	lea		bg_screen_backbuffer,a3
-	lea		bg_screen_data,a6
+	move.l	bg_drawed_screen_ptr(pc),a6
 0:
 	tst.b	(a4,d6.w)
 	jeq		5f
-	clr.b	(a4,d6.w)	| ack as clean
+	subq.b	#1,(a4,d6.w)	| dec counter, eventually ack as clean
 	* now blit the dirty row
 	moveq	#0,d0
 	move.b	(1,a4,d6.w),d0		| scroll offset
@@ -1200,14 +1171,12 @@ update_bg_tile:
 	* mark row as dirty
 	lea		scroll_and_dirty_rows_values(pc),a1
 	add.w	d3,d3
-	st.b	(a1,d3.w)
+	move.b	#2,(a1,d3.w)	| 2 refreshes needed (double buffering)
 	* multiply by 240
 	lea		mulNB_BYTES_PER_ROW_table(pc),a0
-	.ifdef	DIRECT_SCREEN_DRAW
-	lea		bg_screen_data,a1
-	.else
+
 	lea		bg_screen_backbuffer,a1
-	.endif
+
 	move.w	(a0,d3.w),d3
 	lsl.w	#3,d3		| times 8
 	add.w	d3,a1
@@ -1631,7 +1600,7 @@ sprite_y_tables:
 * what: sets bitplanes in copperlist
 
 set_bg_bitplanes:
-    lea		bg_screen_data,a0
+    move.l	bg_displayed_screen_ptr(pc),a0
     moveq #NB_PLAYFIELD_PLANES-1,d1
 	move.l	a0,d0
     lea	bg_bitplanes+2,a0
@@ -2264,8 +2233,16 @@ _gfxbase:
 	.long	0
 _dosbase:
 	.long	0
+bg_drawed_screen_ptr:
+	.long	bg_screen_data_1
 fg_drawed_screen_ptr:
 	.long	fg_screen_data_1
+bg_displayed_screen_ptr:
+	.ifne	OPT_ENABLE_DOUBLE_BUFFERING
+	.long	bg_screen_data_2
+	.else
+	.long	bg_screen_data_1
+	.endif
 fg_displayed_screen_ptr:
 	.ifne	OPT_ENABLE_DOUBLE_BUFFERING
 	.long	fg_screen_data_2
@@ -2350,7 +2327,10 @@ bg_screen_backbuffer:
 	ds.b	BG_SCREEN_SIZE
 	ds.b	NB_BYTES_PER_ROW*12*3
 	.align 0x8		| 8 else fmode=3 makes display wrong
-bg_screen_data:
+bg_screen_data_1:
+	ds.b	BG_SCREEN_SIZE
+	ds.b	NB_BYTES_PER_ROW*12*3
+bg_screen_data_2:
 	ds.b	BG_SCREEN_SIZE
 	ds.b	NB_BYTES_PER_ROW*12*3
 	.align 0x8		| 8 else fmode=3 makes display wrong
