@@ -1,4 +1,55 @@
-* Galaxian, amiga 68k transcode
+*
+* Galaxian (C) 1979 NAMCO.
+*
+* Reverse engineering work by Scott Tunstall, Paisley, Scotland. 
+* Tools used: MAME debugger & Visual Studio Code text editor.
+* Date: 7 July 2019.  
+* 
+* Please send any questions, corrections and updates to scott.tunstall@ntlworld.com
+*
+* Be sure to check out my reverse engineering work for Robotron 2084 and Scramble too, 
+* at http://seanriddle.com/robomame.asm and http://seanriddle.com/scramble.asm asm respectively.
+*
+* Finally:
+* If you'd like to show appreciation for this work by buying me a coffee, feel free: https://ko-fi.com/scotttunstall
+* I'd be equally happy if you donated to Parkinsons UK or Chest Heart And Stroke (CHAS) Scotland.
+* Thanks.  
+*
+* 68k transcode by JOTD in 2023 using Scott excellent work
+*
+* - first started by hand discovering routines from the entrypoint
+*   (which explains why routines aren't in the same order as Scrott z80 code
+*   but I tried to preserve the names)
+* - then wrote and used z80268k.py tool to convert most of the instructions (https://github.com/jotd666/amiga68ktools)
+* - then reworked tool output to fix unconverted instructions, optimize
+*   multiple bit shifts, boolean tests using strange ror+carry test sometimes,
+*    bit test replaced by tst.b...
+* re-injected offsets & symbols that Scott had put in comments, fixing a few mistakes
+*  (fortunately mistakes were very rare!)
+  
+* register conventions (imposed by z80268k mostly) are as follows:
+*
+* A: D0
+* B: D1
+* C: D2
+* BC: manual
+* D: D3
+* E: D4
+* DE: A1
+* H: D5
+* L: D6
+* HL: A0 or D6 (video addresses)
+* carry: manual, using D7 (push/pop af has no portable equivalent as SR is privileged on 68020+)
+*
+* depending on the context H/L/HL and D/E/DE require rework as the game
+* constructs pointers from 0x100-page aligned pointers to avoid to handle
+* lsb wrap and msb increase. Of course the 68000 can do that so easily. But
+* it cannot split address registers :) 
+*
+* screen addresses (0x5000-0x5400) are usually pointed by HL but in the API
+* I chose to store the value in D6 as it's not really an address now but rather
+* an offset to video memory once you subtract 0x5000
+
 
 FAST_INTRO_TEXT = 1
 
@@ -16,23 +67,6 @@ galaxian_reset:
 	bra		INITIALISE_SYSTEM
 
 	
-
-*
-* Galaxian (C) 1979 NAMCO.
-*
-* Reverse engineering work by Scott Tunstall, Paisley, Scotland. 
-* Tools used: MAME debugger & Visual Studio Code text editor.
-* Date: 7 July 2019.  
-* 
-* Please send any questions, corrections and updates to scott.tunstall@ntlworld.com
-*
-* Be sure to check out my reverse engineering work for Robotron 2084 and Scramble too, 
-* at http://seanriddle.com/robomame.asm and http://seanriddle.com/scramble.asm asm respectively.
-*
-* Finally:
-* If you'd like to show appreciation for this work by buying me a coffee, feel free: https://ko-fi.com/scotttunstall
-* I'd be equally happy if you donated to Parkinsons UK or Chest Heart And Stroke (CHAS) Scotland.
-* Thanks.  
 
 /*
 Conventions: 
@@ -961,15 +995,16 @@ HANDLE_SWARM_MOVEMENT:
 * move the swarm, and make it change direction once its hit a screen edge
 l_093e:
 	move.w	SWARM_SCROLL_VALUE,d5                      	| read SWARM_SCROLL_VALUE [ld   hl,(0x420E)]
-	move.w	SWARM_SCROLL_MAX_EXTENTS,d3                      	| read SWARM_SCROLL_MAX_EXTENTS [ld   de,(0x4210)]
+	move.b	SWARM_SCROLL_MAX_EXTENTS,d3              	| read SWARM_SCROLL_MAX_EXTENTS msb [ld   de,(0x4210)]
+	move.b	SWARM_SCROLL_MAX_EXTENTS+1,d4             	| read SWARM_SCROLL_MAX_EXTENTS lsb [ld   de,(0x4210)]
 	move.b	SWARM_DIRECTION,d0                       	| read SWARM_DIRECTION [ld   a,(0x420D)]
 	jne	l_095d                             	| if not zero, swarm is moving right, goto 0x095D [jr   nz,0x095D]
 
 * swarm is moving left
-	btst.b	#15,d5                            	| [bit  7,h]
+	btst	#15,d5                            	| [bit  7,h]
 	jne	l_0953                             	| [jr   nz,0x0953]
 	move.b	d5,d0                           	| [ld   a,l]
-	cmp.b	d3,d0
+	cmp.b	d4,d0							| [cp   e]
 	jcc	MAKE_SWARM_MOVE_RIGHT                             	| jp to MAKE_SWARM_MOVE_RIGHT [jr   nc,0x097D]
 l_0953:
 	move.b	TIMING_VARIABLE,d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
@@ -982,10 +1017,10 @@ l_0953:
 
 * swarm is moving right
 l_095d:
-	btst.b	#15,d5                          	| test bit 7 [bit  7,h]
+	btst	#15,d5                          	| test bit 7 [bit  7,h]
 	jeq	l_0965                             	| [jr   z,0x0965]
 	move.b	d5,d0                           	| [ld   a,l]
-	cmp.b	d3,d0
+	cmp.b	d3,d0							| [cp   d]
 	jcs	MAKE_SWARM_MOVE_LEFT                             	| jp to MAKE_SWARM_MOVE_LEFT [jr   c,0x0983]
 l_0965:
 	move.b	TIMING_VARIABLE,d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
@@ -3839,7 +3874,7 @@ SWITCH_TO_PLAYER_ONE:
 
 HANDLE_PLAYER_MOVE:
 	tst.b	HAS_PLAYER_SPAWNED        	| has player spawned? [bit  0,(hl)]
-	jeq	l_0877                             	| no, goto SPAWN_PLAYER_OR_DIE [jr   z,0x0877]
+	jeq	SPAWN_PLAYER_OR_DIE                             	| no, goto SPAWN_PLAYER_OR_DIE [jr   z,0x0877]
 	lea	PLAYER_Y,a0                  	| now HL points to PLAYER_Y [inc  l]
 
 * are we in demo mode?
@@ -3884,7 +3919,6 @@ l_086b:
 
 * the players ship is 2x2 characters when alive, 4x4 when its exploding. We need to set the scroll offset for the 4 columns.
 	move.b	#0x04,d1                        	| we're doing 4 columns [ld   b,0x04]
-	move.b	d0,0x104
 l_0870:
 	move.b	d0,(a0)+                         	| write scroll offset to OBJRAM_BACK_BUF (see docs @top) [ld   (hl),a]
 	                            	| bump pointer to colour value for column [inc  l]
@@ -3896,7 +3930,6 @@ l_0870:
 
 * if we get here, then either the player hasn't spawned, or the player is hit.
 SPAWN_PLAYER_OR_DIE:
-l_0877:
 	tst.b	IS_PLAYER_DYING                         	| test flag [bit  0,(hl)]
 	jne	PLAYER_EXPLOSION_INIT                             	| if flag is set, player will die, goto PLAYER_EXPLOSION_INIT [jr   nz,0x0882]
 
@@ -6387,7 +6420,7 @@ l_13ce:
 SET_ALIEN_ATTACK_FLANK:
 	move.w	SWARM_SCROLL_VALUE,d5                      	| read SWARM_SCROLL_VALUE [ld   hl,(0x420E)]
 	move.w	SWARM_SCROLL_MAX_EXTENTS,d3                      	| read SWARM_SCROLL_MAX_EXTENTS [ld   de,(0x4210)]
-	btst.b	#15,d5                            	| [bit  7,h]
+	btst	#15,d5                            	| [bit  7,h]
 	jeq	l_13f7                             	| [jr   z,0x13F7]
 
 	move.b	d5,d0                           	| [ld   a,l]
@@ -6398,7 +6431,8 @@ SET_ALIEN_ATTACK_FLANK:
 	rts                                    	| [ret]
 
 l_13f7:
-	move.b	d3,d0                           	| [ld   a,e]
+	move.w	d3,d0                           	
+	lsr.w	#8,d0								| [ld   a,e]
 	sub.b	d5,d0                             	| [sub  l]
 	cmp.b	#0x1C,d0                         	| [cp   0x1C]
 	jcc	l_1403                             	| if A>0x1C, attack from a random flank [jr   nc,0x1403]

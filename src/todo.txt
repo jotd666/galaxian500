@@ -1,15 +1,14 @@
 transcode:
-- startup: swarm is active when it should not
 - SCORE ADVANCE TABLE: missing dashes
-- intro: flagship bob not displayed (displayed in test sprites!)
-- player controls
-- design sound & control api
+- swarm sound loop
+- stars LFSR API
+- aliens seem to attack from swarm (disappear from swarm) 
+  but aren't visible, also attacks are probably buggy
 
 amiga:
-- emulate stars with sprites
-- scrolling is wrong
-- double buffering for background planes too
-- draw bullets
+- emulate stars with sprites (mockup in python first)
+- draw alien bullets on back screen (setting white as colors 4-7)
+- draw player bullets on front screen or use sprite for it
 - game should run at 60Hz
-
+- remove stuff from sprite sheet (ship, flags...) as they're characters
 - rip sounds
