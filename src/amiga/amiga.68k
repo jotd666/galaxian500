@@ -784,7 +784,6 @@ platform_init:
     move.w d0,bpl1mod(a5)
     move.w d0,bpl2mod(a5)
 
-	bsr		create_direction_table
 	bsr		set_fg_bitplanes
 	bsr		set_bg_bitplanes
 
@@ -1505,60 +1504,7 @@ start_lives_dsw:
 difficulty_level_dsw:
 	.word	0
 	
-bit_UP = 0
-bit_DOWN = 1
-bit_LEFT = 2
-bit_RIGHT = 3
-flag_UP = 1<<bit_UP
-flag_DOWN = 1<<bit_DOWN
-flag_LEFT = 1<<bit_LEFT
-flag_RIGHT = 1<<bit_RIGHT
-
-.macro	JOY_BIT_SET	dir
-	btst	#JPB_BTN_\dir,d1
-	beq.b	1f
-	bset	#bit_\dir,d0
-1:
-	.endm
-	
 		
-osd_read_p1_inputs:
-	move.l	_joypad_state(pc),d1
-	moveq.l	#0,d0
-	JOY_BIT_SET	UP
-	JOY_BIT_SET	DOWN
-	JOY_BIT_SET	LEFT
-	JOY_BIT_SET	RIGHT
-	lea		direction_table(pc),a0
-	move.b	(a0,d0.w),d0
-	or.b	#0xF0,d0	| sets 0xF0 (bits 4 & 5 inactive high)
-	
-	btst	#JPB_BTN_RED,d1
-	beq.b	1f
-	bclr	#5,d0	| fire, active low
-	move.l	_previous_joypad_state_2(pc),d2
-	btst	#JPB_BTN_RED,d2
-	bne.b	1f		| was already pressed
-	bclr	#4,d0	| first time fire press
-1:
-	move.l	d1,_previous_joypad_state_2
-	rts
-
-create_direction_table:
-	lea		direction_table(pc),a0
-	move.b	#0,(flag_UP,a0)
-	move.b	#1,(flag_UP+flag_RIGHT,a0)
-	move.b	#2,(flag_RIGHT,a0)
-	move.b	#3,(flag_DOWN+flag_RIGHT,a0)
-	move.b	#4,(flag_DOWN,a0)
-	move.b	#5,(flag_DOWN+flag_LEFT,a0)
-	move.b	#6,(flag_LEFT,a0)
-	move.b	#7,(flag_UP+flag_LEFT,a0)
-	move.b	#8,(a0)
-	rts
-	
-direction_table:
-	ds.b	16
 
 * < d0.w: x
 * < d1.w: y
@@ -1651,28 +1597,6 @@ set_fg_bitplanes:
     dbf d1,1b
     rts
 	
-input_map_tbl:
-		.byte			0xf8															|  0, none
-		.byte			0xf0															|  1, up
-		.byte			0xf4															|  2, down
-		.byte			0xf8															|  3, down+up (invalid)
-		.byte			0xf6															|  4, left
-		.byte			0xf7															|  5, left+up
-		.byte			0xf5															|  6, left+down
-		.byte			0xf8															|  7, left+down+up (invalid)
-		.byte			0xf2															|  8, right
-		.byte			0xf1															|  9, right+up
-		.byte			0xf3															|  A, right+down
-		.byte			0xf8															|  B, right+down+up (invalid)
-		.byte			0xf8															|  C, right+left (invalid)
-		.byte			0xf8															|  D, right+left+up (invalid)
-		.byte			0xf8															|  E, right+left+down (invalid)
-		.byte			0xf8															|  F, right+left+down+up (invalid)
-		
-osd_read_p2_inputs:
-		*move.b    BIOS_P2CURRENT,d0                 | read IN1
-		bra				osd_read_p1_inputs
-		rts
 
 osd_debug_hook:
 	rts
@@ -1703,8 +1627,9 @@ osd_read_dipswitches_old:
 
 * 7000: in D2
 *    bits 0-1: Values for BONUS GALIXIP. 7 = 7000, 10 = 10000, 12 =12000, 20 = 20000
+*    bits 2-3: ????
 osd_read_dipswitches:
-	move.b	#0xF3,d0
+	move.b	#0x03,d0
 	*move.w	#0xC0,d1	| free play: 0xC0, insert coin doesn't work ATM
 	move.w	#0x00,d1	| 1 coin 1 credit
 
@@ -1735,57 +1660,17 @@ osd_read_dipswitches:
 	beq.b	0f
 	bset	#3,d0
 0:
+	btst	#JPB_BTN_RED,d2
+	beq.b	0f
+	bset	#4,d0
+0:
 	
 
 
 	move.l	(a7)+,a0
 	moveq	#0,d2
 	rts
-	
-osd_read_coin:
-	movem.l	a0/d1/d2,-(a7)
-	lea keyboard_table(pc),a0
-	tst.b	(5,a0)		| "5" key like in MAME
-	bne.b	0f
-	move.b	#0,d0
-	move.l	_joypad_state(pc),d1
-	move.l	_previous_joypad_state(pc),d2
 
-2:
-	btst	#JPB_BTN_GRN,d1	
-	beq.b	1f
-	btst	#JPB_BTN_GRN,d2	
-	bne.b	1f
-0:
-	clr.b	(5,a0)		| ack key
-
-	bset	#0,d0
-1:
-	move.l	d1,_previous_joypad_state
-	movem.l	(a7)+,a0/d1/d2
-	rts
-		
-		
-		* D0 bit0=P1, bit1=P2.
-osd_read_start:
-	move.l	d1,-(a7)
-	move.b	#0,d0
-	lea keyboard_table(pc),a0
-	tst.b	(1,a0)		| "1" key like in MAME
-	beq.b	0f
-	clr.b	(1,a0)
-	bra.b	2f
-0:
-	move.l	_joypad_state(pc),d1
-
-	btst	#JPB_BTN_YEL,d1
-	beq.b	1f
-2:
-	bset	#0,d0
-1:
-	move.l	(a7)+,d1
-	tst.b	d0
-	rts
 		
 osd_read_high_scores:
 	movem.l	d0-d7/a0-a6,-(a7)

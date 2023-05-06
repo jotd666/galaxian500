@@ -1677,9 +1677,9 @@ HANDLE_START_BUTTONS:
 04A4: 32 02 40      ld   (0x4002),a           | and update NUM_CREDITS with remainder
 
 * initialise player 2's state (lives etc) to defaults
-04A7: 21 1B 05      ld   hl,0x051B            | load HL with address of DEFAULT_PLAYER_STATE
-04AA: 11 A0 41      ld   de,0x41A0            | load DE with address of PLAYER_TWO_STATE
-04AD: 01 20 00      ld   bc,0x0020            | sizeof (PLAYER_TWO_STATE)
+04A7: 21 1B 05      ld   hl,0x051B            | load HL with address of PACKED_DEFAULT_SWARM_DEFINITION
+04AA: 11 A0 41      ld   de,0x41A0            | load DE with address of PLAYER_TWO_PACKED_SWARM_DEF
+04AD: 01 20 00      ld   bc,0x0020            | sizeof (PLAYER_TWO_STATE+PLAYER_TWO_PACKED_SWARM_DEF)
 04B0: ED B0         ldir
 
 * if dip switch 5 is on, then player 2 gets 3 lives

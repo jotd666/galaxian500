@@ -295,10 +295,11 @@ HANDLE_SOUND:
 
 
 HANDLE_PLAYER_SHOOTING_SOUND:
+	move.l	#PLAYER_SHOOT_SOUND_COUNTER,0x110
 	move.b	PLAY_PLAYER_SHOOT_SOUND,d0                       	| read PLAY_PLAYER_SHOOT_SOUND flag [ld   a,(0x41CC)]
 	subq.b	#1,d0                           	| decrement value [dec  a]
 	jne	l_1733                             	| if the value is nonzero now then it wasn't set to 1 before, so don't play the sound. Goto 0x1733 [jp   nz,0x1733]
-	move.b	d0,PLAY_PLAYER_SHOOT_SOUND                       	| a is zero, so this sets the shoot flag to false. [ld   (0x41CC),a]
+	clr.b	PLAY_PLAYER_SHOOT_SOUND                       	| a is zero, so this sets the shoot flag to false. [ld   (0x41CC),a]
 	move.b	#0x08,d0                        	| this value here appears to affect the length of the shoot sound. Higher value = longer [ld   a,0x08]
 	move.b	d0,PLAYER_SHOOT_SOUND_COUNTER                       	| set PLAYER_SHOOT_SOUND_COUNTER [ld   (0x41CE),a]
 	rts                                    	| [ret]
@@ -311,6 +312,11 @@ l_1733:
 	move.b	d0,PLAYER_SHOOT_SOUND_COUNTER                       	| and write updated count back. [ld   (0x41CE),a]
 	move.b	IS_GAME_OVER,d0                       	| read IS_GAME_OVER flag [ld   a,(0x4007)]
 	eor.b	#0x01,d0                         	| [xor  0x01]
+	beq.b	l_1743
+	cmp.b	#7,PLAYER_SHOOT_SOUND_COUNTER		| added in port so we only play shoot sound once
+	bne.b	l_1743
+	move.w	#SHOOT_SND,d0
+	jbsr	osd_sound_start
 l_1743:
 	*move.b	d0,l_6805                       	| !SOUND shoot on/off [ld   (0x6805),a]
 	rts                                    	| [ret]
@@ -3191,9 +3197,9 @@ TWOP_START_BUTTON_HANDLER:
 	move.b	d0,NUM_CREDITS                       	| and update NUM_CREDITS with remainder [ld   (0x4002),a]
 
 * initialise player 2's state (lives etc) to defaults
-	lea	DEFAULT_PLAYER_STATE(pc),a0                      	| load HL with address of DEFAULT_PLAYER_STATE [ld   hl,0x051B]
-	lea	PLAYER_TWO_STATE,a1                      	| load DE with address of PLAYER_TWO_STATE [ld   de,0x41A0]
-	move.w	#0x0020,d1                          	| sizeof (PLAYER_TWO_STATE)
+	lea	PACKED_DEFAULT_SWARM_DEFINITION(pc),a0                      	| load HL with address of PACKED_DEFAULT_SWARM_DEFINITION [ld   hl,0x051B]
+	lea	PLAYER_TWO_PACKED_SWARM_DEF,a1                      	| load DE with address of PLAYER_TWO_PACKED_SWARM_DEF [ld   de,0x41A0]
+	move.w	#0x0020,d1                          	| sizeof (PLAYER_TWO_STATE+PLAYER_TWO_PACKED_SWARM_DEF)
 	bsr		ldir
 
 * if dip switch 5 is on, then player 2 gets 3 lives
@@ -5552,26 +5558,23 @@ l_0a29:
 
 
 HANDLE_PLAYER_SHOOT:
-	move.b	HAS_PLAYER_SPAWNED,d0                       	| read HAS_PLAYER_SPAWNED flag [ld   a,(0x4200)]
-	ror.b	#1,d0                           	| move bit 0 into carry [rrca]
-	bcs.b	0f
+	tst.b	HAS_PLAYER_SPAWNED                       	| read HAS_PLAYER_SPAWNED flag [ld   a,(0x4200)]
+	bne.b	0f
 	rts                                    	| if player has not spawned, return [ret  nc]
 0:
-	move.b	HAS_PLAYER_BULLET_BEEN_FIRED,d0                       	| read HAS_PLAYER_BULLET_BEEN_FIRED flag [ld   a,(0x4208)]
-	ror.b	#1,d0                           	| move bit 0 into carry [rrca]
-	bcc.b	0f
+	tst.b	HAS_PLAYER_BULLET_BEEN_FIRED                       	| read HAS_PLAYER_BULLET_BEEN_FIRED flag [ld   a,(0x4208)]
+	beq.b	0f
 	rts                                    	| if carry is set, missile has already been fired, can't shoot again. [ret  c]
 0:
-	move.b	IS_GAME_IN_PLAY,d0                       	| read IS_GAME_IN_PLAY flag [ld   a,(0x4006)]
-	ror.b	#1,d0                           	| move bit 0 into carry [rrca]
-	jcc	l_0a68                             	| if no carry, game is not in play, so this is demo mode, goto 0x0A68 [jr   nc,0x0A68]
+	tst.b	IS_GAME_IN_PLAY                       	| read IS_GAME_IN_PLAY flag [ld   a,(0x4006)]
+	jeq	l_0a68                             	| if no carry, game is not in play, so this is demo mode, goto 0x0A68 [jr   nc,0x0A68]
 
 	move.b	PREV_PORT_STATE_6000,d0                       	| read PREV_PORT_STATE_6000 [ld   a,(0x4013)]
 	not.b	d0                               	| [cpl]
 	move.b	d0,d1                           	| [ld   b,a]
 	move.b	PORT_STATE_6000,d0                       	| read PORT_STATE_6000 [ld   a,(0x4010)]
 l_0a50:
-	and.b	d1,d0                            	| [and  b]
+	and.b	d1,d0                            	| [and  b] (first time shot)
 	and.b	#0x10,d0                         	| test state of SHOOT button [and  0x10]
 	bne.b	0f
 	rts                                    	| return if not held down [ret  z]

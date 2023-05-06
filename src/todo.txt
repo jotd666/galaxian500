@@ -6,9 +6,12 @@ transcode:
   but aren't visible, also attacks are probably buggy
 
 amiga:
+- player shots have no effect on swarm!
 - emulate stars with sprites (mockup in python first)
 - draw alien bullets on back screen (setting white as colors 4-7)
 - draw player bullets on front screen or use sprite for it
 - game should run at 60Hz
 - remove stuff from sprite sheet (ship, flags...) as they're characters
-- rip sounds
+- rip more sounds
+- more dip switches
+- "1" start starts 2 player game
