@@ -3838,15 +3838,13 @@ SWITCH_TO_PLAYER_ONE:
 *
 
 HANDLE_PLAYER_MOVE:
-	lea	HAS_PLAYER_SPAWNED,a0                      	| load HL with address of HAS_PLAYER_SPAWNED flag [ld   hl,0x4200]
-	btst.b	#0,(a0)                         	| has player spawned? [bit  0,(hl)]
+	tst.b	HAS_PLAYER_SPAWNED        	| has player spawned? [bit  0,(hl)]
 	jeq	l_0877                             	| no, goto SPAWN_PLAYER_OR_DIE [jr   z,0x0877]
 	lea	PLAYER_Y,a0                  	| now HL points to PLAYER_Y [inc  l]
 
 * are we in demo mode?
-	move.b	IS_GAME_IN_PLAY,d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
-	ror.b	#1,d0                            	| move bit 0 into carry. If carry is now set, the game is in play. [rrca]
-	jcc	l_0892                             	| carry not set, game is not in play, goto 0x0892 to simulate moving player ship in attract mode [jp   nc,0x0892]
+	tst.b	IS_GAME_IN_PLAY                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	jeq	l_0892                             	| carry not set, game is not in play, goto 0x0892 to simulate moving player ship in attract mode [jp   nc,0x0892]
 	move.b	DISPLAY_IS_COCKTAIL_P2,d0                       	| read DISPLAY_IS_COCKTAIL_P2 flag [ld   a,(0x4018)]
 	ror.b	#1,d0                            	| move bit 0 into carry [rrca]
 	jcs	l_088c                             	| if carry is set, we're in cocktail mode and it's player 2 in control. Goto 0x088C [jr   c,0x088C]
@@ -3886,6 +3884,7 @@ l_086b:
 
 * the players ship is 2x2 characters when alive, 4x4 when its exploding. We need to set the scroll offset for the 4 columns.
 	move.b	#0x04,d1                        	| we're doing 4 columns [ld   b,0x04]
+	move.b	d0,0x104
 l_0870:
 	move.b	d0,(a0)+                         	| write scroll offset to OBJRAM_BACK_BUF (see docs @top) [ld   (hl),a]
 	                            	| bump pointer to colour value for column [inc  l]
@@ -3898,7 +3897,7 @@ l_0870:
 * if we get here, then either the player hasn't spawned, or the player is hit.
 SPAWN_PLAYER_OR_DIE:
 l_0877:
-	btst.b	#0,IS_PLAYER_DYING                         	| test flag [bit  0,(hl)]
+	tst.b	IS_PLAYER_DYING                         	| test flag [bit  0,(hl)]
 	jne	PLAYER_EXPLOSION_INIT                             	| if flag is set, player will die, goto PLAYER_EXPLOSION_INIT [jr   nz,0x0882]
 
 * spawn player
