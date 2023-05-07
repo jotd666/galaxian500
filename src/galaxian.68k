@@ -5726,8 +5726,8 @@ l_0b1b:
 
 * B =  row index from 1 to 6. Identifies which row of aliens to check for player bullet collisions.
 * 1 = blue row of aliens closest to player	| 6 = flagship row
+* enters here when bullet reaches the swarm Y-zone
 l_0b25:
-	**move.w	#0,0x110		| TEMP
 
 	                           	| bump HL to point to PLAYER_BULLET_Y [inc  hl]
 	move.b	SWARM_SCROLL_VALUE+1,d0                       	| read SWARM_SCROLL_VALUE [ld   a,(0x420E)]
@@ -5737,14 +5737,19 @@ l_0b25:
 	and.b	#0x0F,d0                         	| mask in low nibble [and  0x0F]
 	subq.b	#0x02,d0                        	| [sub  0x02]
 	cmp.b	#0x0B,d0                         	| [cp   0x0B]
-	bcc.b	0f
-	rts
+	bcs.b	0f
+	rts											| [ret  nc]
 0:
+	move.w	#0,0x110		| TEMP
 	addq.b	#1,d1                           	| [inc  b]
 	move.b	d2,d0                           	| [ld   a,c]
 	and.b	#0xF0,d0                         	| mask in high nibble [and  0xF0]
 	add.b	d1,d0                            	| [add  a,b]
-	lsl.b	#4,d0                           	| [rrca]*4 multiply by 16
+	* JOTD: this isn't really a division by 16 but an actual bit rotation
+	* to get proper offset in alien swarm table. How it works? I don't know and Scott
+	* doesn't seem to have commented that part either :)
+	* transcoding with equivalent instructions makes the bullet/swarm collision work, yay!
+	ror.b	#4,d0                           	| [rrca]*4 rotate 4 bits to the right
 	moveq	#0,d5
 	move.b	d0,d5
 											| DE is now an offset into the ALIEN_SWARM_FLAGS table
