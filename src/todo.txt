@@ -9,7 +9,6 @@ amiga:
 - player shots have no effect on swarm!
 - emulate stars with sprites (mockup in python first)
 - draw alien bullets on back screen (setting white as colors 4-7)
-- player bullet not 100% accurate location
 - player bullet doesn't shoot aliens
 - game should run at 60Hz
 - remove stuff from sprite sheet (ship, flags...) as they're characters

@@ -295,7 +295,6 @@ HANDLE_SOUND:
 
 
 HANDLE_PLAYER_SHOOTING_SOUND:
-	move.l	#PLAYER_SHOOT_SOUND_COUNTER,0x110
 	move.b	PLAY_PLAYER_SHOOT_SOUND,d0                       	| read PLAY_PLAYER_SHOOT_SOUND flag [ld   a,(0x41CC)]
 	subq.b	#1,d0                           	| decrement value [dec  a]
 	jne	l_1733                             	| if the value is nonzero now then it wasn't set to 1 before, so don't play the sound. Goto 0x1733 [jp   nz,0x1733]
@@ -5708,8 +5707,8 @@ HANDLE_SWARM_ALIEN_TO_PLAYER_BULLET_COLLISION_DETECTION:
 	rts                                 	| if X coordinate >= #0x68 (104 decimal) then bullet is not near swarm yet, so exit
 0:
 	sub.b	#0x1E,d0                         	| if X coordinate < #0x1E (30 decimal) then bullet has passed the swarm, this subtraction will cause a carry.. [sub  0x1E]
-	bcs.b	0f
-	rts|		| .. so exit.
+	bcc.b	0f
+	rts									|		| .. so exit.
 0:
 
 * OK, we have to check if an alien has been hit
@@ -5728,9 +5727,11 @@ l_0b1b:
 * B =  row index from 1 to 6. Identifies which row of aliens to check for player bullet collisions.
 * 1 = blue row of aliens closest to player	| 6 = flagship row
 l_0b25:
+	**move.w	#0,0x110		| TEMP
+
 	                           	| bump HL to point to PLAYER_BULLET_Y [inc  hl]
 	move.b	SWARM_SCROLL_VALUE+1,d0                       	| read SWARM_SCROLL_VALUE [ld   a,(0x420E)]
-	sub.b	PLAYER_BULLET_X,d0                          	| [sub  (hl)]
+	sub.b	PLAYER_BULLET_Y,d0                          	| [sub  (hl)]
 	neg.b   d0
 	move.b	d0,d2                           	| [ld   c,a]
 	and.b	#0x0F,d0                         	| mask in low nibble [and  0x0F]
