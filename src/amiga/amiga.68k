@@ -61,7 +61,7 @@ _custom = 0xDFF000
 
 
 NB_PLAYFIELD_PLANES = 3
-TOTAL_NB_COLORS = 32   | 8+8+16
+TOTAL_NB_COLORS = 16   | 8+8+16
 NB_BYTES_PER_ROW = 40
 NB_LINES = 256
 Y_MAX = NB_LINES
@@ -784,6 +784,20 @@ platform_init:
     move.w d0,bpl1mod(a5)
     move.w d0,bpl2mod(a5)
 
+	* allocate sprite zero for player shot
+	move.l		#player_shot_sprite,d0
+	lea		sprites,a1
+    move.w	d0,(6,a1)
+	swap	d0
+    move.w	d0,(2,a1)
+	* yellow
+	lea		sprite_cols,a1		| color 17
+	move.w	#0xFF0,d0
+	move.w	d0,(2,a1)
+	move.w	d0,(6,a1)
+	move.w	d0,(10,a1)
+	
+	
 	bsr		set_fg_bitplanes
 	bsr		set_bg_bitplanes
 
@@ -928,14 +942,31 @@ osd_update_graphics:
 
 	* delete previous sprites
 	bsr		delete_previous_sprites
+	bsr		delete_previous_bullets
 	
 	* now A0 contains sprite data
-	move.l	a0,0x100
+
 	**lea		test_sprite_data(pc),a0
 	
 	bsr		draw_sprites
 	
 	* now A0 contains bullet data
+	* +0x1D: player bullet Y (amiga: x)
+	* +0x1D: player bullet X (amiga: y)
+	lea		(0x1D,a0),a1
+	move.l	a0,0x100
+	moveq	#0,d0
+	moveq	#0,d1
+	* get X and Y
+	move.b	(a1),d0
+	move.b	(2,a1),d1
+	neg.b	d1
+	add.w	#256-6,d1
+	bsr		store_sprite_pos
+	lea		player_shot_sprite,a1
+	* set X/Y coords for sprite
+	move.l	d0,(a1)
+	
 	
 	movem.l	(a7)+,d0-d7/a0-a6
 	rts
@@ -989,6 +1020,9 @@ draw_sprites:
 	movem.l	(a7)+,a2/a5
 	rts
 
+delete_previous_bullets:
+	rts
+	
 delete_previous_sprites:
 	movem.l	a0-a2/a5,-(a7)
 
@@ -1240,229 +1274,6 @@ update_bg_tile:
 		
 
 
-* d0 = base sprite number (0/32)
-*
-* Since sprites aren't really sprites but BOBs
-* updating only the relevant half of
-* the sprites trashes the other half when pre-erasing
-* the latter sprites if some sprites had been previously
-* drawed here. This and also leftovers of BOBs when player
-* is killed. So, too complicated, let's update everything
-* just store the previous positions only by half (because the
-* others aren't updated anyway)
-
-
-is_hw_sprite_table:
-	ds.b	256
-
-
-
-* show sprite, supports clipping (y offset)
-* < A1: sprite data
-* < A4: pointer on the sprite backup table
-* < D0: X
-* < D1: Y
-* < D2: height
-* < D3: y offset (clipping)
-* < D6: amiga sprite number (0-7)
-
-show_sprite:
-	movem.l	d2-d6/a0/a2-a5,-(a7)
-	* store it in sprite table structure
-	* A4 is a pointer on the sprite display table
-	* add a lifetime of 2 updates each time called, we'll
-	* update with the pointer on the sprite structure later
-	
-	lea		active_hw_sprite_lifetime,a0
-	lsl.w	#3,d6
-	add.w	d6,a0
-	move.w	#SPRITE_LIFETIME,(a0)+
-	move.l	A4,(a0)
-	
-	moveq	#0,d5
-	move.w	(actsprite_y_clipping,a4),d5	| previous y clipping offset
-	* here handle bogus Y clip = 32 out of nowhere
-	bne.b	0f
-	* previous y clip = 0, current clip 32: bogus first
-	* andor position, skip display
-	cmp.w	#32,d3
-	jeq		10f
-	bra.b	7f			| no clipping to restore from previous
-0:
-	cmp.w	D3,d5
-	beq.b	7f			| no need to restore: sprite has the same pos
-	* restore previous sprite bitmap line
-	lea	(actsprite_saved_line.W,a4),a2	| source
-	lsl.l	#4,d5
-	lea		(a1,d5.l),a5	| destination
-	lsr.l	#4,D5	| restore D5 value for correctness (D3 and D5 are compared again)
-	* copy 16 bytes back to restore sprite line
-	* but we have to make sure that the beam is not too high
-	* else sprite flickers a lot. Ironically this happens
-	* with fast machines, not with slow machines
-	*WAIT_BEAM_SPRITE
-	
-	move.l	(a2)+,(a5)+
-	move.l	(a2)+,(a5)+
-	move.l	(a2)+,(a5)+
-	move.l	(a2),(a5)
-7:
-	* store a1 in backup BEFORE adding offset to it
-	move.l	a1,(actsprite_orig_ptr,a4)
-
-	move.w	D3,(actsprite_y_clipping,a4)  | store previous offset
-	beq.b	8f
-	* clipping enabled
-
-	swap	d3
-	clr		d3
-	swap	d3
-	* must move sprite start & put position here
-	* first we back up sprite data
-	lsl.l	#4,D3
-	* add offset to sprite pointer to start by that line
-	add.l	D3,a1
-	lsr.l	#4,D3	| restore D3 value for next loop
-
-	* don't save: sprite has the same pos as before, this
-	* would clobber the backup
-	
-	cmp.w	D3,d5
-	beq.b	8f
-
-	lea	(actsprite_saved_line.W,a4),a5			| destination
-	move.l	a1,a2	| source
-	
-	* copy 16 bytes to sprite line backup space
-	* and zero that sprite line so 
-	* it can be used as X/Y sprite first line
-	*WAIT_BEAM_SPRITE
-	.rept	4
-	move.l	(a2),(a5)+
-	clr.l	(a2)+
-	.endr
-8:
-	* same position as bobs: shift X by 8
-	subq.w	#8,d0
-	bsr		store_sprite_pos
-	move.w	d0,(8,a1)
-	swap	d0
-	move.w	d0,(a1)
-	* put it in the proper sprite slot (d6: sprite number)
-	move.l	a1,d0
-	lea		sprites,a1
-	lea		(a1,d6.w),a1	| times 8, but d6 is already *8 at this point
-	move.l	a1,(actsprite_copperlist_ptr,a4)
-	move.w	d0,(6,a1)
-	swap	d0
-	move.w	d0,(2,a1)
-10:
-	movem.l	(a7)+,d2-d6/a0/a2-a5
-	
-	rts
-	
-* we have to restore backuped line if Y offset was != 0
-* we have to reset sprite pointer to original in copperlist
-* in case it's been y-clipped
-* (else it's pointing on the clipped sprite in the copperlist
-* and we are going to restore the sprite data at this line)
-*
-* < A1: sprite backup structure (if zero, skip)
-* destroyed registers: none
-
-hide_sprite:
-	movem.l	d0/a2-a3,-(a7)
-	move.l	(actsprite_orig_ptr,a1),a2
-	move.l	a2,d0
-	beq.b	11f
-	move.l	(actsprite_copperlist_ptr,a1),a3
-	move.w	d0,(6,a3)
-	swap	d0
-	move.w	d0,(2,a3)
-	* nullify pointer
-	clr.l	(actsprite_orig_ptr,a1)
-	* now set coords to zero
-	clr.w	(a2)
-	clr.w	(8,a2)
-	move.w	(actsprite_y_clipping,a1),d0
-	beq.b	11f		| no need to restore
-	* we need to restore backuped line
-	lsl.w	#4,d0	| times 16
-	add.w	d0,a2	| destination to be restored
-	lea		(actsprite_saved_line.W,a1),a3
-	* restore sprite data
-	move.l	(a3)+,(a2)+
-	move.l	(a3)+,(a2)+
-	move.l	(a3)+,(a2)+
-	move.l	(a3),(a2)
-	* zero clipping to be coherent
-	* (we're using it as "previous clipping offset" too)
-	clr.w	(actsprite_y_clipping,a1)
-11:
-	movem.l	(a7)+,d0/a2-a3
-	rts
-
-	
-* < D0: sprite index times 64 (for lifetime table)
-* < D1: color table index
-* < D2: sprite height
-* < D3.L: Y-offset (for clipping in the top area)
-* < D4: Y
-* < D5: X
-* < A3: graphical object structure (sprites)
-
-draw_hw_sprite:
-	movem.l	d6/a2/a4-a6,-(a7)
-	* X in D5
-	* Y in D4
-	* set a lifetime in sprite table
-	lea		active_hw_sprite_display_table(pc),a4
-	
-	add.w	d0,a4
-	lea	(2,a3,d1.w),a0
-
-	
-5:
-	move.w	(a0)+,d6	| sprite number
-	bmi		21f			| end of sprite chain
-	* load palette in the proper copperlist slots for this sprite
-	move.w	d6,d1
-	lsr.w	#1,d1
-	bcs.b	51f
-
-	* even: select range 48-63 (next shift makes it times 32)
-	* this is not ok for ECS... to change
-	add.w	#4,d1
-51:
-	lsl.w	#4,d1	| times 16
-	lea	sprite_cols,a1
-
-	add.w	d1,a1
-	moveq	#3,d0	| 4 colors
-6:
-	move.w	(a0)+,(2,a1)
-	addq.w	#4,a1
-	dbf		d0,6b
-
-
-	*moveq	#0,d0		| we need to clear MSB, already done above
-	* get sprite data
-	move.l	(a0)+,a1
-
-	* restore coordinates (same for all sprites in that chain)
-	move.w	d5,d0
-	move.w	d4,d1
-	bsr		show_sprite
-
-	* next sprite for this image
-	lea		(actsprite_second_sprite.W,a4),a4
-	bra	5b
-21:
-	movem.l	(a7)+,d6/a2/a4-a6
-	rts
-	
-
-
 
 osd_stars_on:
 	rts
@@ -1508,18 +1319,13 @@ difficulty_level_dsw:
 
 * < d0.w: x
 * < d1.w: y
-* < d2.w: sprite height: 16, 32, 96 are supported
+* < a1: sprite pos table (depending on height)
 * > d0.L: control word
 store_sprite_pos:
-    movem.l  d2/a0-a1,-(a7)
+    move.l  a0,-(a7)
 
     lea	HW_SpriteXTable(pc),a0
-    lea	sprite_y_tables(pc),a1
-	lsr.w	#2,d2
-	subq.w	#4,d2
-	and.w	#0xFC,d2
-	* pick proper table depending on height
-	move.l	(a1,d2.w),a1
+	lea		HW_SpriteYTable_8,a1
 	
 	.ifdef	NO68020
     add.w	d0,d0
@@ -1534,7 +1340,7 @@ store_sprite_pos:
     move.l	(a0,d0.w*4),d0
     or.l	(a1,d1.w*4),d0	
 	.endc
-    movem.l  (a7)+,d2/a0-a1
+    move.l  (a7)+,a0
     rts
 	
 HW_SpriteXTable:
@@ -1556,13 +1362,12 @@ HW_SpriteYTable_\height:
   .endr
 	.endm
 
+	DEF_HW_SPRITE_Y_TABLE	8
 	DEF_HW_SPRITE_Y_TABLE	16
 	DEF_HW_SPRITE_Y_TABLE	32
 
 
-sprite_y_tables:
-	.long	HW_SpriteYTable_16
-	.long	HW_SpriteYTable_32
+
 	
 * set_bitplanes
 * what: sets bitplanes in copperlist
@@ -1601,18 +1406,6 @@ set_fg_bitplanes:
 osd_debug_hook:
 	rts
 	
-* d0=DSWA, d1=DSWB
-
-osd_read_dipswitches_old:
-	move.w	#0x1F,d0
-	* precomputed DSW bits
-	or.w	start_lives_dsw(pc),d0
-	
-
-
-	**move.l	_joypad_state(pc),d2
-
-	rts
 
 * 6000: in D0
 *    bits 0-1: coin1 & coin2
@@ -2298,6 +2091,19 @@ debug_copperlist:
 debug_color:
 	dc.w	0
 	dc.l	-2
+	
+player_shot_sprite:
+	.long	0
+	.long	0x00800000
+	.long	0x00800000
+	.long	0x00800000
+	.long	0x00800000
+	.long	0x00800000
+	.long	0x00800000
+	.rept	24
+	.long	0
+	.endr
+	.long	0
 	
 	* main copperlist
 copperlist:

@@ -3995,9 +3995,9 @@ HANDLE_PLAYER_BULLET:
 *
 
 POSITION_PLAYER_BULLET:
-	lea	HAS_PLAYER_BULLET_BEEN_FIRED,a0                      	| pointer to HAS_PLAYER_BULLET_BEEN_FIRED flag [ld   hl,0x4208]
-	btst.b	#0,(a0)                         	| test if flag is set [bit  0,(hl)]
 	lea	  PLAYER_BULLET_X,a0                         	| HL now points to PLAYER_BULLET_X [inc  hl]
+	tst.b	HAS_PLAYER_BULLET_BEEN_FIRED                      	| pointer to HAS_PLAYER_BULLET_BEEN_FIRED flag [ld   hl,0x4208]
+												| test if flag is set [bit  0,(hl)]
 	jeq	POSITION_PLAYER_BULLET_ABOVE_SHIP                             	| if player has not fired, goto POSITION_PLAYER_BULLET_ABOVE_SHIP [jr   z,0x08D3]
 
 * player bullet has been fired. Subtract 4 from its X coordinate and check if its gone off screen.
@@ -4018,11 +4018,10 @@ POSITION_PLAYER_BULLET:
 POSITION_PLAYER_BULLET_ABOVE_SHIP:
 	move.b	#0xDC,(a0)                      	| set PLAYER_BULLET_X [ld   (hl),0xDC]
 	lea	PLAYER_BULLET_Y,a0                            	| point HL to PLAYER_BULLET_Y [inc  l]
-	move.b	HAS_PLAYER_SPAWNED,d0                       	| read HAS_PLAYER_SPAWNED flag [ld   a,(0x4200)]
-	btst.b	#0,d0                           	| test if player has spawned [bit  0,a]
+	tst.b	HAS_PLAYER_SPAWNED                       	| read HAS_PLAYER_SPAWNED flag [ld   a,(0x4200)]
+											| test if player has spawned [bit  0,a]
 	jeq	l_08e2                             	| no, player has not spawned, goto 0x08E2 [jr   z,0x08E2]
-	move.b	PLAYER_Y,d0                       	| read PLAYER_Y [ld   a,(0x4202)]
-	move.b	d0,(a0)                         	| and write to PLAYER_BULLET_Y [ld   (hl),a]
+	move.b	PLAYER_Y,(a0)                         	| write to PLAYER_BULLET_Y [ld   (hl),a]
 	rts                                    	| [ret]
 
 * player hasn't spawned. Hide the bullet!
@@ -4041,9 +4040,8 @@ HANDLE_PLAYER_BULLET_EXPIRED:
 	bcs.b	0f
 	rts                                    	| if no carry, then return. [ret  nc]
 0:
-	moveq	#0,d0                            	| [xor  a]
-	move.b	d0,IS_PLAYER_BULLET_DONE                       	| reset the IS_PLAYER_BULLET_DONE flag [ld   (0x420B),a]
-	move.b	d0,HAS_PLAYER_BULLET_BEEN_FIRED                       	| reset HAS_PLAYER_BULLET_BEEN_FIRED flag. Player can shoot again. [ld   (0x4208),a]
+	clr.b	IS_PLAYER_BULLET_DONE                       	| reset the IS_PLAYER_BULLET_DONE flag [ld   (0x420B),a]
+	clr.b	HAS_PLAYER_BULLET_BEEN_FIRED                       	| reset HAS_PLAYER_BULLET_BEEN_FIRED flag. Player can shoot again. [ld   (0x4208),a]
 	rts                                    	| [ret]
 
 
