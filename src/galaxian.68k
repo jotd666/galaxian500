@@ -4803,81 +4803,96 @@ DRAW_PLAYER_SHIP:
 *
 * Value in register A       Points added to score
 * ===============================================
-* 0,0x30
-* 1,0x40
-* 2,0x50
-* 3,0x60
-* 4,0x70
-* 5,0x80
-* 6,0x90
-* 7                         100
-* 8                         150
-* 9                         200
+* 0x0,0x30
+* 0x1,0x40
+* 0x2,0x50
+* 0x3,0x60
+* 0x4,0x70
+* 0x5,0x80
+* 0x6,0x90
+* 0x7                         100
+* 0x8                         150
+* 0x9                         200
 *,0x10                        300
 *,0x11                        800
 
 UPDATE_PLAYER_SCORE_COMMAND:
-	.ifdef	TODO   |TODO
+	moveq	#0,d2
 	move.b	d0,d2                           	| save A in C as the rst corrupts A [ld   c,a]
-
-	jbsr	LEA_DE_OF_CURRENT_PLAYER_SCORE                   	| call LEA_DE_OF_CURRENT_PLAYER_SCORE. Now DE = pointer to current player's score [call 0x2290]
+	jbsr	LEA_DE_OF_CURRENT_PLAYER_SCORE    	| call LEA_DE_OF_CURRENT_PLAYER_SCORE. Now DE = pointer to current player's score [call 0x2290]
 	move.b	d2,d0                           	| restore A (points value ID) from C [ld   a,c]
 	add.b	d2,d0                            	| And then multiply .. [add  a,c]
 	add.b	d2,d0                            	| .. A by 3. [add  a,c]
 	move.b	d0,d2                           	| [ld   c,a]
-	clr.b	d1                               	| Extend A into BC. Now BC is an offset into ALIEN_SCORE_TABLE [ld   b,0x00]
+												| Extend A into BC. Now BC is an offset into ALIEN_SCORE_TABLE [ld   b,0x00]
 	lea	ALIEN_SCORE_TABLE(pc),a0                      	| pointer to ALIEN_SCORE_TABLE [ld   hl,0x22D0]
-add  hl,bc                              	| now HL points to an entry in the score table.
+    add.w	d2,a0                         	 	| now HL points to an entry in the score table [add  hl,bc]
 	tst.b	d0                               	| clear carry flag [and  a]
 	move.b	#0x03,d1                        	| Players score is 3 bytes in size [ld   b,0x03]
 l_21b8:
 	move.b	(a1),d0                         	| read byte from players score [ld   a,(de)]
-adc  a,(hl)                             	| add byte from the score table
+	add.b  (a0),d0                            	| add byte from the score table [adc  a,(hl)]
 
-* When this instruction is executed, the A register is BCD corrected using the contents of the flags. The exact process is the following: if the least significant four bits of A contain a non-BCD digit (i. e. it is greater than 9) or the H flag is set, then $06 is added to the register. Then the four most significant bits are checked. If this more significant digit also happens to be greater than 9 or the C flag is set, then $60 is added.
-	**TODO daa                                     	| ensure that the result is valid BCD
+* When this instruction is executed, the A register is BCD corrected using the contents of the flags. The exact process is the following:
+* if the least significant four bits of A contain a non-BCD digit (i. e. it is greater than 9) 
+* or the H flag is set, then $06 is added to the register.
+* Then the four most significant bits are checked. If this more significant digit also happens to be greater than 9
+* or the C flag is set, then $60 is added.
+	**TODO daa                                     	| ensure that the result is valid BCD [daa]
 	move.b	d0,(a1)+                         	| update player score [ld   (de),a]
-	a                           	| bump to next BCD digits in players score [inc  de]
+												| bump to next BCD digits in players score [inc  de]
 	addq.w	#1,a0                           	| bump to next BCD digits in alien score [inc  hl]
 	subq.b	#1,d1                           	| [...]
 	jne	l_21b8                             	| repeat until all digits in player score have been updated. [djnz 0x21B8]
-	subq.b	#1,a1                           	| point to first 2 digits of player score [dec  de]
-push de
+	subq.w	#1,a1                           	| point to first 2 digits of player score [dec  de]
+	move.l	a1,-(a7)
 	subq.w	#1,a1                           	| point to 3rd and 4th digits of player score [dec  de]
-ld   h,a                                	| load H with first two digits of player score
-	move.b	(a1),d0                         	| [ld   a,(de)]
-ld   l,a                                	| load L with 3rd and 4th digits of player score
-add  hl,hl
-add  hl,hl
-add  hl,hl
-add  hl,hl                              	| multiply HL * 16, which shifts all bits left 4 places.
-	move.b	#h,d0                           	| [ld   a,h]
-	lea	BONUS_GALIXIP_FOR,a0                      	| read BONUS_GALIXIP_FOR value [ld   hl,0x40AC]
-cp   (hl)
-	bcs	0f
+	* here d5.w simulates hl
+	move.b	d0,d5								| load H with first two digits of player score
+	lsl.w	#8,d5
+												| [ld   a,(de)]
+	move.b	(a1),d5								| load L with 3rd and 4th digits of player score [ld   l,a]
+	
+	lsl.w	#4,d5								| [add  hl,hl] multiply HL * 16, which shifts all bits left 4 places.
+	move.w	d5,d0                           	| [ld   a,h]
+	lsr.w	#8,d0
+	cmp.b	BONUS_GALIXIP_FOR,d0                      	| read BONUS_GALIXIP_FOR value [ld   hl,0x40AC]
+	bcs.b	0f
 	jbsr	AWARD_EXTRA_LIFE                            	| call AWARD_EXTRA_LIFE if our score is higher [call nc,0x229C]
 0:
 	addq.w	#1,a1                           	| [inc  de]
 	move.b	CURRENT_PLAYER,d0                       	| read CURRENT_PLAYER [ld   a,(0x400D)]
 	jbsr	DECIDE_TO_DISPLAY_PLAYER_ONE_OR_PLAYER_TWO_SCORE           	| call DECIDE_TO_DISPLAY_PLAYER_ONE_OR_PLAYER_TWO_SCORE [call 0x2256]
-pop  de
-	lea	l_40AA,a0                      	| point to last byte (first 2 digits) of HI_SCORE [ld   hl,0x40AA]
+	move.l	(a7)+,a1
+	lea	HI_SCORE+2,a0                      	| point to last byte (first 2 digits) of HI_SCORE [ld   hl,0x40AA]
 	move.b	#0x03,d1                        	| Players score is 3 bytes in size [ld   b,0x03]
 l_21df:
 	move.b	(a1),d0                         	| read byte from player score [ld   a,(de)]
-cp   (hl)                               	| compare to byte from high score
+	cmp.b	(a0),d0                               	| compare to byte from high score [cp   (hl)]
 	bcc.b	0f
 	rts                                    	| if byte read is lower than the byte from high score, not new high score, so return [ret  c]
 0:
-	jne	l_21e9                             	| if byte is different, we have a new high score, goto 0x21E9 [jr   nz,0x21E9]
+	jne	UPDATE_HIGH_SCORE                             	| if byte is different, we have a new high score, goto 0x21E9 [jr   nz,0x21E9]
 	subq.w	#1,a1                           	| otherwise, bump de [dec  de]
 	subq.w	#1,a0                           	| and bump hl [dec  hl]
 	subq.b	#1,d1                           	| [...]
 	jne	l_21df                             	| repeat until b==0 [djnz 0x21DF]
-	.endif
 	rts                                    	| [ret]
 
 
+ALIEN_SCORE_TABLE:
+	.byte	0x30,0x00,0x00            | 30 PTS
+	.byte	0x40,0x00,0x00            | 40 PTS
+	.byte	0x50,0x00,0x00            | 50 PTS
+	.byte	0x60,0x00,0x00            | 60 PTS
+	.byte	0x70,0x00,0x00            | 70 PTS
+	.byte	0x80,0x00,0x00            | 80 PTS
+	.byte	0x00,0x01,0x00            | 100 PTS
+	.byte	0x50,0x01,0x00            | 150 PTS
+	.byte	0x00,0x02,0x00            | 200 PTS
+	.byte	0x00,0x03,0x00            | 300 PTS
+	.byte	0x00,0x08,0x00            | 800 PTS
+	.align	2
 *
 * Expects:
 *
@@ -5233,6 +5248,24 @@ DISPLAY_LEVEL_FLAGS:
 6:
     jbsr	l_259E               | plot spaces to overwrite any existing flags
     bra.b	5b
+
+
+AWARD_EXTRA_LIFE:
+	move.b	CURRENT_PLAYER,d0                       	| load CURRENT_PLAYER into A [ld   a,(0x400D)]
+	lea	PLAYER_ONE_AWARDED_EXTRA_LIFE,a0                      	| load HL with address of PLAYER_ONE_AWARDED_EXTRA_LIFE flag. [ld   hl,0x40AD]
+	add.w	d0,a0                   	| Now HL points to either PLAYER_ONE_AWARDED_EXTRA_LIFE or PLAYER_TWO_AWARDED_EXTRA_LIFE
+	tst.b	(a0)                         	| Test if current player has already had a bonus live given to them. [bit  0,(hl)]
+	beq.b	0f
+	rts                                    	| if flag is set, then return. Player gets no more extra lives. [ret  nz]
+0:
+
+* player awarded extra life
+	move.b	#0x01,(a0)                      	| Set "Player has had his extra life" flag [ld   (hl),0x01]
+	move.b	#0x01,d0                        	| [ld   a,0x01]
+	move.b	d0,PLAY_EXTRA_LIFE_SOUND                       	| set PLAY_EXTRA_LIFE_SOUND flag. [ld   (0x41C7),a]
+	lea	PLAYER_LIVES,a0                      	| pointer to PLAYER_LIVES [ld   hl,0x421D]
+	addq.b	#1,(a0)                         	| increment number of lives [inc  (hl)]
+	move.b	(a0),d1                         	| read number of player lives into B [ld   b,(hl)]
 
 DISPLAY_PLAYER_SHIPS_REMAINING:
 	move.w	#0x539E,d6          | address in character RAM [ld   hl,0x539E]
@@ -5740,7 +5773,6 @@ l_0b25:
 	bcs.b	0f
 	rts											| [ret  nc]
 0:
-	move.w	#0,0x110		| TEMP
 	addq.b	#1,d1                           	| [inc  b]
 	move.b	d2,d0                           	| [ld   a,c]
 	and.b	#0xF0,d0                         	| mask in high nibble [and  0xF0]
