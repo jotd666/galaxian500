@@ -16,9 +16,6 @@ NO68020 = 1
 
 SCREEN_ADDRESS = 0x5000
 
-STATE_ACTIVE = 2
-STATE_DO_NOT_UPDATE_SHADOW = 1
-STATE_INACTIVE = 0
 
 SCORE_FILE_SIZE = 16*5
 BOB_16X16_PLANE_SIZE = 4*16
@@ -74,6 +71,10 @@ FG_SCREEN_SIZE =  FG_SCREEN_PLANE_SIZE*NB_PLAYFIELD_PLANES
 
 NB_SPRITES_TO_UPDATE = 8
 NB_SPRITES_TOTAL = 8
+NB_BULLETS_TOTAL = 7
+SPRITE_MEM_SIZE = 4
+BULLET_MEM_SIZE = 4
+SPRITE_SAVE_BUFFER_SIZE = SPRITE_MEM_SIZE*NB_SPRITES_TOTAL+BULLET_MEM_SIZE*NB_BULLETS_TOTAL
 
 BLANK_FG_TILE_ID = 0x24
 
@@ -946,6 +947,7 @@ osd_update_graphics:
 	
 	* now A0 contains sprite data
 
+	move.l	a0,-(a7)		| save it
 	**lea		test_sprite_data(pc),a0
 	
 	bsr		draw_sprites
@@ -962,18 +964,32 @@ osd_update_graphics:
 	move.b	(2,a1),d1
 	neg.b	d1
 	add.w	#256-6,d1
+	lea		HW_SpriteYTable_8,a1	
 	bsr		store_sprite_pos
 	lea		player_shot_sprite,a1
 	* set X/Y coords for sprite
 	move.l	d0,(a1)
 	
+	bsr		update_hw_sprites_lifetime
+	
+	move.l	(a7)+,a0
+
+	* save previous state for HW sprites now (we needed the "previous" data earlier)
+	lea		previous_sprite_state_3(pc),a5
+	move.l	#(SPRITE_MEM_SIZE*NB_SPRITES_TOTAL)/4-1,d0
+0:
+	move.l	(a0)+,(a5)+		| for sprites (immediate previous, no double buffering)
+	dbf		d0,0b
 	
 	movem.l	(a7)+,d0-d7/a0-a6
 	rts
 
+update_hw_sprites_lifetime:
+	rts
+	
 draw_sprites:
-	movem.l	a2/a5,-(a7)
-	move.w	#NB_SPRITES_TOTAL-1,d3
+	movem.l	a2-a4,-(a7)
+	moveq	#0,d3
 	moveq	#0,d0
 	moveq	#0,d1
 	moveq	#0,d6
@@ -982,8 +998,7 @@ draw_sprites:
 2:
 	* get sprite x,y,clut,index
 	move.l	(a2)+,d4
-	* save in previous
-	move.l	d4,(a5)+
+	move.l	d4,(a5)+		| save for next time
 	move.l	d4,d7
 	and.l	#0xFF0000FF,d7
 	cmp.l	#0xF80000F8,d7	| X=Y=0xF8: means disabled
@@ -995,17 +1010,17 @@ draw_sprites:
 	add.w	d6,d6
 	add.w	d6,d6
 	move.l	(a1,d6.w),d7
-	beq.b	11f			| invalid sprite
+	jeq	11f			| invalid sprite
 	move.l	d7,a1
 	* todo check attributes (flip X/Y)
 	and.w	#7,d5		| mask attributes
 	add.w	d5,d5
 	add.w	d5,d5
 	move.l	(a1,d5.w),d7
-	beq.b	11f			| invalid clut index
+	jbeq	11f			| invalid clut index
 	move.l	d7,a1
 	move.w	(a1)+,d7	| type
-	bne.b	11f			| sprite: ATM not supported
+	bne.b	4f			| sprite
 	* BOB
 	btst	#7,d2
 	beq.b	3f
@@ -1013,19 +1028,131 @@ draw_sprites:
 	addq.w	#4,a1
 3:
 	move.l	(a1),a0		| BOB data
-	bsr		blit_16x16_bob
+	jbsr		blit_16x16_bob
+	jra			11f
+4:
+	* sprite: memorize pointer on palette
+	move.l	a1,current_sprite_palette
+	* was the sprite 
+	* skip to sprite frames
+	addq.w	#8,a1
+	move.l	(a1)+,a0		| memorize sprite frame table
+	* now was the sprite active in the previous occurrence?
+	lea		previous_sprite_state_3(pc),a6
+	move.w	d3,d7
+	lsl.w	#2,d7		| because SPRITE_MEM_SIZE=4
+	cmp.b	#0xF8,(a6,d7.w)
+	beq.b	5f			| was not active
+	* active: was it a hw sprite?
+	move.b	(1,a6,d7.w),d7	| get previous sprite code
+	and.w	#0x3F,d7
+	lea		hw_sprite_flag_table,a4
+	tst.b	(a4,d7.w)
+	beq.b	5f			| was not a HW sprite
+	st.b	d2
+	* already active: reuse current slot as it is the same hardware
+	* sprite on the emulated display too
+
+	bra.b	10f
+5:
+	lea		amiga_sprite_slots(pc),a3
+	moveq	#0,d2
+6:
+	* sprite just appeared in the playfield: find free slot
+	move.b	(a1)+,d2	| index of the amiga sprite
+	bmi.b	11f			| no slot available
+	* check if that slot is available
+	tst.b	(a3,d2.w)
+	beq.b	7f
+	bra.b	6b
+7:
+	* slot is available: amiga hardware sprite d2 is free
+	st.b	(a3,d2.w)		| reserve it
+10:
+	* update hw sprite table
+	move.w	d3,d7
+	lsl.w	#3,d7
+	lea		hw_sprite_slots,a4
+	add.w	d7,a4		| select proper slot
+	tst.b	d2
+	bmi.b	100f
+	* new sprite: must set amiga sprite index value
+	move.w	d2,(4,a4)
+	bra.b	101f
+100:
+	* get previous value
+	move.w	(4,a4),d2
+101:
+	* set palette
+	add.w	d2,d2
+	add.w	d2,d2
+	
+	move.w	d2,-(a7)
+	add.w	d2,d2
+	add.w	d2,d2
+	bclr	#4,d2		| same palette for 2 sprites
+	lea		sprite_cols,a1
+	add.w	d2,a1
+	move.l	current_sprite_palette(pc),a3
+	* copy 4 no 3 colors
+	addq	#2,a3
+	*move.w	(a3)+,(2,a1)
+	move.w	(a3)+,(6,a1)
+	move.w	(a3)+,(10,a1)
+	move.w	(a3)+,(14,a1)
+
+	move.w	(a7)+,d2
+	
+	* get sprite frame for current amiga hw sprite
+	move.l	(a0,d2.w),a0
+	* and store it in hw_sprite_slots table
+	move.l	a0,(a4)
+
+	* set sprite X,Y
+	bsr		store_sprite_pos_16
+	move.l	d0,(a0)
+	
+	* set in copperlist at the proper location
+	lea		sprites,a4
+	add.w	d2,d2		| hw sprite index times 8
+	add.w	d2,a4
+	move.l	a0,d2		| sprite pointer
+	
+	move.w	d2,(6,a4)
+	swap	d2
+	move.w	d2,(2,a4)
 11:
-	dbf		d3,2b
+	addq.w	#1,d3
+	cmp.w	#NB_SPRITES_TOTAL,d3
+	jne	2b
 	move.l	a2,a0
-	movem.l	(a7)+,a2/a5
+	movem.l	(a7)+,a2-a4
 	rts
 
+* 8 slots (indexed with the target sprite index, not
+* the amiga sprite index) with
+* - 4 bytes for the sprite actual address
+* - 2 bytes amiga sprite index
+* - 2 bytes??
+hw_sprite_slots:
+	ds.b	8*8
+* 8 slots (indexed with the amiga sprite index)
+amiga_sprite_slots:
+	ds.b	8
+	
+current_sprite_palette:
+	.long	0
+current_sprite_frame_table:
+	.long	0
+	
 delete_previous_bullets:
 	rts
 	
 delete_previous_sprites:
-	movem.l	a0-a2/a5,-(a7)
+	movem.l	a0-a3/a5,-(a7)
 
+	lea		hw_sprite_flag_table,a3
+	
 	move.w	#NB_SPRITES_TOTAL-1,d3
 	moveq	#0,d0
 	moveq	#0,d1
@@ -1040,11 +1167,9 @@ delete_previous_sprites:
 	* get data
 	bsr		decode_sprite_data
 
+	tst.b	(a3,d6.w)
+	bne.w	11f		| real sprite: skip erase
 	
-*	move.b	(2,a5),d0    | sprite tile code (8 first bits)
-
-*	tst.b	(a6,d0.w)
-*	bne.w	11f		| real sprite: skip erase
 	* erase previous sprite position (but not if sprite type
 	* is hardware sprite)
 
@@ -1061,10 +1186,11 @@ delete_previous_sprites:
 	movem.l	(a7)+,d3/a5
 11:
 	dbf		d3,2b
-	movem.l	(a7)+,a0-a2/a5
+	movem.l	(a7)+,a0-a3/a5
 	rts
 	
 * < D4: sprite properties
+*     Y code+attrs clut X
 * > D0,D1: X,Y.B
 * > D5: clut index
 * > D6: sprite index
@@ -1316,7 +1442,13 @@ difficulty_level_dsw:
 	.word	0
 	
 		
-
+store_sprite_pos_16:
+	move.l	a1,-(a7)
+	lea		HW_SpriteYTable_16,a1
+	bsr		store_sprite_pos
+	move.l	(a7)+,a1
+	rts
+	
 * < d0.w: x
 * < d1.w: y
 * < a1: sprite pos table (depending on height)
@@ -1325,7 +1457,6 @@ store_sprite_pos:
     move.l  a0,-(a7)
 
     lea	HW_SpriteXTable(pc),a0
-	lea		HW_SpriteYTable_8,a1
 	
 	.ifdef	NO68020
     add.w	d0,d0
@@ -1882,17 +2013,19 @@ blit_planes_any_internal_cookie_cut:
 	
 	MUL_TABLE	NB_BYTES_PER_ROW,256
 
-SPRITE_MEM_SIZE = 4
 current_sprite_state:
-	ds.b	SPRITE_MEM_SIZE*NB_SPRITES_TOTAL
+	ds.b	SPRITE_SAVE_BUFFER_SIZE
 previous_sprite_state_ptr:
 	dc.l	previous_sprite_state_1
 previous_sprite_state_1:
-	ds.b	SPRITE_MEM_SIZE*NB_SPRITES_TOTAL
+	ds.b	SPRITE_SAVE_BUFFER_SIZE
 	.ifne	OPT_ENABLE_DOUBLE_BUFFERING
 previous_sprite_state_2:
-	ds.b	SPRITE_MEM_SIZE*NB_SPRITES_TOTAL
+	ds.b	SPRITE_SAVE_BUFFER_SIZE
 	.endif
+* dedicated for hardware sprites, doesn't contain bullets either
+previous_sprite_state_3:
+	ds.b	SPRITE_MEM_SIZE*NB_SPRITES_TOTAL
 	
 rdargs_struct:
 	dc.l	0

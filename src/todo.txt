@@ -4,13 +4,12 @@ transcode:
 - stars LFSR API
 - aliens seem to attack from swarm (disappear from swarm) 
   but aren't visible, also attacks are probably buggy
-- no score when shooting aliens: test it, but DAA isn't emulated
+- wrong score when shooting aliens: test it, but DAA isn't emulated
 
 amiga:
 - emulate stars with sprites (mockup in python first)
 - draw alien bullets on back screen (setting white as colors 4-7)
 - game should run at 60Hz
-- remove stuff from sprite sheet (ship, flags...) as they're characters
 - rip more sounds
 - sound volume seems a bit low
 - support more dip switches (CLI but should be 1.3 compliant eeek & whdload)
@@ -18,3 +17,6 @@ amiga:
 - alien explosions (should be sprites)
 - alien kill sound
 - extra life sound
+- alien shot show explosion but probably bug as it hides shot sprite
+- hide hw sprite if no longer a real sprite in slot (check current sprite state
+  vs hw_sprite_slots in the end)

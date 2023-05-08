@@ -12,6 +12,8 @@ dump_dir = os.path.join(this_dir,"dumps")
 def dump_asm_bytes(*args,**kwargs):
     bitplanelib.dump_asm_bytes(*args,**kwargs,mit_format=True)
 
+NB_POSSIBLE_SPRITES = 64
+
 black = (0,0,0)
 # brown only used for flagship
 brown = (222,71,0)
@@ -117,7 +119,7 @@ with open(os.path.join(this_dir,"sprite_config.json")) as f:
 
 sprites = collections.defaultdict(dict)
 
-hw_sprite_table = [False]*256
+hw_sprite_table = [False]*NB_POSSIBLE_SPRITES
 for k,data in sprite_config.items():
     sprdat = block_dict["sprite"]["data"][k]
     for m,clut_index in enumerate(data["cluts"]):
@@ -185,8 +187,8 @@ with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
             bitplanelib.dump_asm_bytes(c,f,mit_format=True)
     f.write("sprite_table:\n")
 
-    sprite_names = [None]*256
-    for i in range(256):
+    sprite_names = [None]*NB_POSSIBLE_SPRITES
+    for i in range(NB_POSSIBLE_SPRITES):
         sprite = sprites.get(i)
         f.write("\t.long\t")
         if sprite:
@@ -197,7 +199,7 @@ with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
             f.write("0")
         f.write("\n")
 
-    for i in range(256):
+    for i in range(NB_POSSIBLE_SPRITES):
         sprite = sprites.get(i)
         if sprite:
             name = sprite_names[i]
@@ -212,7 +214,7 @@ with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
                     f.write("0")
                 f.write("\n")
 
-    for i in range(256):
+    for i in range(NB_POSSIBLE_SPRITES):
         sprite = sprites.get(i)
         if sprite:
             name = sprite_names[i]
@@ -238,15 +240,16 @@ with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
                         f.write("* palette")
                         rgb4 = [bitplanelib.to_rgb4_color(x) for x in slot["palette"]]
                         bitplanelib.dump_asm_bytes(rgb4,f,mit_format=True,size=2)
+                        f.write("\t.long\t0f\n")
                         f.write("* slots")
                         bitplanelib.dump_asm_bytes(bytes(hw_sprite),f,mit_format=True)
-
+                        f.write("\t.byte\t0xff\n\t.align\t2\n")
                         # we chose HW sprites for sprites that only have 1 clut
                         # else this will generate multiply defined symbols
                         # but ATM this is sufficient
                         # also size is assumed 16x16
 
-                        f.write(f"* frames\n")
+                        f.write(f"* frames\n0:\n")
                         for index in range(8):
                             if index in hw_sprite:
                                 f.write(f"\t.long\t{name}_sprdata_{index}\n")
