@@ -13,7 +13,7 @@ def dump_asm_bytes(*args,**kwargs):
     bitplanelib.dump_asm_bytes(*args,**kwargs,mit_format=True)
 
 black = (0,0,0)
-# brown only used for flagship, in sprite palette
+# brown only used for flagship
 brown = (222,71,0)
 # white used for shots
 white = (222,222,247)
@@ -117,6 +117,7 @@ with open(os.path.join(this_dir,"sprite_config.json")) as f:
 
 sprites = collections.defaultdict(dict)
 
+hw_sprite_table = [False]*256
 for k,data in sprite_config.items():
     sprdat = block_dict["sprite"]["data"][k]
     for m,clut_index in enumerate(data["cluts"]):
@@ -144,6 +145,7 @@ for k,data in sprite_config.items():
         else:
             entry["palette"]=spritepal
             entry["hw_sprite"]=hw_sprite
+            hw_sprite_table[k] = True
 
             left = bitplanelib.palette_image2sprite(img,None,spritepal)
             if data["mirror"]:
@@ -162,7 +164,11 @@ for k,data in sprite_config.items():
 with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
     f.write("\t.global\tcharacter_table\n")
     f.write("\t.global\tsprite_table\n")
+    f.write("\t.global\thw_sprite_flag_table\n")
     f.write("\t.global\tbg_cluts\n")
+    f.write("hw_sprite_flag_table:")
+    bitplanelib.dump_asm_bytes(bytes(hw_sprite_table),f,mit_format=True)
+
     f.write("bg_cluts:")
     amiga_cols = [bitplanelib.to_rgb4_color(x) for clut in bg_cluts for x in clut]
     bitplanelib.dump_asm_bytes(amiga_cols,f,mit_format=True,size=2)
@@ -228,8 +234,24 @@ with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
                         else:
                             f.write(left_ptr)
                     else:
-                        f.write("1   | HW SPRITE\n")
+                        f.write("1   | HW_SPRITE\n")
+                        f.write("* palette")
+                        rgb4 = [bitplanelib.to_rgb4_color(x) for x in slot["palette"]]
+                        bitplanelib.dump_asm_bytes(rgb4,f,mit_format=True,size=2)
+                        f.write("* slots")
+                        bitplanelib.dump_asm_bytes(bytes(hw_sprite),f,mit_format=True)
 
+                        # we chose HW sprites for sprites that only have 1 clut
+                        # else this will generate multiply defined symbols
+                        # but ATM this is sufficient
+                        # also size is assumed 16x16
+
+                        f.write(f"* frames\n")
+                        for index in range(8):
+                            if index in hw_sprite:
+                                f.write(f"\t.long\t{name}_sprdata_{index}\n")
+                            else:
+                                f.write("\t.long\t0\n")
     f.write("\t.datachip\n")
 
     for i in range(256):
@@ -249,5 +271,9 @@ with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
                         if "right" in slot:
                             f.write(f"{name}_{j}_right:")
                             bitplanelib.dump_asm_bytes(slot["right"],f,mit_format=True)
-
-
+                    else:
+                        for index in range(8):
+                            if index in hw_sprite:
+                                f.write(f"{name}_sprdata_{index}:\n\t.long\t0\t| control word")
+                                bitplanelib.dump_asm_bytes(slot["left"],f,mit_format=True)
+                                f.write("\t.long\t0\n")
