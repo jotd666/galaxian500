@@ -25,6 +25,8 @@
     .equ  CREDIT_SND,         0x00
     .equ  SHOOT_SND,         0x01
     .equ  INTRO_SND,      0x02
+    .equ  ALIEN_SHOT_SND,      0x03
+    .equ  FLAGSHIP_SHOT_SND,      0x04
 
 
     

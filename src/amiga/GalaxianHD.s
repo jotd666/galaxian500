@@ -36,14 +36,8 @@ _expmem
 _config
 	dc.b    "C1:X:invincibility:0;"    
 	dc.b    "C1:X:infinite lives:1;"    
-	dc.b    "C1:X:reveal sol tower:2;"    
-	dc.b    "C1:X:reveal bonus flag:3;"    
-	dc.b    "C2:L:skill level:normal,easy,hard,hardest;"
-	dc.b    "C3:X:flag awards bonus life:0;"    
-	dc.b    "C3:X:no in-game music:1;"    
-	dc.b    "C3:X:play Super Xevious:2;"
-	dc.b    "C4:L:lives:3,1,2,5;"
-	dc.b	"C5:L:start area:1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16;"
+	dc.b    "C5:X:DSW - 3 lives:0;"
+	dc.b    "C5:X:DSW - free play:1;"    
 	dc.b	0
 
 	IFD BARFLY
@@ -65,7 +59,8 @@ _data   dc.b    0
 _name	dc.b	'Galaxian',0
 _copy	dc.b	'1979 Namco',0
 _info
-    dc.b	"Amiga port by JOTD",0
+    dc.b	"Amiga port by JOTD",10,10
+    dc.b	"From a Z80 RE by Scott Tunstall",0
 	dc.b	0
 _kickname   dc.b    0
 ;--- version id

@@ -14,9 +14,22 @@ amiga:
 - sound volume seems a bit low
 - support more dip switches (CLI but should be 1.3 compliant eeek & whdload)
 - "1" start starts 2 player game
-- alien explosions (should be sprites)
-- alien kill sound
-- extra life sound
+- alien explosions (should be sprites): not working too well
+- alien kill sound: not working
+- flagship kill sound: not working
+- extra life sound: to rip
 - alien shot show explosion but probably bug as it hides shot sprite
 - hide hw sprite if no longer a real sprite in slot (check current sprite state
   vs hw_sprite_slots in the end)
+- sprites of intro remain displayed
+
+Galaxian - like a lot of earlier games -
+has a few 'nuances' for the sprites. For instance, all sprites have a
+1-pixel adjustment for X, and sprites #0-2 have a 1-pixel adjustment for
+Y (see the MAME source galaxian_v.cpp for details). Also - unlike
+Xevious - sprite #0 has the highest priority.
+
+To rip the sounds:
+
+- enter service mode (F2)
+- press credit/fire/start to create various sounds (without swarm sound that I can't get rid of !!)

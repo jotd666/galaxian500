@@ -469,7 +469,7 @@ l_1815:
 *
 * Plays the sound of an alien or a flagship when hit.
 *
-* No death sound will,0xbe played if either of the IS_GAME_IN_PLAY or IS_COMPLEX_SOUND_PLAYING flags are set.
+* No death sound will be played if either of the IS_GAME_IN_PLAY or IS_COMPLEX_SOUND_PLAYING flags are set.
 *
 
 HANDLE_ALIEN_DEATH_SOUND:
@@ -483,16 +483,18 @@ HANDLE_ALIEN_DEATH_SOUND:
 	cmp.b	#0x06,d0                         	| Do we want to play the ALIEN DEATH sound? [cp   0x06]
 	jne	l_183a                             	| no, goto 0x183A [jp   nz,0x183A]
 
-	move.b	IS_COMPLEX_SOUND_PLAYING,d0                       	| read IS_COMPLEX_SOUND_PLAYING flag [ld   a,(0x41CD)]
-	ror.b	#1,d0                            	| move [rrca]
-	bcc.b	0f
+	tst.b	IS_COMPLEX_SOUND_PLAYING                       	| read IS_COMPLEX_SOUND_PLAYING flag [ld   a,(0x41CD)]
+	beq.b	0f
 	rts                                    	| [ret  c]
 0:
 
 	move.b	#0x01,d0                        	| [ld   a,0x01]
 	move.b	d0,PLAYER_SHOOT_SOUND_COUNTER+1                       	| [ld   (0x41CF),a]
 	move.b	d0,DELAY_BEFORE_NEXT_SOUND                       	| [ld   (0x41D6),a]
-	* play alien death sound *TODO
+	move.w	#ALIEN_SHOT_SND,d0
+	jbsr	osd_sound_start
+	
+	* play alien death sound
 	*lea	l_1EBD(pc),a0                      	| [ld   hl,0x1EBD]
 	*move.b	a0,COMPLEX_SOUND_POINTER                       	| [ld   (0x41D3),hl]
 	rts                                    	| [ret]
@@ -508,6 +510,8 @@ l_183a:
 	move.b	d0,IS_COMPLEX_SOUND_PLAYING                       	| [ld   (0x41CD),a]
 	move.b	d0,DELAY_BEFORE_NEXT_SOUND                       	| [ld   (0x41D6),a]
 	* play flagship death soundeffect
+	move.w	#FLAGSHIP_SHOT_SND,d0
+	jbsr	osd_sound_start
 	*lea	l_1EDF(pc),a0                      	| [ld   hl,0x1EDF]
 	*move.b	a0,COMPLEX_SOUND_POINTER                       	| [ld   (0x41D3),hl]
 	rts                                    	| [ret]
@@ -522,7 +526,7 @@ HANDLE_EXTRA_LIFE_SOUND:
 	tst.b	PLAY_EXTRA_LIFE_SOUND                            	| read PLAY_EXTRA_LIFE_SOUND flag. [bit  0,l]
 	jeq	l_185e                             	| if flag is not set, goto 0x185E. [jp   z,0x185E]
 	             	| store 0 in PLAY_EXTRA_LIFE_SOUND and 0x80 in EXTRA_LIFE_SOUND_COUNTER [ld   hl,0x8000]
-	move.b	#0,PLAY_EXTRA_LIFE_SOUND                       	| [ld   (0x41C7),hl]
+	clr.b	PLAY_EXTRA_LIFE_SOUND                       	| [ld   (0x41C7),hl]
 	move.b	#0x80,EXTRA_LIFE_SOUND_COUNTER                       	| [ld   (0x41C7),hl]
 	rts                                    	| [ret]
 
@@ -7291,8 +7295,7 @@ l_16de:
 * This piece of code is only called when there are 3 aliens or less in the swarm.
 * It makes the aliens extremely aggressive!
 l_16e7:
-	move.b	#0x01,d0                        	| [ld   a,0x01]
-	move.b	d0,HAVE_AGGRESSIVE_ALIENS                       	| set HAVE_AGGRESSIVE_ALIENS flag [ld   (0x4224),a]
+	move.b	#0x01,HAVE_AGGRESSIVE_ALIENS                       	| set HAVE_AGGRESSIVE_ALIENS flag [ld   (0x4224),a]
 	rts                                    	| [ret]
 
 * This piece of code writes 0 to !SOUND  reset background,0xF1 to,0xF3
@@ -7368,7 +7371,8 @@ TXT_CREDIT:
 	.align	2
 TXT_BONUS_GALIXIP_FOR___000_PTS:
 	.word	0x5398
-	.ascii	"BONUS@GALIXIP@FOR@@@000@PTS?"
+	.ascii	"BONUS@GALIXIP@FOR@@@000@"
+	.byte	0xD0,0xD1,0xD2,0x3F
 	.align	2
 TXT_CONVOY_CHARGER:
 	.word	0x52D1
