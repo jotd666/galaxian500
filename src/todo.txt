@@ -18,9 +18,7 @@ amiga:
 - alien kill sound: not working
 - flagship kill sound: not working
 - extra life sound: implement
-- alien shot show explosion but probably bug as it hides shot sprite: sprite 0 zeroed at some point
-- hide hw sprite if no longer a real sprite in slot (check current sprite state
-  vs hw_sprite_slots in the end)
+- alien sprite issue / sprite 0 (player shot) gets set to 0
 - implement cheat/debug key: stop aliens from attacking
 - if not fire first pressed & game not playing
   * credit 0: fire = insert coin

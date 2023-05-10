@@ -1162,24 +1162,21 @@ delete_previous_bullets:
 	rts
 	
 delete_previous_sprites:
-	movem.l	a0-a3/a5,-(a7)
+	movem.l	a0-a5,-(a7)
+	move.w	#10,0x110
 
 	lea		hw_sprite_flag_table,a3
+	move.l	a5,a4
 	
-	move.w	#NB_SPRITES_TOTAL-1,d3
-	moveq	#0,d0
-	moveq	#0,d1
-	moveq	#0,d6
-	moveq	#0,d5
+	move.w	#NB_SPRITES_TOTAL-1,d5
 2:
-	move.l	(a5)+,d4
+	move.l	(a4)+,d4
 	move.l	d4,d7
 	and.l	#0xFF0000FF,d7
 	cmp.l	#0xF80000F8,d7	| X=Y=0xF8: means disabled
 	beq.w	11f
 	* get data
-	bsr		decode_sprite_data
-
+	bsr		decode_sprite_data_2
 	tst.b	(a3,d6.w)
 	bne.w	11f		| real sprite: skip erase
 	
@@ -1191,22 +1188,22 @@ delete_previous_sprites:
 
     move.w  #16,d4		| max single size height
 
-	movem.l	d3/a5,-(a7)
     lea _custom,a5
 	move.l	fg_drawed_screen_ptr(pc),a1
 	moveq	#3,d3
+	move.w	d5,-(a7)
 	bsr		clear_planes_any_blitter_internal
-	movem.l	(a7)+,d3/a5
+	move.w	(a7)+,d5
 11:
-	dbf		d3,2b
-	movem.l	(a7)+,a0-a3/a5
+	dbf		d5,2b
+	movem.l	(a7)+,a0-a5
 	rts
 	
 * < D4: sprite properties
 *     Y code+attrs clut X
 * > D0,D1: X,Y.B
 * > D5: clut index
-* > D6: sprite index
+* > D6: sprite index + attributes
 * 
 decode_sprite_data:
 	move.b	d4,d1	| sprite X (aka Y on amiga)
@@ -1214,6 +1211,24 @@ decode_sprite_data:
 	move.b	d4,d5	| clut index
 	lsr.l	#8,d4
 	move.b	d4,d6	| sprite index
+	lsr.l	#8,d4	
+	move.b	d4,d0	| sprite Y (aka X on amiga)
+	rts
+
+* < D4: sprite properties
+*     Y code+attrs clut X
+* > D0,D1: X,Y.W
+* > D6: sprite index.W
+* 	
+* used in erase sprite
+*
+decode_sprite_data_2:
+	moveq	#0,d0	| make sure .W value is correct
+	moveq	#0,d1
+	move.b	d4,d1	| sprite X (aka Y on amiga)
+	swap	d4
+	move.b	d4,d6	| sprite index
+	and.w	#0x3F,d6  | only sprite code
 	lsr.l	#8,d4	
 	move.b	d4,d0	| sprite Y (aka X on amiga)
 	rts
@@ -1759,7 +1774,7 @@ clear_plane_any_blitter_internal:
 * < D3: number of planes to clear
 * < D4: blit height
 * < D7: mask (disabled, -1 set at start)
-* trashes D0-D6
+* trashes D0-D6, A1,A2
 clear_planes_any_blitter_internal:
     * pre-compute the maximum of shit here
 	move.w	d1,d6
