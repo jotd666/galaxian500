@@ -944,7 +944,9 @@ osd_update_graphics:
 	* set X/Y coords for sprite
 	move.l	d0,(a1)
 	
-	bsr		update_hw_sprites_lifetime
+	move.l	(a7),a0
+	
+	bsr		delete_old_hw_sprites
 	
 	move.l	(a7)+,a0
 
@@ -958,7 +960,46 @@ osd_update_graphics:
 	movem.l	(a7)+,d0-d7/a0-a6
 	rts
 
-update_hw_sprites_lifetime:
+* hide hw sprite if no longer a real sprite in slot 
+* check current sprite state vs hw_sprite_slots in the end
+
+delete_old_hw_sprites:
+	lea		hw_sprite_flag_table,a4
+ 	lea		previous_sprite_state_3(pc),a5
+	lea		hw_sprite_slots(pc),a2
+	lea		amiga_sprite_slots(pc),a3
+
+	moveq	#0,d0
+	moveq	#0,d3
+0:
+	move.w	(a0),d1
+	move.b	d1,d3	| get sprite code
+	and.w	#0x3F,d3
+	tst.b	(a4,d3.w)
+	beq.b	1f			| is not a HW sprite
+	lsr.w	#8,d1
+	cmp.b	#0xF8,d1
+	bne.b	2f	| current position is a sprite, active
+	
+1:
+	* current sprite no longer active / replaced by BOB
+	* now check if was previously a sprite
+	move.w	(a5),d2
+	move.b	d2,d3	| get sprite code
+	and.w	#0x3F,d3
+	tst.b	(a4,d3.w)
+	beq.b	2f			| was not a HW sprite
+	* it was a sprite
+	move.l	(a2,d0.w),a1
+	clr.l	(a1)+		| clear control word: undisplay sprite
+	move.w	(a1),d7		| now get amiga hw sprite index
+	clr.b	(a3,d7.w)	| unreserve from amiga sprite table
+2:
+	addq.w	#4,a0
+	addq.w	#4,a5
+	addq.w	#8,d0
+	cmp.w	#NB_SPRITES_TOTAL*8,d0
+	bne.b	0b
 	rts
 	
 draw_sprites:
@@ -1007,10 +1048,9 @@ draw_sprites:
 4:
 	* sprite: memorize pointer on palette
 	move.l	a1,current_sprite_palette
-	* was the sprite 
 	* skip to sprite frames
 	addq.w	#8,a1
-	move.l	(a1)+,a0		| memorize sprite frame table
+	move.l	(a1)+,a0		| memorize sprite frame table in a0
 	* now was the sprite active in the previous occurrence?
 	lea		previous_sprite_state_3(pc),a6
 	move.w	d3,d7
@@ -1063,8 +1103,7 @@ draw_sprites:
 	
 	move.w	d2,-(a7)
 	add.w	d2,d2
-	add.w	d2,d2
-	bclr	#4,d2		| same palette for 2 sprites
+	bclr	#3,d2		| same palette for 2 sprites
 	lea		sprite_cols,a1
 	add.w	d2,a1
 	move.l	current_sprite_palette(pc),a3
@@ -1535,11 +1574,11 @@ osd_read_dipswitches:
 	beq.b	0f
 	bclr	#1,d0
 0:
-	tst.b	(0,a0)		| "1" key like in MAME
+	tst.b	(1,a0)		| "1" key like in MAME
 	beq.b	0f
 	bset	#0,d1
 0:
-	tst.b	(1,a0)		| "2" key like in MAME
+	tst.b	(2,a0)		| "2" key like in MAME
 	beq.b	0f
 	bset	#1,d1
 0:
@@ -2064,30 +2103,6 @@ fg_displayed_screen_ptr:
 	.endif
 
 
-* table accounting for amiga hardware sprites that the engine
-* asked to display. Holds y-offset (for andor) & line backup
-* (when y-offset is non-zero). Also holds pointers on sprite start
-* and also on part of the copperlist which displays the sprite
-* (so it can be reset when clipped sprite disappears)
-*
-* 64 bytes per sprite is enough to make access simple
-* by shifting by ACTIVE_SPRITE_STRUCT_BITS
-* each entry can hold up to 2 sprites (6-colored sprites)
-*
-* a lot of entries are unused, as only a few sprites are hardware ones
-
-active_hw_sprite_display_table:
-	ds.l	256*(1<<ACTIVE_SPRITE_STRUCT_BITS)
-
-* simple structure 1 per hw sprite
-* word: life (0: not active)
-* long: sprite backup structure (needed to shut down the sprite)
-* word: pad
-
-active_hw_sprite_lifetime:
-	ds.l	16
-
-	
 	.include	"sound_entries.68k"
 	
 dosname:
