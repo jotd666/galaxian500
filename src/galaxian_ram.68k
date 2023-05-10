@@ -164,6 +164,7 @@
 	.global	bg_colorram
 	.global	bg_videoram
 	.global	vb_ticks_count
+	.global	next_sound_to_play
 
     .bss
 
@@ -724,7 +725,8 @@ ATTRIBUTE_RAM:						| $5800
 	ds.b	0x800
 
 
-
+next_sound_to_play:
+	.word	0
 invincible_flag:
 	.byte	0
 infinite_lives_flag:

@@ -336,8 +336,7 @@ HANDLE_GAME_START_MELODY:
 	move.b	d0,PLAY_GAME_START_MELODY+1                       	| [ld   (0x41D2),a]
 	move.b	d0,DELAY_BEFORE_NEXT_SOUND                       	| [ld   (0x41D6),a]
 	
-	move.w	#INTRO_SND,d0
-	jsr		osd_sound_start
+	move.w	#INTRO_SND,next_sound_to_play
 	
 	* play game start tune
 	*lea	l_1E68(pc),a0                      	| [ld   hl,0x1E68]
@@ -374,9 +373,16 @@ l_176c:
 	move.b	DELAY_BEFORE_NEXT_SOUND,d0                       	| read DELAY_BEFORE_NEXT_SOUND [ld   a,(0x41D6)]
 	subq.b	#1,d0                           	| decrement countdown [dec  a]
 	jne	l_17a2                             	| if count hasn't hit zero, then goto 0x17A2 [jp   nz,0x17A2]
-	*TODO
-	nop
+
 * OK, counter is zero, we get musical note or sound effect to play.
+
+	move.w	next_sound_to_play,d1
+	bmi.b	l_17a2
+	exg		d0,d1
+	jsr		osd_sound_start
+	move.w	#-1,next_sound_to_play
+	move.w	d1,d0
+	
 *	move.w	COMPLEX_SOUND_POINTER,a0                   	| read COMPLEX_SOUND_POINTER [ld   hl,(0x41D3)]
 *	move.b	(a0),d0                         	| read sound to play [ld   a,(hl)]
 *	cmp.b	#0xE0,d0                         	| is this the end of sound marker? [cp   0xE0]
@@ -473,9 +479,8 @@ l_1815:
 *
 
 HANDLE_ALIEN_DEATH_SOUND:
-	move.b	IS_GAME_IN_PLAY,d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
-	ror.b	#1,d0                            	| move flag into carry [rrca]
-	bcs.b	0f
+	tst.b	IS_GAME_IN_PLAY                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	bne.b	0f
 	rts                                    	| if game is not in play, we won't play sound. [ret  nc]
 0:
 
@@ -491,8 +496,8 @@ HANDLE_ALIEN_DEATH_SOUND:
 	move.b	#0x01,d0                        	| [ld   a,0x01]
 	move.b	d0,PLAYER_SHOOT_SOUND_COUNTER+1                       	| [ld   (0x41CF),a]
 	move.b	d0,DELAY_BEFORE_NEXT_SOUND                       	| [ld   (0x41D6),a]
-	move.w	#ALIEN_SHOT_SND,d0
-	jbsr	osd_sound_start
+	move.w	#ALIEN_SHOT_SND,next_sound_to_play
+	clr.b	ALIEN_DEATH_SOUND		| JOTD: ack the sound else it plays continuously
 	
 	* play alien death sound
 	*lea	l_1EBD(pc),a0                      	| [ld   hl,0x1EBD]
@@ -510,8 +515,9 @@ l_183a:
 	move.b	d0,IS_COMPLEX_SOUND_PLAYING                       	| [ld   (0x41CD),a]
 	move.b	d0,DELAY_BEFORE_NEXT_SOUND                       	| [ld   (0x41D6),a]
 	* play flagship death soundeffect
-	move.w	#FLAGSHIP_SHOT_SND,d0
-	jbsr	osd_sound_start
+	move.w	#FLAGSHIP_SHOT_SND,next_sound_to_play
+	clr.b	ALIEN_DEATH_SOUND		| JOTD: ack the sound else it plays continuously
+
 	*lea	l_1EDF(pc),a0                      	| [ld   hl,0x1EDF]
 	*move.b	a0,COMPLEX_SOUND_POINTER                       	| [ld   (0x41D3),hl]
 	rts                                    	| [ret]
@@ -2143,13 +2149,17 @@ INFLIGHT_ALIEN_DYING_SETUP_ANIM_AND_SOUND:
 	move.b	(IndexInSwarm,a2),d0                    	| read INFLIGHT_ALIEN.IndexInSwarm [ld   a,(ix+0x07)]
 	cmp.b	#0x70,d0                         	| is this a flagship? [cp   0x70]
 	jcc	l_110c                             	| yes, goto 0x110C to play flagship hit sound [jr   nc,0x110C]
-	move.b	#0x07,d0                        	| [ld   a,0x07]
+* original game writes 0x07, and some obscure call at 0x16A6 does useless stuff
+* but also decreases that value. Since the code wasn't ported (why wasting cycles?)
+* just correct the values
+	move.b	#0x06,d0                        	| [ld   a,0x07]
 	move.b	d0,ALIEN_DEATH_SOUND                       	| play sound effect of alien hit [ld   (0x41DF),a]
 	rts                                    	| [ret]
 
 * play flagship hit sound
 l_110c:
-	move.b	#0x17,d0                        	| [ld   a,0x17]
+* original game writes 0x17, see above
+	move.b	#0x16,d0                        	| [ld   a,0x17]
 	move.b	d0,ALIEN_DEATH_SOUND                       	| play sound effect of flagship hit [ld   (0x41DF),a]
 	rts                                    	| [ret]
 
@@ -6222,8 +6232,7 @@ l_131c:
 0:
 
 * Make player BOOM! sound
-	move.b	#0x01,d0                        	| [ld   a,0x01]
-	*SOUND  move.b	d0,l_6803                       	| make PLAYER HIT noise [ld   (0x6803),a]
+	move.w	#PLAYER_SHOT_SND,d0
 	rts                                    	| [ret]
 
 

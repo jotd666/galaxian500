@@ -18,14 +18,16 @@ outfile = os.path.join(src_dir,"sounds.68k")
 sndfile = os.path.join(src_dir,"sound_entries.68k")
 
 hq_sample_rate = 22050
-
+lq_sample_rate = hq_sample_rate//2
 
 sound_dict = {
 #"EXTRA_SOLVALOU_SND"     :{"index":0x04,"channel":3,"sample_rate":hq_sample_rate,"priority":10},
 "CREDIT_SND"               :{"index":0,"channel":0,"sample_rate":hq_sample_rate},
 "SHOOT_SND"              :{"index":1,"channel":1,"sample_rate":hq_sample_rate},
-"INTRO_SND"               :{"index":2,"channel":1,"sample_rate":11025},
+"INTRO_SND"               :{"index":2,"channel":1,"sample_rate":lq_sample_rate},
 "ALIEN_SHOT_SND"               :{"index":3,"channel":2,"sample_rate":hq_sample_rate},
+"FLAGSHIP_SHOT_SND"               :{"index":4,"channel":0,"sample_rate":hq_sample_rate,"priority":10},
+"PLAYER_SHOT_SND"              :{"index":4,"channel":3,"sample_rate":lq_sample_rate,"priority":10}
 }
 
 max_sound = max(x["index"] for x in sound_dict.values())+1

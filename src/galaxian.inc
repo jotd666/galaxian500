@@ -27,6 +27,7 @@
     .equ  INTRO_SND,      0x02
     .equ  ALIEN_SHOT_SND,      0x03
     .equ  FLAGSHIP_SHOT_SND,      0x04
+    .equ  PLAYER_SHOT_SND,      0x05
 
 
     

@@ -5559,20 +5559,28 @@ HANDLE_SHOCKED_SWARM:
 16A5: C9            ret
 
 *
-* Looks like this might be legacy code imported from an older game| it writes to a port that does nothing
+* Scott: Looks like this might be legacy code imported from an older game
+* it writes to a port that does nothing
 *
-
+* JOTD: no, it actually does something: it decreases ALIEN_DEATH_SOUND
+* if not zero (when not service mode)
+* which explains why game sets 0x7 / 0x17 to play alien/flagship death sound
+* but HANDLE_ALIEN_DEATH_SOUND checks for 0x6 / 0x16
+*
+* of course it could be much simpler, because the aim was probably
+* to enable some hardware stuff that ended up not connected as Scott mentionned
+*
 16A6: 3A 07 40      ld   a,(0x4007)            | read IS_GAME_OVER flag
 16A9: 0F            rrca                      | move bit 0 into carry
 16AA: D8            ret  c                    | if carry set, return
-16AB: 21 DF 41      ld   hl,0x41DF
+16AB: 21 DF 41      ld   hl,0x41DF			  | load ALIEN_DEATH_SOUND address
 16AE: 7E            ld   a,(hl)
 16AF: A7            and  a
 16B0: C8            ret  z
 16B1: 0F            rrca
 16B2: 0F            rrca
 16B3: 32 04 68      ld   (0x6804),a            | Does nothing - this port is not connected
-16B6: 35            dec  (hl)
+16B6: 35            dec  (hl)                  | decrease ALIEN_DEATH_SOUND value
 16B7: C9            ret
 
 

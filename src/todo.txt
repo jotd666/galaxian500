@@ -6,15 +6,14 @@ transcode:
   but aren't visible, also attacks are probably buggy
 - sprite animation frames are wrong
 - wrong score when shooting aliens: test it, but DAA isn't emulated
+- send corrected transcode to Scott
 
 amiga:
-- sprites of intro remain displayed
 - emulate stars with sprites (mockup in python first)
 - draw alien bullets on back screen (setting white as colors 4-7)
 - game should run at 60Hz
 - sound volume seems a bit low
 - support more dip switches (CLI but should be 1.3 compliant eeek & whdload)
-- alien explosions (should be sprites): not working too well
 - alien kill sound: not working
 - flagship kill sound: not working
 - extra life sound: implement
