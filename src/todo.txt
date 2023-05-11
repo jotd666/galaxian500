@@ -2,21 +2,19 @@ transcode:
 - SCORE ADVANCE TABLE: missing dashes
 - swarm sound loop
 - stars LFSR API
-- aliens seem to attack from swarm (disappear from swarm) only from right 
-  but aren't visible, also attacks are probably buggy
-- sprite animation frames are wrong
 - wrong score when shooting aliens: test it, but DAA isn't emulated
 - send corrected transcode to Scott
 - re-convert GENERATE_RANDOM_NUMBER and CALCULATE_TANGENT
 - debug HANDLE_SINGLE_ALIEN_ATTACK
 
 amiga:
-- emulate stars with sprites (mockup in python first)
 - draw alien bullets on back screen (setting white as colors 4-7)
 - game should run at 60Hz
 - sound volume seems a bit low
 - support more dip switches (CLI but should be 1.3 compliant eeek & whdload)
 - if credit inserted while sprites are shown in demo, sprites remain!
+- big graphical bugs when aliens attack
+- when to play attack sound?
 - extra life sound: implement
 - implement cheat/debug key: stop aliens from attacking
 - if not fire first pressed & game not playing
@@ -24,6 +22,7 @@ amiga:
   * credit != 0: fire to start game
   * same for second player
 - joypad controls: insert coin/start/play for pause
+- emulate stars with sprites (mockup in python first)
 
 Galaxian - like a lot of earlier games -
 has a few 'nuances' for the sprites. For instance, all sprites have a

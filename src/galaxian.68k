@@ -6353,7 +6353,6 @@ HANDLE_SINGLE_ALIEN_ATTACK:
 	beq.b	0f
 	rts                                    	| return if no aliens are in the swarm. [ret  c]
 0:
-
 * The difficulty level specifies how many aliens can be attacking the player at one time.
 	move.b	DIFFICULTY_BASE_VALUE,d5
 	move.b	DIFFICULTY_EXTRA_VALUE,d6 	| load H with DIFFICULTY_BASE_VALUE and L with DIFFICULTY_EXTRA_VALUE [ld   hl,(0x421A)]
@@ -6387,7 +6386,7 @@ l_1366:
 l_136f:
 	move.l	a0,a2								| IX = HL
 	move.b	ALIENS_ATTACK_FROM_RIGHT_FLANK,d0                       	| read ALIENS_ATTACK_FROM_RIGHT_FLANK flag [ld   a,(0x4215)]
-	move.b	d0,(0x06,a2)                    	| update INFLIGHT_ALIEN.ArcClockwise flag [ld   (ix+0x06),a]
+	move.b	d0,(ArcClockwise,a2)                    	| update INFLIGHT_ALIEN.ArcClockwise flag [ld   (ix+0x06),a]
 	tst.b	d0                               	| test if flag is set [and  a]
 	jne	FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_RIGHT      	| if flag is set, goto FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_RIGHT [jr   nz,0x13AB]
 
@@ -6524,8 +6523,12 @@ WAKEUP_INFLIGHT_ALIEN:
 *
 
 SET_ALIEN_ATTACK_FLANK:
+	* no problem with endian here, MSB is just used a sign flag (bit 15)
 	move.w	SWARM_SCROLL_VALUE,d5                      	| read SWARM_SCROLL_VALUE [ld   hl,(0x420E)]
-	move.w	SWARM_SCROLL_MAX_EXTENTS,d3                      	| read SWARM_SCROLL_MAX_EXTENTS [ld   de,(0x4210)]
+	* tricky with z80/m68k endianness difference, as this variable is either accessed with word or byte size...
+	* it is initialized by a word write so when reading it, d aka d3 and e aka d4 are inverted
+	move.b	SWARM_SCROLL_MAX_EXTENTS,d3                      	| read SWARM_SCROLL_MAX_EXTENTS [ld   de,(0x4210)]
+	move.b	SWARM_SCROLL_MAX_EXTENTS+1,d4                      	| read SWARM_SCROLL_MAX_EXTENTS [ld   de,(0x4210)]
 	btst	#15,d5                            	| [bit  7,h]
 	jeq	l_13f7                             	| [jr   z,0x13F7]
 
@@ -6533,12 +6536,11 @@ SET_ALIEN_ATTACK_FLANK:
 	sub.b	d3,d0                             	| [sub  d]
 	cmp.b	#0x1C,d0                         	| [cp   0x1C]
 	jcc	l_1403                             	| if A>0x1C, attack from a random flank [jr   nc,0x1403]
-	clr.b	ALIENS_ATTACK_FROM_RIGHT_FLANK                       	| reset ALIENS_ATTACK_FROM_RIGHT_FLANK flag. Aliens will now attack from left side of swarm. [ld   (0x4215),a]
+	clr.b	ALIENS_ATTACK_FROM_RIGHT_FLANK       	| reset ALIENS_ATTACK_FROM_RIGHT_FLANK flag. Aliens will now attack from left side of swarm. [ld   (0x4215),a]
 	rts                                    	| [ret]
 
 l_13f7:
-	move.w	d3,d0                           	
-	lsr.w	#8,d0								| [ld   a,e]
+	move.w	d4,d0								| [ld   a,e]
 	sub.b	d5,d0                             	| [sub  l]
 	cmp.b	#0x1C,d0                         	| [cp   0x1C]
 	jcc	l_1403                             	| if A>0x1C, attack from a random flank [jr   nc,0x1403]
