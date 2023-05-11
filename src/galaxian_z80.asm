@@ -2051,7 +2051,7 @@ HANDLE_MAIN_GAME_LOGIC:
 068B: CD F3 14      call 0x14F3               | call HANDLE_LEVEL_DIFFICULTY
 068E: CD ED 12      call 0x12ED               | call HANDLE_PLAYER_HIT
 0691: CD 27 13      call 0x1327               | call HANDLE_PLAYER_DYING
-0694: CD A6 16      call 0x16A6               | Doesn't actually do anything
+0694: CD A6 16      call 0x16A6               | Doesn't actually do anything but decreases ALIEN_DEATH_SOUND value
 0697: CD 15 15      call 0x1515               | call CHECK_IF_ALIEN_CAN_ATTACK
 069A: CD 55 15      call 0x1555               | call UPDATE_ATTACK_COUNTERS
 069D: CD C3 15      call 0x15C3               | call CHECK_IF_FLAGSHIP_CAN_ATTACK

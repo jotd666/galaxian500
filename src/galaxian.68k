@@ -2217,84 +2217,88 @@ INFLIGHT_ALIEN_DYING_FINALLY_BUYS_FARM:
 	
 
 *
-* An alien that has just completed an arc animation (see docs @ 0x0D71 and 0x101F) is now ready to attack the player. 
+* An alien that has just completed an arc animation (see docs @ 0x0D71 and 0x101F) is now ready to attack the player.
 *
 * Expects:
 * IX = pointer to INFLIGHT_ALIEN that will attack
 *
 
 INFLIGHT_ALIEN_READY_TO_ATTACK:
-	addq.b	#1,(inf_alien_X,a2)				  | increment INFLIGHT_ALIEN.X
-	move.b	(IndexInSwarm,a2),d0			 | read INFLIGHT_ALIEN.IndexInSwarm
-	and.b	#0x70,d0                          | keep the row, remove the column
-	cmp.b	#0x60,d0                          | is this a red alien?
-	jbeq	l_0E20							   | yes, goto 0x0E20
+	addq.b	#1,(inf_alien_X,a2)                    	| increment INFLIGHT_ALIEN.X [inc  (ix+0x03)]
+	move.b	(IndexInSwarm,a2),d0                    	| read INFLIGHT_ALIEN.IndexInSwarm [ld   a,(ix+0x07)]
+	and.b	#0x70,d0                         	| keep the row, remove the column [and  0x70]
+	cmp.b	#0x60,d0                         	| is this a red alien? [cp   0x60]
+	jeq	l_0e20                             	| yes, goto 0x0E20 [jr   z,0x0E20]
 
 INFLIGHT_ALIEN_DEFINE_FLIGHTPATH:
-	move.b	PLAYER_Y,d1		| read PLAYER_Y 
-	move.b	(inf_alien_Y,a2),d0 | read INFLIGHT_ALIEN.Y 
-	sub.b	d1,d0               | A = INFLIGHT_ALIEN.Y  - PLAYER_Y
-	jcs		l_0E0F             | if alien is to right of player, goto 0x0E0F
+l_0ddd:
+	move.b	PLAYER_Y,d0                       	| read PLAYER_Y [ld   a,(0x4202)]
+	move.b	d0,d1                           	| [ld   b,a]
+	move.b	(inf_alien_Y,a2),d0                    	| read INFLIGHT_ALIEN.Y [ld   a,(ix+0x04)]
+	sub.b	d1,d0                            	| A = INFLIGHT_ALIEN.Y  - PLAYER_Y [sub  b]
+	jcs	l_0e0f                             	| if alien is to right of player, goto 0x0E0F [jr   c,0x0E0F]
 
 * alien is to left of player (d0 >= 0)
-* A = signed number representing distance in pixels between alien Y and player Y. 
-	asr.b	#1,d0	 				| divide distance by 2     
-	add.b	#0x10,d0               | add 0x10 (16 decimal) to product
+* A = signed number representing distance in pixels between alien Y and player Y.
+	roxr.b	#1,d0                           	| divide distance by 2 [rra]
+	add.b	#0x10,d0                         	| add 0x10 (16 decimal) to product [add  a,0x10]
 * clamp A between 0x30 and 0x70
-	cmp.b   #0x30,d0                 | compare to 48 (decimal)
-	jcc		0f            | if A>=48 goto 0x0DF0
-	move.b   #0x30,d0
-0:
-	cmp.b   #0x70,d0                 | compare to 112 (decimal)  NB: 112 is half the screen height in pixels
-	jcs		l_0DF6
-	move.b	#0x70,d0
+	cmp.b	#0x30,d0                         	| compare to 48 (decimal) [cp   0x30]
+	jcc	l_0df0                             	| if A>=48 goto 0x0DF0 [jr   nc,0x0DF0]
+	move.b	#0x30,d0                        	| [ld   a,0x30]
+l_0df0:
+	cmp.b	#0x70,d0                         	| compare to 112 (decimal)  NB: 112 is half the screen height in pixels [cp   0x70]
+	jcs	l_0df6                             	| [jr   c,0x0DF6]
+	move.b	#0x70,d0                        	| [ld   a,0x70]
 
-* PivotYValue is a Y coordinate to pivot around. You could think of it like the "origin" Y coordinate. 
+* PivotYValue is a Y coordinate to pivot around. You could think of it like the "origin" Y coordinate.
 * PivotYValueAdd is a delta (offset) to add to PivotYValue to produce the correct Y coordinate of the alien.
 *
 * PivotYValueAdd will increment if the player is to the left of the alien when it leaves the swarm,
-* or decrement if the player is to the right. 
+* or decrement if the player is to the right.
 
-l_0DF6:
-	move.b	d0,(PivotYValueAdd,a2)          | set INFLIGHT_ALIEN.PivotYValueAdd
-	sub.b	(inf_alien_Y,a2),d0            | subtract INFLIGHT_ALIEN.Y 
-	neg.b	d0
-	move.b	d0,(a2,PivotYValue)          | set INFLIGHT_ALIEN.PivotYValue. Now PivotYValue + PivotYValueAdd = INFLIGHT_ALIEN.Y
-	clr.b	(0x1a,a2)
-	clr.b	(0x1b,a2)			| ???? unknown stuff, but probably useful!!
-	clr.b	(0x1c,a2)
+l_0df6:
+	move.b	d0,(PivotYValueAdd,a2)                    	| set INFLIGHT_ALIEN.PivotYValueAdd [ld   (ix+0x19),a]
+	sub.b	(inf_alien_Y,a2),d0                     	| subtract INFLIGHT_ALIEN.Y [sub  (ix+0x04)]
+	neg.b	d0                               	| [neg]
+	move.b	d0,(PivotYValue,a2)                    	| set INFLIGHT_ALIEN.PivotYValue. Now PivotYValue + PivotYValueAdd = INFLIGHT_ALIEN.Y [ld   (ix+0x09),a]
+	clr.b	d0                               	| [xor  a]
+	move.b	d0,(0x1a,a2)                    	| [ld   (ix+0x1a),a]
+	move.b	d0,(0x1b,a2)                    	| [ld   (ix+0x1b),a] ???? unknown stuff, but probably useful!!
+	move.b	d0,(0x1c,a2)                    	| [ld   (ix+0x1c),a]
 
-	addq.b	#1,(StageOfLife,a2)    | set stage of life to INFLIGHT_ALIEN_ATTACKING_PLAYER or INFLIGHT_ALIEN_ATTACKING_PLAYER_AGGRESSIVELY
-	rts
+	addq.b	#1,(StageOfLife,a2)                    	| set stage of life to INFLIGHT_ALIEN_ATTACKING_PLAYER or INFLIGHT_ALIEN_ATTACKING_PLAYER_AGGRESSIVELY [inc  (ix+0x02)]
+	rts                                    	| [ret]
 
 * alien is to right of player (d0 < 0)
 * A = signed number representing distance in pixels between alien and player.
-	
-l_0E0F:
-	asr.b	#1,d0              | perform a shift right, with sign bit preserved
-    sub  #0x10,d0
+l_0e0f:
+	roxr.b	#1,d0                           	| perform a shift right, with sign bit preserved [rra]
+	sub.b	#0x10,d0                         	| [sub  0x10]
 * clamp A between -48 and -112 decimal
-	cmp.b   #0xD0,d0                  | compare to -48 (decimal)
-	bcs.b	0f
-	move.b	#0xD0,d0
-0:           
-	cmp.b   #0x90,d0                  | compare to -112 (decimal)  NB: 112 is half the screen height in pixels
-	bcc.b	l_0DF6
-	move.b	#0x90,d0		| clamp to 0x90 (-16)
-	jra		l_0DF6
+	cmp.b	#0xD0,d0                         	| compare to -48 (decimal) [cp   0xD0]
+	jcs	l_0e18                             	| [jr   c,0x0E18]
+	move.b	#0xD0,d0                        	| [ld   a,0xD0]
+l_0e18:
+	cmp.b	#0x90,d0                         	| compare to -112 (decimal)  NB: 112 is half the screen height in pixels [cp   0x90]
+	jcc	l_0df6                             	| [jr   nc,0x0DF6]
+	move.b	#0x90,d0                        	| [ld   a,0x90]
+	jra	l_0df6                             	| [jr   0x0DF6]
 
 
-l_0E20:
-	tst.b	INFLIGHT_ALIENS+inflight_alien_size+IsActive      | address of INFLIGHT_ALIENS[1].IsActive
-	jeq		INFLIGHT_ALIEN_DEFINE_FLIGHTPATH                  | if not set then we are not part of a convoy, goto INFLIGHT_ALIEN_DEFINE_FLIGHTPATH
+l_0e20:
+	move.b	INFLIGHT_ALIENS+inflight_alien_size+IsActive,d0                       	| address of INFLIGHT_ALIENS[1].IsActive [ld   a,(0x42D0)]
+	ror.b	#1,d0                            	| move flag into carry [rrca]
+	jcc	INFLIGHT_ALIEN_DEFINE_FLIGHTPATH                             	| if not set then we are not part of a convoy, goto INFLIGHT_ALIEN_DEFINE_FLIGHTPATH [jr   nc,0x0DDD]
 
 * make the alien accompany the flagship as part of a convoy. The PivotYValueAdd of the alien is the same as the flagship,
 * so it will fly the same path.
-	move.b	INFLIGHT_ALIENS+inflight_alien_size+PivotYValueAdd,d0	| read flagship INFLIGHT_ALIENS[1].PivotYValueAdd  
-	jra		l_0DF6
+	move.b	INFLIGHT_ALIENS+inflight_alien_size+PivotYValueAdd,d0                       	| read flagship INFLIGHT_ALIENS[1].PivotYValueAdd [ld   a,(0x42E9)]
+	jra	l_0df6                             	| [jr   0x0DF6]
+
 
 *
-* This is probably the most important routine for the INFLIGHT_ALIEN. 
+* This is probably the most important routine for the INFLIGHT_ALIEN.
 *
 * It is responsible for making an INFLIGHT_ALIEN fly down the screen, dropping bombs when it can.
 *
@@ -2303,50 +2307,56 @@ l_0E20:
 *
 
 INFLIGHT_ALIEN_ATTACKING_PLAYER:
-	addq.b	#1,(inf_alien_X,a2)       | increment INFLIGHT_ALIEN.X 
-	jbsr	UPDATE_INFLIGHT_ALIEN_YADD
-	move.b	(PivotYValue,a2),d0         | load A with INFLIGHT_ALIEN.PivotYValue
-	add.b	(PivotYValueAdd,a2),d0      | add in INFLIGHT_ALIEN.PivotYValueAdd to produce a Y coordinate      
-	move.b	d0,(inf_alien_Y,a2)         | write to INFLIGHT_ALIEN.Y 
-	addq.b	#7,d0
-	cmp.b	#14,d0
-	bcs.b	2f                          | if the alien has gone off the side of the screen, return to swarm
-	move.b	(inf_alien_X,a2),d0			| load A with INFLIGHT_ALIEN.X
-	add.b	#0x48,d0
-	bcs.b	3f                          | if the alien is nearing the bottom of the screen, speed it up!
-	tst.b	HAS_PLAYER_SPAWNED
-	bne.b	0f
-	rts		| return if player has not spawned
+	addq.b	#1,(inf_alien_X,a2)                    	| increment INFLIGHT_ALIEN.X [inc  (ix+0x03)]
+	jbsr	UPDATE_INFLIGHT_ALIEN_YADD                            	| call UPDATE_INFLIGHT_ALIEN_YADD [call 0x116B]
+	move.b	(PivotYValue,a2),d0                    	| load A with INFLIGHT_ALIEN.PivotYValue [ld   a,(ix+0x09)]
+	add.b	(PivotYValueAdd,a2),d0                     	| add in INFLIGHT_ALIEN.PivotYValueAdd to produce a Y coordinate [add  a,(ix+0x19)]
+	move.b	d0,(inf_alien_Y,a2)                    	| write to INFLIGHT_ALIEN.Y [ld   (ix+0x04),a]
+	addq.b	#0x07,d0                        	| [add  a,0x07]
+	cmp.b	#0x0E,d0                         	| [cp   0x0E]
+	jcs	l_0e64                             	| if the alien has gone off the side of the screen, return to swarm [jr   c,0x0E64]
+	move.b	(inf_alien_X,a2),d0                    	| load A with INFLIGHT_ALIEN.X [ld   a,(ix+0x03)]
+	add.b	#0x48,d0                         	| [add  a,0x48]
+	jcs	l_0e67                             	| if the alien is nearing the bottom of the screen, speed it up! [jr   c,0x0E67]
+	move.b	HAS_PLAYER_SPAWNED,d0                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
+	ror.b	#1,d0                            	| move flag into carry [rrca]
+	bcs.b	0f
+	rts                                    	| return if player has not spawned [ret  nc]
 0:
-	jbsr	CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME
+	jbsr	CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME                            	| call CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME [call 0x11B0]
+
 * alien won't shoot at you if a flagship has been hit
-	tst.b	IS_FLAGSHIP_HIT
-	beq.b	1f		    | return if flagship was hit
-	rts
-1:
+	move.b	IS_FLAGSHIP_HIT,d0                       	| read IS_FLAGSHIP_HIT [ld   a,(0x422B)]
+	ror.b	#1,d0                            	| move flag into carry [rrca]
+	bcc.b	0f
+	rts                                    	| return if flagship was hit [ret  c]
+0:
+
 * Can this alien start shooting at you?
 *
 * code from 0x0E54-0E63 is akin to:
 *
-* byte yToCheck = INFLIGHT_ALIEN.X|
-* for (byte l=0| l<INFLIGHT_ALIEN_SHOOT_RANGE_MUL|l++)
+* byte yToCheck = INFLIGHT_ALIEN.X      	|
+* for (byte l=0                         	| l<INFLIGHT_ALIEN_SHOOT_RANGE_MUL|l++)
 * {
 *     if (yToCheck == INFLIGHT_ALIEN_SHOOT_EXACT_X)
-*        goto TRY SPAWN_ENEMY_BULLET|
+*        goto TRY SPAWN_ENEMY_BULLET    	|
 *     else
-*        yToCheck+=0x19|
+*        yToCheck+=0x19                 	|
 * }
 *
 	jra		l_0E54			| avoids code duplication
 
 
-* If only one of these INCs are called (see 0x0E45), INFLIGHT_ALIEN.StageOfLife will be set to INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN.
-* If both these INCs are called (see 0x0E3E), set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN. 
-2:
-	addq.b	#1,(StageOfLife,a2)
-3:   
-	addq.b	#1,(StageOfLife,a2)
-	rts
+
+* If only one of these INCs are called (see 0x0E45), INFLIGHT_ALIEN.StageOfLife will,0xbe set to INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN.
+* If both these INCs are called (see 0x0E3E), set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN.
+l_0e64:
+	addq.b	#1,(StageOfLife,a2)                    	| [inc  (ix+0x02)]
+l_0e67:
+	addq.b	#1,(StageOfLife,a2)                    	| [inc  (ix+0x02)]
+	rts                                    	| [ret]
+
 
 *
 * When an alien is close to the horizontal plane where the player resides, it speeds up to zoom by (or into) the player.
@@ -2356,102 +2366,108 @@ INFLIGHT_ALIEN_ATTACKING_PLAYER:
 *
 
 INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN:
-	move.b	TIMING_VARIABLE,d0
-	and.b	#1,d0							| ..now A is either 0 or 1.
-	addq.b	#1,d0		                    | ..now A is either 1 or 2. 
-	add.b	(inf_alien_X,a2),d0
-	move.b	d0,(inf_alien_X,a2)		        | Add either 1 or 2 pixels to INFLIGHT_ALIEN.X
-	subq.b	#6,d0
-	cmp.b	#3,d0                            | has alien gone off the bottom of the screen?
-	jcs		0f
-	jbsr		UPDATE_INFLIGHT_ALIEN_YADD
-	move.b	(PivotYValueAdd,a2),d0           | read INFLIGHT_ALIEN.PivotYValueAdd
-											 | set flags - we are interested if its a minus value
-	bmi.b	1f								| if the PivotYValueAdd is a negative value, goto 0x0E90
-	add.b	(a2,PivotYValue),d0             | add INFLIGHT_ALIEN.PivotYValue
-	bcs.b	0f                              | carry flag set if alien has gone off side of screen,  goto 0x0E95
-2:
-	move.b	d0,(inf_alien_Y,a2)			            | set INFLIGHT_ALIEN.Y 
-	rts
-1:
-	add.b	(a2,PivotYValue),d0             | add INFLIGHT_ALIEN.PivotYValue
-	bcs.b	2b
-	
-* alien's went off the bottom or the side of the screen. 
-0:
-	addq.b	#1,(StageOfLife,a2)       | now call INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN stage of life.
-	rts
+	move.b	TIMING_VARIABLE,d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
+	and.b	#0x01,d0                         	| ..now A is either 0 or 1. [and  0x01]
+	addq.b	#1,d0                           	| ..now A is either 1 or 2. [inc  a]
+	add.b	(inf_alien_X,a2),d0                     	| Add either 1 or 2 pixels to INFLIGHT_ALIEN.X [add  a,(ix+0x03)]
+	move.b	d0,(inf_alien_X,a2)                    	| and update INFLIGHT_ALIEN.X [ld   (ix+0x03),a]
+	subq.b	#0x06,d0                        	| [sub  0x06]
+	cmp.b	#0x03,d0                         	| has alien gone off the bottom of the screen? [cp   0x03]
+	jcs	l_0e95                             	| yes, goto 0x0E95 [jr   c,0x0E95]
+
+	jbsr	UPDATE_INFLIGHT_ALIEN_YADD                            	| call UPDATE_INFLIGHT_ALIEN_YADD [call 0x116B]
+	move.b	(PivotYValueAdd,a2),d0                    	| read INFLIGHT_ALIEN.PivotYValueAdd [ld   a,(ix+0x19)]
+	tst.b	d0                               	| set flags - we are interested if its a minus value [and  a]
+	jmi	l_0e90                             	| if the PivotYValueAdd is a negative value, goto 0x0E90 [jp   m,0x0E90]
+
+	add.b	(PivotYValue,a2),d0                     	| add INFLIGHT_ALIEN.PivotYValue [add  a,(ix+0x09)]
+	jcs	l_0e95                             	| carry flag set if alien has gone off side of screen,  goto 0x0E95 [jr   c,0x0E95]
+
+l_0e8c:
+	move.b	d0,(inf_alien_Y,a2)                    	| set INFLIGHT_ALIEN.Y [ld   (ix+0x04),a]
+	rts                                    	| [ret]
+
+l_0e90:
+	add.b	(PivotYValue,a2),d0                     	| add INFLIGHT_ALIEN.PivotYValue [add  a,(ix+0x09)]
+	jcs	l_0e8c                             	| [jr   c,0x0E8C]
+
+* alien's went off the bottom or the side of the screen.
+l_0e95:
+	addq.b	#1,(StageOfLife,a2)                    	| now call INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN stage of life. [inc  (ix+0x02)]
+	rts                                    	| [ret]
 
 
 *
-* An inflight alien has flown past the player and left the bottom of the visible screen. 
-* 
+* An inflight alien has flown past the player and left the bottom of the visible screen.
+*
 *
 * If the alien is not a flagship, it will always return to the top of the screen.
 * Then, its behaviour is determined by flag state:
-* 
-*    If the HAS_PLAYER_SPAWNED flag is clear, the alien will rejoin the swarm. 
 *
-*    If both of the HAVE_AGGRESSIVE_ALIENS and HAVE_NO_BLUE_OR_PURPLE_ALIENS flags are clear, 
+*    If the HAS_PLAYER_SPAWNED flag is clear, the alien will rejoin the swarm.
+*
+*    If both of the HAVE_AGGRESSIVE_ALIENS and HAVE_NO_BLUE_OR_PURPLE_ALIENS flags are clear,
 *    the alien will rejoin the swarm.
 *
-*    Otherwise, if the criteria above is not satisfied, the alien will keep attacking the player.  
-*    
-*        
-* If the alien is a flagship, then the rules described @ 0x0EDA (INFLIGHT_ALIEN_FLAGSHIP_REACHED_BOTTOM_OF_SCREEN) apply. 
+*    Otherwise, if the criteria above is not satisfied, the alien will keep attacking the player.
+*
+*
+* If the alien is a flagship, then the rules described @ 0x0EDA (INFLIGHT_ALIEN_FLAGSHIP_REACHED_BOTTOM_OF_SCREEN) apply.
 *
 * Expects:
 * IX = pointer to INFLIGHT_ALIEN structure
 *
 
 INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN:
-	move.b	#0x08,(inf_alien_Y,a2)          | set INFLIGHT_ALIEN.X to position at very top of screen
-	addq.b	#1,(SortieCount,a2)             | increment INFLIGHT_ALIEN.SortieCount
-	clr.b	(AnimationFrame,a2)             | clear INFLIGHT_ALIEN.AnimationFrame
+	move.b	#0x08,(inf_alien_Y,a2)                 	| set INFLIGHT_ALIEN.X to position at very top of screen [ld   (ix+0x03),0x08]
+	addq.b	#1,(SortieCount,a2)                    	| increment INFLIGHT_ALIEN.SortieCount [inc  (ix+0x17)]
+	clr.b	(AnimationFrame,a2)                        	| clear INFLIGHT_ALIEN.AnimationFrame [ld   (ix+0x05),0x00]
 
 * what type of alien are we dealing with?
-	move.b	(IndexInSwarm,a2),d0			  | read INFLIGHT_ALIEN.IndexInSwarm  
-	and.b	#0x70,d0                          | remove the column number from the index, keep the row
-	cmp.b 	#0x70,d0						  | is this alien a flagship?
-	jeq	INFLIGHT_ALIEN_FLAGSHIP_REACHED_BOTTOM_OF_SCREEN  | yes, goto INFLIGHT_ALIEN_FLAGSHIP_REACHED_BOTTOM_OF_SCREEN
+	move.b	(IndexInSwarm,a2),d0                    	| read INFLIGHT_ALIEN.IndexInSwarm [ld   a,(ix+0x07)]
+	and.b	#0x70,d0                         	| remove the column number from the index, keep the row [and  0x70]
+	cmp.b	#0x70,d0                         	| is this alien a flagship? [cp   0x70]
+	jeq	INFLIGHT_ALIEN_FLAGSHIP_REACHED_BOTTOM_OF_SCREEN                             	| yes, goto INFLIGHT_ALIEN_FLAGSHIP_REACHED_BOTTOM_OF_SCREEN [jr   z,0x0EDA]
 
-l_0EAD:
 *if the player has not spawned, the alien will return to the swarm.
-	tst.b	HAS_PLAYER_SPAWNED
-	jeq		0f	| if player has not spawned yet, goto 0x0ED6 - aliens return to swarm
+l_0ead:
+	move.b	HAS_PLAYER_SPAWNED,d0                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
+	ror.b	#1,d0                            	| move flag into carry [rrca]
+	jcc	l_0ed6                             	| if player has not spawned yet, goto 0x0ED6 - aliens return to swarm [jr   nc,0x0ED6]
 
 *  if HAVE_AGGRESSIVE_ALIENS OR HAVE_NO_BLUE_OR_PURPLE_ALIENS flags are set, the alien will keep attacking (see 0x0EBF).
 *  otherwise the alien returns to the swarm (see 0x0ED3 and 0x0F07)
-	tst.b	HAVE_AGGRESSIVE_ALIENS
-	jne		1f					| if aliens are aggressive, make alien reappear at top of screen, keep attacking 
-	tst.b	HAVE_NO_BLUE_OR_PURPLE_ALIENS		| read HAVE_NO_BLUE_OR_PURPLE_ALIENS
-	jeq		0f             | if we do have any blue or purple aliens, goto 0x0ED6 - aliens return to swarm
+	tst.b	HAVE_AGGRESSIVE_ALIENS                       	| read HAVE_AGGRESSIVE_ALIENS flag [ld   a,(0x4224)]
+	jne	l_0ebf                             	| if aliens are aggressive, make alien reappear at top of screen, keep attacking [jr   nz,0x0EBF]
+	tst.b	HAVE_NO_BLUE_OR_PURPLE_ALIENS                       	| read HAVE_NO_BLUE_OR_PURPLE_ALIENS [ld   a,(0x4221)]
+	jeq	l_0ed6                             	| if we do have any blue or purple aliens, goto 0x0ED6 - aliens return to swarm [jr   z,0x0ED6]
 
-* alien reappears at top of screen and will keep attacking - it will not return to swarm. 
+* alien reappears at top of screen and will keep attacking - it will not return to swarm.
 * add some unpredictability to where it reappears, so that player can't wait for it and shoot it easily
-1:
-	move.b	(inf_alien_Y,a2),d0              | read INFLIGHT_ALIEN.Y 
-	lsr.b	#1,d0							 | divide by 2 (don't worry about carry, it was cleared by AND above)
-	move.b	d0,d2
-	jbsr	GENERATE_RANDOM_NUMBER
-	and.b	#0x1F,d0                 | ensure random number is between 0..31 decimal
-	add.b	d2,d0
-	add.b	#0x20,d0
-	move.b	d0,(inf_alien_Y,a2)        | set INFLIGHT_ALIEN.Y
-	move.b	#0x28,(TempCounter1,a2)    | set INFLIGHT_ALIEN.TempCounter1 for INFLIGHT_ALIEN_UNKNOWN_OF3C to use.
+l_0ebf:
+	move.b	(inf_alien_Y,a2),d0                    	| read INFLIGHT_ALIEN.Y [ld   a,(ix+0x04)]
+	roxr.b	#1,d0                           	| divide by 2 (don't worry about carry, it was cleared by AND above) [rra]
+	move.b	d0,d2                           	| preserve in C [ld   c,a]
+	jbsr	GENERATE_RANDOM_NUMBER                            	| call GENERATE_RANDOM_NUMBER [call 0x003C]
+	and.b	#0x1F,d0                         	| ensure random number is between 0..31 decimal [and  0x1F]
+	add.b	d2,d0                            	| [add  a,c]
+	add.b	#0x20,d0                         	| [add  a,0x20]
+	move.b	d0,(inf_alien_Y,a2)                    	| set INFLIGHT_ALIEN.Y [ld   (ix+0x04),a]
+	move.b	#0x28,(TempCounter1,a2)                 	| set INFLIGHT_ALIEN.TempCounter1 for INFLIGHT_ALIEN_UNKNOWN_OF3C to use. [ld   (ix+0x10),0x28]
 
-* if both of these incs are called, the stage of life will be set to INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN. 
-* if only the inc @ 0x0ED6 is invoked (see 0x0EB1), then the stage of life will be set to INFLIGHT_ALIEN_RETURNING_TO_SWARM.
-	addq.b	#1,(StageOfLife,a2)		| increment INFLIGHT_ALIEN.StageOfLife
-0:
-	addq.b	#1,(StageOfLife,a2)		| increment INFLIGHT_ALIEN.StageOfLife
-	rts
+* if both of these incs are called, the stage of life will,0xbe set to INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN.
+* if only the inc @ 0x0ED6 is invoked (see 0x0EB1), then the stage of life will,0xbe set to INFLIGHT_ALIEN_RETURNING_TO_SWARM.
+	addq.b	#1,(StageOfLife,a2)                    	| increment INFLIGHT_ALIEN.StageOfLife [inc  (ix+0x02)]
+l_0ed6:
+	addq.b	#1,(StageOfLife,a2)                    	| increment INFLIGHT_ALIEN.StageOfLife [inc  (ix+0x02)]
+	rts                                    	| [ret]
+
 
 *
 * A flagship has gone off screen.
 *
 * If the flagship had an escort, it will return to the top of the screen to fight again.
-* If the flagship had no escort, it will flee the level. 
+* If the flagship had no escort, it will flee the level.
 * A maximum of 2 fleeing flagships can be carried over to the next level.
 *
 * Expects:
@@ -2459,171 +2475,189 @@ l_0EAD:
 *
 
 INFLIGHT_ALIEN_FLAGSHIP_REACHED_BOTTOM_OF_SCREEN:
-	tst.b	FLAGSHIP_ESCORT_COUNT        | test if flagship actually had any escort!
-	jne	INFLIGHT_ALIEN_COUNT_FLAGSHIP_ESCORTS  | if flagship has escort, goto INFLIGHT_ALIEN_COUNT_FLAGSHIP_ESCORTS
+l_0eda:
+	move.b	FLAGSHIP_ESCORT_COUNT,d0                       	| read FLAGSHIP_ESCORT_COUNT [ld   a,(0x422A)]
+	tst.b	d0                               	| test if flagship actually had any escort! [and  a]
+	jne	l_0ef2                             	| if flagship has escort, goto INFLIGHT_ALIEN_COUNT_FLAGSHIP_ESCORTS [jr   nz,0x0EF2]
 
-* This flagship has no escort. It has escaped the level. 
-* Deactivate the INFLIGHT_ALIEN record, and check if this flagship can be carried over to the next wave.
-	clr.b	(IsActive,a2)			       | reset INFLIGHT_ALIEN.IsActive
-	move.b	FLAGSHIP_SURVIVOR_COUNT,d0
-	addq.b	#1,d0                  | add another one to the survivor count!
-	cmp.b	#3,d0				   | have we got 3 surviving flagships?
-	bcs.b	0f                     | if we have less than 3, that's OK, goto 0x0EEE
+* This flagship has no escort. It has escaped the level.
+* Deactivate the INFLIGHT_ALIEN record, and check if this flagship can,0xbe carried over to the next wave.
+	clr.b	(IsActive,a2)                        	| reset INFLIGHT_ALIEN.IsActive [ld   (ix+0x00),0x00]
+	move.b	FLAGSHIP_SURVIVOR_COUNT,d0                       	| read FLAGSHIP_SURVIVOR_COUNT [ld   a,(0x421E)]
+	addq.b	#1,d0                           	| add another one to the survivor count! [inc  a]
+	cmp.b	#0x03,d0                         	| have we got 3 surviving flagships? [cp   0x03]
+	jcs	l_0eee                             	| if we have less than 3, that's OK, goto 0x0EEE [jr   c,0x0EEE]
 
-* We seem to have 3 flagships but only 2 flagships are allowed to be carried over...
-	move.b	#2,d0				  | clamp surviving flagship count to 2.
-0:
-	move.b	d0,FLAGSHIP_SURVIVOR_COUNT
-	rts
+* We seem to have 3 flagships but only 2 flagships are allowed to,0xbe carried over...
+	move.b	#0x02,d0                        	| clamp surviving flagship count to 2. [ld   a,0x02]
 
+l_0eee:
+	move.b	d0,FLAGSHIP_SURVIVOR_COUNT                       	| set FLAGSHIP_SURVIVOR_COUNT [ld   (0x421E),a]
+	rts                                    	| [ret]
 
-* count how many aliens were escorting the flagship. 
+* count how many aliens were escorting the flagship.
 INFLIGHT_ALIEN_COUNT_FLAGSHIP_ESCORTS:
-	moveq	#0,d0
-	tst.b	(inflight_alien_size,a2)          | test IsActive flag of first escort  
-	beq.b	0f 
-	addq.b	#1,d0		| increment escort count
-0:
-	tst.b	(inflight_alien_size*2,a2)          | test IsActive flag of second escort  
-	beq.b	1f 
-	addq.b	#1,d0		| increment escort count
-1:
-	move.b	d0,FLAGSHIP_ESCORT_COUNT
-	jra	l_0EAD         | make flagship reappear at top of screen
+l_0ef2:
+	clr.b	d0                               	| [xor  a]
+	tst.b	(inflight_alien_size,a2)                    	| test IsActive flag of first escort [bit  0,(ix+0x20)]
+	jeq	l_0efa                             	| [jr   z,0x0EFA]
+	addq.b	#1,d0                           	| increment escort count [inc  a]
+l_0efa:
+	btst.b	#0,(inflight_alien_size*2+IsActive,a2)                    	| test IsActive flag of second escort [bit  0,(ix+0x40)]
+	jeq	l_0f01                             	| [jr   z,0x0F01]
+	addq.b	#1,d0                           	| increment escort count [inc  a]
+l_0f01:
+	move.b	d0,FLAGSHIP_ESCORT_COUNT                       	| set FLAGSHIP_ESCORT_COUNT [ld   (0x422A),a]
+	jra	l_0ead                             	| make flagship reappear at top of screen [jp   0x0EAD]
 
 
 
 *
 * An alien has either flown off the side or the bottom of the screen, and is returning to the swarm.
-* 
+*
 * Expects:
-* IX = pointer to INFLIGHT_ALIEN structure           
+* IX = pointer to INFLIGHT_ALIEN structure
 *
 
 INFLIGHT_ALIEN_RETURNING_TO_SWARM:
-	move.b	(inf_alien_X,a2),d1     | keep copy of INFLIGHT_ALIEN.X in B as SET_INFLIGHT_ALIEN_START_POSITION changes it 
-    addq.b	#1,d1
-    jbsr	SET_INFLIGHT_ALIEN_START_POSITION               | to determine where alien needs to go  
+	move.b	(inf_alien_X,a2),d1                    	| keep copy of INFLIGHT_ALIEN.X in B as SET_INFLIGHT_ALIEN_START_POSITION changes it [ld   b,(ix+0x03)]
+	addq.b	#1,d1                           	| [inc  b]
+	jbsr	SET_INFLIGHT_ALIEN_START_POSITION                            	| call SET_INFLIGHT_ALIEN_START_POSITION to determine where alien needs to go [call 0x1147]
 
 * INFLIGHT_ALIEN.Y  and INFLIGHT_ALIEN.X have been changed by SET_INFLIGHT_ALIEN_START_POSITION
-	move.b	(inf_alien_X,a2),d0             | A = destination INFLIGHT_ALIEN.X
-	move.b	d1,(inf_alien_X,a2)				| restore INFLIGHT_ALIEN.X back to what it was before
-	sub.b	d1,d0                           | OK, how far away is this alien from where it wants to be?
-	jbeq	INFLIGHT_ALIEN_BACK_IN_SWARM    | distance is zero, it's got where it wants to be, goto INFLIGHT_ALIEN_BACK_IN_SWARM
-	cmp.b	#0x19,d0                 | 25 pixels away?
+	move.b	(inf_alien_X,a2),d0                    	| A = destination INFLIGHT_ALIEN.X [ld   a,(ix+0x03)]
+	move.b	d1,(inf_alien_X,a2)                    	| restore INFLIGHT_ALIEN.X back to what it was before [ld   (ix+0x03),b]
+	sub.b	d1,d0                            	| OK, how far away is this alien from where it wants to be? [sub  b]
+	jeq	INFLIGHT_ALIEN_BACK_IN_SWARM                             	| distance is zero, it's got where it wants to be, goto INFLIGHT_ALIEN_BACK_IN_SWARM [jr   z,0x0F2B]
+	cmp.b	#0x19,d0                         	| 25 pixels away? [cp   0x19]
 	bcs.b	0f
-	rts		     | if distance is more than 0x19 (25 decimal), not near enough to destination, so exit
+	rts                                    	| if distance is more than 0x19 (25 decimal), not near enough to destination, so exit [ret  nc]
 0:
-	btst	#0,d0            | is distance an odd number?
-	beq.b	1f
-	rts						    | yes, so exit
-1:
-* Alien is less than 25 pixels away from its destination back in the swarm.
-* We now need to determine what way to rotate the sprite so that it returns to the swarm upside-down, bat-style. 
-	tst.b	(ArcClockwise,a2)       | read INFLIGHT_ALIEN.ArcClockwise
-	bne.b	2f
-	addq.b	#1,(AnimationFrame,a2)    | update INFLIGHT_ALIEN.AnimationFrame to rotate the alien right
-	rts
-2:
-	subq.b	#1,(AnimationFrame,a2)    | update INFLIGHT_ALIEN.AnimationFrame to rotate the alien left
-	rts
-	
+	and.b	#0x01,d0                         	| is distance an odd number? [and  0x01]
+	beq.b	0f
+	rts                                    	| yes, so exit [ret  nz]
+0:
+
+* Alien is less than,0x25 pixels away from its destination back in the swarm.
+* We now need to determine what way to rotate the sprite so that it returns to the swarm upside-down, bat-style.
+	tst.b	(ArcClockwise,a2)                    	| read INFLIGHT_ALIEN.ArcClockwise [bit  0,(ix+0x06)]
+	jne	l_0f27                             	| [jr   nz,0x0F27]
+
+	addq.b	#1,(AnimationFrame,a2)                    	| update INFLIGHT_ALIEN.AnimationFrame to rotate the alien right [inc  (ix+0x05)]
+	rts                                    	| [ret]
+
+l_0f27:
+	subq.b	#1,(AnimationFrame,a2)                    	| update INFLIGHT_ALIEN.AnimationFrame to rotate the alien left [dec  (ix+0x05)]
+	rts                                    	| [ret]
+
 * alien has returned to swarm. Remove sprite and substitute sprite with characters.
 INFLIGHT_ALIEN_BACK_IN_SWARM:
-	clr.b	(IsActive,a2)                     | set INFLIGHT_ALIEN.IsActive to 0 - will hide sprite (see 0x0C98)
-	lea		ALIEN_SWARM_FLAGS,a3          | MSB of ALIEN_SWARM_FLAGS address 
+	clr.b	(IsActive,a2)                        	| set INFLIGHT_ALIEN.IsActive to 0 - will hide sprite (see 0x0C98) [ld   (ix+0x00),0x00]
+	lea		ALIEN_SWARM_FLAGS,a0                             	| MSB of ALIEN_SWARM_FLAGS address
 	moveq	#0,d6
-	move.b	(IndexInSwarm,a2),d6                                              | Now a3+d6 = pointer to address in ALIEN_SWARM_FLAGS where alien belongs
-	moveq	#0,d3							  | command: DRAW_ALIEN_COMMAND
-	move.b	#1,(a3,d6.w)                      | mark flag in ALIEN_SWARM_FLAGS as "occupied". Our alien's back in the swarm!
-	move.b	d6,d3							  | E = index of alien in swarm
-	jra		QUEUE_COMMAND                     | jump to QUEUE COMMAND. Alien will be drawn in its place in the swarm.
+	move.b	(IndexInSwarm,a2),d6  	| Now HL = pointer to address in ALIEN_SWARM_FLAGS where alien belongs
+	clr.w	d3						| command: DRAW_ALIEN_COMMAND
+	move.b	#0x01,(a0,d6.w)                      	| mark flag in ALIEN_SWARM_FLAGS as "occupied". Our alien's back in the swarm! [ld   (hl),0x01]
+	move.b	d6,d3							| E = index of alien in swarm
+	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND. Alien will be drawn in its place in the swarm. [jp   0x08F2]
+
 
 *
 * Called when aliens are aggressive and refuse to return to the swarm.
 *
 * This routine makes the alien fly from the top of the screen for [TempCounter1] pixels vertically.
 * During this time it won't shoot, but it will gravitate towards the player's horizontal position (as the player sees it).
-* 
+*
 * The trigger for this stage of life is when:
-*     HAVE_AGGRESSIVE_ALIENS is set OR 
-*     HAVE_NO_BLUE_OR_PURPLE_ALIENS flag is set 
-* 
+*     HAVE_AGGRESSIVE_ALIENS is set OR
+*     HAVE_NO_BLUE_OR_PURPLE_ALIENS flag is set
+*
 *
 
 INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN:
-	addq.b	#1,(inf_alien_X,a2)		| increment INFLIGHT_ALIEN.X
-	move.b	PLAYER_Y,d0			  | read PLAYER_Y     
-	sub.b	(inf_alien_Y,a2),d0		  | subtract INFLIGHT_ALIEN.Y 
-	neg.b	d0
-	add.b	d0,d0                     | A = A * 2
-	move.b	d0,d4
-	subx.b	d0,d0					 | A= 0 - Carry flag
-	move.b	d0,d3
+	addq.b	#1,(inf_alien_X,a2)                    	| increment INFLIGHT_ALIEN.X [inc  (ix+0x03)]
+
+*
+	move.b	PLAYER_Y,d0                       	| read PLAYER_Y [ld   a,(0x4202)]
+	sub.b	(inf_alien_Y,a2),d0                     	| subtract INFLIGHT_ALIEN.Y [sub  (ix+0x04)]
+
+	neg.b	d0                               	| [neg]
+	roxl.b	#1,d0                           	| A = A * 2 [rla]
+	move.b	d0,d4								| [ld   e,a]
+	subx.b	d0,d0                           	| A= 0 - Carry flag [sbc  a,a]
+	move.b	d0,d3								| [ld   d,a]
+	roxl.b	#1,d4                            	| [rl   e]
+	roxl.b	#1,d3                            	| DE = DE * 2 [rl   d]
 	lsl.w	#8,d3
-	move.b	d4,d3
-	add.w	d3,d3                    | DE = DE * 2
-	move.b	(inf_alien_Y,a2),d4
-	lsl.w	#8,d4
-	move.b	(PivotYValue,a2),d4
-	sub.w	d3,d4
-	move.b	d4,(PivotYValue,a2)    | update INFLIGHT_ALIEN.Y 
-	lsr.w	#8,d4                  
-	move.b	d4,(inf_alien_X,a2)    | update INFLIGHT_ALIEN.PivotYValue
-	subq.b	#1,(TempCounter1,a2)   | counter was set @ 0x0ECF
+	move.b	d4,d3							| rebuild DE
+	move.b	(inf_alien_Y,a2),d5				| [ld   h,(ix+0x04)]
+	lsl.w	#8,d5
+    move.b	(PivotYValue,a2),d5                    	| INFLIGHT_ALIEN.PivotYValue [ld   l,(ix+0x09)] => rebuild HL
+	sub.w	d3,d5                          	| ..there's no sub hl,de instruction in Z80 no carry needed [sbc  hl,de]
+	move.b	d5,(PivotYValue,a2)                     	| update INFLIGHT_ALIEN.PivotYValue [ld   (ix+0x09),l]
+	lsr.w	#8,d5
+	move.b	d5,(inf_alien_X,a2)                     	| update INFLIGHT_ALIEN.Y [ld   (ix+0x04),h]
+	subq.b	#1,(TempCounter1,a2)                    	| counter was set @ 0x0ECF [dec  (ix+0x10)]
 	beq.b	0f
-	rts
+	rts                                    	| [ret  nz]
 0:
-	addq.b	#1,(StageOfLife,a2)				| set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_FULL_SPEED_CHARGE
-	rts
+
+	addq.b	#1,(StageOfLife,a2)                    	| set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_FULL_SPEED_CHARGE [inc  (ix+0x02)]
+	rts                                    	| [ret]
+
 
 
 *
-* The inflight alien is now going to fly at full speed and zigzag to make it harder to shoot. 
+* The inflight alien is now going to fly at full speed and zigzag to make it harder to shoot.
 * It won't drop bombs, but it will gravitate towards the player.
 *
 * When the alien gets to the vertical (as the player sees it) centre of the screen, the alien will loop
-* the loop if there's enough space to do so. 
+* the loop if there's enough space to do so.
 *
 * After the loop is complete, the alien will start shooting.
 *
 
 INFLIGHT_ALIEN_FULL_SPEED_CHARGE:
-	addq.b	#1,(inf_alien_X,a2)		| increment INFLIGHT_ALIEN.X
+	addq.b	#1,(inf_alien_X,a2)                    	| increment INFLIGHT_ALIEN.X [inc  (ix+0x03)]
 
 * first check the X coordinate to see if the alien is in the centre
-	move.b	(inf_alien_X,a2),d0         | read INFLIGHT_ALIEN.X 
-	sub.b  #0x60,d0                       
-	cmp.b   #0x40,d0
-	bcc.b	l_0F7B           | if INFLIGHT_ALIEN.X-0x60 >= 0x40, we're not centre horizontally   
+	move.b	(inf_alien_X,a2),d0                    	| read INFLIGHT_ALIEN.X [ld   a,(ix+0x03)]
+	sub.b	#0x60,d0                         	| [sub  0x60]
+	cmp.b	#0x40,d0                         	| [cp   0x40]
+	jcc	l_0f7b                             	| if INFLIGHT_ALIEN.X-0x60 >= 0x40, we're not centre horizontally [jr   nc,0x0F7B]
 
 * next thing we need to do is check if we have enough space for a loop.
-	move.b	(inf_alien_Y,a2),d0          | read INFLIGHT_ALIEN.Y 
-	sub.b  #0x60,d0                       
-	cmp.b   #0x40,d0
-	bcs.b	1f                 | yes, we have space, make alien loop the loop
-l_0F7B:
-* otherwise, make the alien veer erratically. 
-	jbsr	INFLIGHT_ALIEN_DEFINE_FLIGHTPATH
-	move.b	#3,(Speed,a2)                     | set INFLIGHT_ALIEN.Speed to maximum!
-	move.b	#0x64,(TempCounter1,a2)            | set INFLIGHT_ALIEN.TempCounter1
-	rts   
-1:
-	addq.b	#2,(StageOfLife,a2)                | set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_LOOP_THE_LOOP 
-	move.b	#3,(TempCounter1,a2)               | set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame
-	move.b	#0xc,(TempCounter2,a2)             | set INFLIGHT_ALIEN.TempCounter2 to number of animation frames in total
-	clr.b	(AnimationFrame,a2)                | set INFLIGHT_ALIEN.AnimationFrame
-	clr.b	(ArcTableLsb,a2)				  | set INFLIGHT_ALIEN.ArcTableLsb 
-	move.b	PLAYER_Y,d0					| read PLAYER_Y 
-	sub.b   (inf_alien_Y,a2),d0             | subtract INFLIGHT_ALIEN.Y 
-	bcs.b	2f								| if player to right of alien, make alien loop the loop clockwise
+	move.b	(inf_alien_Y,a2),d0                    	| read INFLIGHT_ALIEN.Y [ld   a,(ix+0x04)]
+	sub.b	#0x60,d0                         	| [sub  0x60]
+	cmp.b	#0x40,d0                         	| [cp   0x40]
+	jcs	l_0f87                             	| yes, we have space, make alien loop the loop [jr   c,0x0F87]
+
+* otherwise, make the alien veer erratically.
+l_0f7b:
+	jbsr	INFLIGHT_ALIEN_DEFINE_FLIGHTPATH                            	| call INFLIGHT_ALIEN_DEFINE_FLIGHTPATH [call 0x0DDD]
+	move.b	#0x03,(Speed,a2)                 	| set INFLIGHT_ALIEN.Speed to maximum! [ld   (ix+0x18),0x03]
+	move.b	#0x64,(TempCounter1,a2)                 	| set INFLIGHT_ALIEN.TempCounter1 [ld   (ix+0x10),0x64]
+	rts                                    	| [ret]
+
+
+l_0f87:
+	addq.b	#2,(StageOfLife,a2)                    	| [inc  (ix+0x02)]
+	move.b	#0x03,(TempCounter1,a2)                 	| set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame [ld   (ix+0x10),0x03]
+	move.b	#0x0C,(TempCounter2,a2)                 	| set INFLIGHT_ALIEN.TempCounter2 to number of animation frames in total [ld   (ix+0x11),0x0C]
+	clr.b	(AnimationFrame,a2)                        	| set INFLIGHT_ALIEN.AnimationFrame [ld   (ix+0x05),0x00]
+	clr.b	(ArcTableLsb,a2)                        	| set INFLIGHT_ALIEN.ArcTableLsb [ld   (ix+0x13),0x00]
+	move.b	PLAYER_Y,d0                       	| read PLAYER_Y [ld   a,(0x4202)]
+	sub.b	(inf_alien_Y,a2),d0                     	| subtract INFLIGHT_ALIEN.Y [sub  (ix+0x04)]
+	jcs	l_0faa                             	| if player to right of alien, make alien loop the loop clockwise [jr   c,0x0FAA]
 
 * alien will perform an anti-clockwise loop
-	clr.b	(ArcClockwise,a2)      | reset INFLIGHT_ALIEN.ArcClockwise
-	rts
-2:
-	move.b	#1,(ArcClockwise,a2)      | set INFLIGHT_ALIEN.ArcClockwise
-	rts
+	clr.b	(ArcClockwise,a2)                        	| reset INFLIGHT_ALIEN.ArcClockwise [ld   (ix+0x06),0x00]
+	rts                                    	| [ret]
+
+l_0faa:
+	move.b	#0x01,(ArcClockwise,a2)                 	| set INFLIGHT_ALIEN.ArcClockwise [ld   (ix+0x06),0x01]
+	rts                                    	| [ret]
+
 
 
 *
@@ -2633,37 +2667,42 @@ l_0F7B:
 *
 
 INFLIGHT_ALIEN_ATTACKING_PLAYER_AGGRESSIVELY:
-	addq.b	#1,(inf_alien_X,a2)          | increment INFLIGHT_ALIEN.X
-	jbsr	UPDATE_INFLIGHT_ALIEN_YADD
-	move.b	(SortieCount,a2),d0           | read INFLIGHT_ALIEN.SortieCount           
-	cmp.b	#4,d0						  | has the alien made it past the player 4 times?
-	beq.b	4f							  | yes, exactly 4 times, *maybe* make alien closer to player                                                                 
-	bcc.b	5f							| more than 4 times, make aliens hug player closer 
-l_0FBE:
-	move.b	(PivotYValue,a2),d0         | INFLIGHT_ALIEN.PivotYValue
-	add.b	(PivotYValueAdd,a2),d0      | Add INFLIGHT_ALIEN.PivotYValueAdd 
-	move.b	d0,(inf_alien_Y,a2)         | set INFLIGHT_ALIEN.Y 
+	addq.b	#1,(inf_alien_X,a2)                    	| increment INFLIGHT_ALIEN.X [inc  (ix+0x03)]
+	jbsr	UPDATE_INFLIGHT_ALIEN_YADD                            	| call UPDATE_INFLIGHT_ALIEN_YADD [call 0x116B]
+	move.b	(SortieCount,a2),d0                    	| read INFLIGHT_ALIEN.SortieCount [ld   a,(ix+0x17)]
+	cmp.b	#0x04,d0                         	| has the alien made it past the player 4 times? [cp   0x04]
+	jeq	l_1004                             	| yes, exactly 4 times, *maybe* make alien closer to player [jr   z,0x1004]
+	jcc	l_100b                             	| more than 4 times, make aliens hug player closer [jr   nc,0x100B]
+
+l_0fbe:
+	move.b	(PivotYValue,a2),d0                    	| INFLIGHT_ALIEN.PivotYValue [ld   a,(ix+0x09)]
+	add.b	(PivotYValueAdd,a2),d0                     	| Add INFLIGHT_ALIEN.PivotYValueAdd [add  a,(ix+0x19)]
+	move.b	d0,(inf_alien_Y,a2)                    	| set INFLIGHT_ALIEN.Y [ld   (ix+0x04),a]
+
 * has alien wandered off left or right side of screen as player sees it?
-	add.b	#7,d0
-	cmp.b	#0xE,d0
-	bcs.b	1f                          | alien has gone off side of screen, goto 0x0FF6
+	addq.b	#0x07,d0                        	| [add  a,0x07]
+	cmp.b	#0x0E,d0                         	| [cp   0x0E]
+	jcs	l_0ff6                             	| alien has gone off side of screen, goto 0x0FF6 [jr   c,0x0FF6]
 
 * is alien near bottom of the screen?
-      move.b	(inf_alien_X,a2),d0          | read INFLIGHT_ALIEN.X
-      add.b	#0x40,d0               | 
-      bcs.b	2f             | if adding 0x40 pixels to X gives a result >255, then alien is near bottom of screen, goto 0x0FFB
-      subq.b	#1,(TempCounter1,a2)
-      beq.b	3f
-	  tst.b	HAS_PLAYER_SPAWNED
-      bne.b	11f
-      rts                  | return if player has not spawned
-11:
-      jbsr	CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME
-      tst.b	IS_FLAGSHIP_HIT
-      beq.b	l_0E54
-      rts                   | return if flagship has been hit
+	move.b	(inf_alien_X,a2),d0                    	| read INFLIGHT_ALIEN.X [ld   a,(ix+0x03)]
+	add.b	#0x40,d0                         	| [add  a,0x40]
+	jcs	l_0ffb                             	| if adding 0x40 pixels to X gives a result >255, then alien is near bottom of screen, goto 0x0FFB [jr   c,0x0FFB]
+	subq.b	#1,(TempCounter1,a2)                    	| [dec  (ix+0x10)]
+	jeq	l_1000                             	| [jr   z,0x1000]
+	move.b	HAS_PLAYER_SPAWNED,d0                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
+	ror.b	#1,d0                            	| move flag into carry [rrca]
+	bcs.b	0f
+	rts                                    	| return if player has not spawned [ret  nc]
+0:
+	jbsr	CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME                            	| call CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME [call 0x11B0]
+	move.b	IS_FLAGSHIP_HIT,d0                       	| read IS_FLAGSHIP_HIT [ld   a,(0x422B)]
+	ror.b	#1,d0                            	| move flag into carry [rrca]
+	bcc.b	l_0E54
+	rts                                    	| return if flagship has been hit [ret  c]
 l_0E54:
-* OK, can this alien start firing at you? Exact duplicate of code @0x0E54, look there for docs on how algorithm works. 
+
+* OK, can this alien start firing at you? Exact duplicate of code @0x0E54, look there for docs on how algorithm works.
 * Can this alien start shooting at you?
 *
 * code from 0x0E54-0E63 is akin to:
@@ -2678,42 +2717,51 @@ l_0E54:
 * }
 *
 
-	move.b	INFLIGHT_ALIEN_SHOOT_EXACT_X,d5
+	move.b	INFLIGHT_ALIEN_SHOOT_EXACT_X,d5                   	| get INFLIGHT_ALIEN_SHOOT_EXACT_X into H and INFLIGHT_ALIEN_SHOOT_RANGE_MUL into L [ld   hl,(0x4213)]
 	move.b	INFLIGHT_ALIEN_SHOOT_RANGE_MUL,d6
-	move.b	(inf_alien_X,a2),d0
-10:
-	cmp.b	d5,d0		| compare A to INFLIGHT_ALIEN_SHOOT_EXACT_X 
-	jeq	TRY_SPAWN_ENEMY_BULLET	| if equal, jump to TRY_SPAWN_ENEMY_BULLET
-	add.b	#0x19,d0				| add 0x19 (25 decimal) to A
-	subq.b	#1,d6		| and try again...
-	bne.b	10b
-	rts
-1:
-	move.b	#0x05,(StageOfLife,a2)        | set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN
-    rts
-2:
-	move.b	#0x04,(StageOfLife,a2)        | set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN
-    rts
-3:
-	subq.b	#1,(StageOfLife,a2)
-	rts
-4:
-* If we get here, the alien has survived exactly 4 continuous sorties.     
-	btst	#0,TIMING_VARIABLE      | is the number odd?
-	jeq		l_0FBE             | no, the number's even, it's business as usual, goto 0x0FBE
-5:
+	move.b	(inf_alien_X,a2),d0                    	| [ld   a,(ix+0x03)]
+l_0fec:
+	cmp.b	d5,d0		| compare A to INFLIGHT_ALIEN_SHOOT_EXACT_X [cp   h]
+	jeq	TRY_SPAWN_ENEMY_BULLET                             	| jump to TRY_SPAWN_ENEMY_BULLET [jp   z,0x11E0]
+	add.b	#0x19,d0                         	| [add  a,0x19]
+	subq.b	#1,d6                            	| [dec  l]
+	jne	l_0fec                             	| [jr   nz,0x0FEC]
+	rts                                    	| [ret]
+
+l_0ff6:
+	move.b	#0x05,(StageOfLife,a2)                 	| set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN [ld   (ix+0x02),0x05]
+	rts                                    	| [ret]
+
+l_0ffb:
+	move.b	#0x04,(StageOfLife,a2)                 	| set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN [ld   (ix+0x02),0x04]
+	rts                                    	| [ret]
+
+l_1000:
+	subq.b	#1,(StageOfLife,a2)                    	| [dec  (ix+0x02)]
+	rts                                    	| [ret]
+
+
+* If we get here, the alien has survived exactly 4 continuous sorties.
+l_1004:
+	move.b	TIMING_VARIABLE,d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
+	and.b	#0x01,d0                         	| is the number odd? [and  0x01]
+	jeq	l_0fbe                             	| no, the number's even, it's business as usual, goto 0x0FBE [jr   z,0x0FBE]
+
 * If we get here, the alien is going to "hug" the player a little bit closer than he might like.
-* Note: This routine is *always* called if the alien survives 5 continuous sorties or more. 
-	move.b	PLAYER_Y,d0		| read PLAYER_Y 
-	sub.b  (a2,PivotYValue),d0  | subtract INFLIGHT_ALIEN.PivotYValue
-	bcs.b	6f					|   if a carry occurred, alien is, as player sees it, to left of player ship
+* Note: This routine is *always* called if the alien survives 5 continuous sorties or more.
+l_100b:
+	move.b	PLAYER_Y,d0                       	| read PLAYER_Y [ld   a,(0x4202)]
+	sub.b	(PivotYValue,a2),d0                     	| subtract INFLIGHT_ALIEN.PivotYValue [sub  (ix+0x09)]
+	jcs	l_1019                             	| [jr   c,0x1019             if a carry occurred, alien is, as player sees it, to left of player ship]
 
 * Make the alien's pivot Y coordinate a bit closer to the player...
-	addq.b	#1,(PivotYValue,a2)            | Update INFLIGHT_ALIEN.PivotYValue
-	jra		l_0FBE
-6:
-	subq.b	#1,(PivotYValue,a2)            | Update INFLIGHT_ALIEN.PivotYValue
-	jra		l_0FBE
+	addq.b	#1,(PivotYValue,a2)                    	| Update INFLIGHT_ALIEN.PivotYValue [inc  (ix+0x09)]
+	jra	l_0fbe                             	| [jp   0x0FBE]
+
+l_1019:
+	subq.b	#1,(PivotYValue,a2)                    	| Update INFLIGHT_ALIEN.PivotYValue [dec  (ix+0x09)]
+	jra	l_0fbe                             	| [jp   0x0FBE]
+
 
 
 *
@@ -2721,90 +2769,92 @@ l_0E54:
 *
 * This routine rotates the alien 270 degrees. The remaining 90 degrees is done by the INFLIGHT_ALIEN_FLIES_IN_ARC routine. 
 *
-* Expects:  
+* Expects:
 * IX = pointer to INFLIGHT_ALIEN structure
 *
 
 INFLIGHT_ALIEN_LOOP_THE_LOOP:
 	moveq	#0,d6
-	move.b	(ArcTableLsb,a2),d6
-	lea		INFLIGHT_ALIEN_ARC_TABLE(pc),a3
-	add.w	d6,a3
-* Now a3 is a pointer to an entry in the INFLIGHT_ALIEN_ARC_TABLE (see docs @ 0x1E00)
-	move.b	(inf_alien_X,a2),d0
-	sub.b	(a3)+,d0
-	move.b	d0,(inf_alien_X,a2)     | subtract X component from table  
+	move.b	(ArcTableLsb,a2),d6		| load L with INFLIGHT_ALIEN.ArcTableLsb [ld   l,(ix+0x13)]
+	lea		INFLIGHT_ALIEN_ARC_TABLE(pc),a0	| MSB of INFLIGHT_ALIEN_ARC_TABLE  [ld   h,0x1E]
+	add.w	d6,a0                 	
 
-	tst.b	(ArcClockwise,a2)         | is this alien going to do a clockwise loop?
-	jne		INFLIGHT_ALIEN_LOOPING_CLOCKWISE
+* Now a0 is a pointer to an entry in the INFLIGHT_ALIEN_ARC_TABLE (see docs @ 0x1E00)
+	move.b	(inf_alien_X,a2),d0                    	| load INFLIGHT_ALIEN.X [ld   a,(ix+0x03)]
+	sub.b	(a0)+,d0                          	| subtract X component from table [sub  (hl) + inc l]
+	move.b	d0,(inf_alien_X,a2)                    	| [ld   (ix+0x03),a]
+
+
+	tst.b	(ArcClockwise,a2)                    	| is this alien going to do a clockwise loop? [bit  0,(ix+0x06)]
+	jne	INFLIGHT_ALIEN_LOOPING_CLOCKWISE                             	| yes, goto INFLIGHT_ALIEN_LOOPING_CLOCKWISE [jr   nz,0x1060]
 
 * Alien is performing a counter-clockwise loop-the-loop maneuvre
-	move.b	(inf_alien_Y,a2),d0			   | read INFLIGHT_ALIEN.Y
-	sub.b	(a3),d0					      | subtract Y component from INFLIGHT_ALIEN_ARC_TABLE
-	move.b	d0,(inf_alien_Y,a2)            | set INFLIGHT_ALIEN.Y 
-* now update to next X,Y pair in INFLIGHT_ALIEN_ARC_TABLE
-	addq.b	#2,d6
-	move.b	d6,(ArcTableLsb,a2)             | set INFLIGHT_ALIEN.ArcTableLsb
-	subq.b	#1,(TempCounter1,a2)            | decrement INFLIGHT_ALIEN.TempCounter1 
+	move.b	(inf_alien_Y,a2),d0                    	| read INFLIGHT_ALIEN.Y [ld   a,(ix+0x04)]
+	sub.b	(a0),d0                          	| subtract Y component from INFLIGHT_ALIEN_ARC_TABLE [sub  (hl)]
+	move.b	d0,(inf_alien_Y,a2)                    	| set INFLIGHT_ALIEN.Y [ld   (ix+0x04),a]
+											| bump HL to point to next X,Y pair in INFLIGHT_ALIEN_ARC_TABLE [inc  l]
+	addq.b	#2,(ArcTableLsb,a2)                     	| set INFLIGHT_ALIEN.ArcTableLsb [ld   (ix+0x13),l]
+	subq.b	#1,(TempCounter1,a2)                    	| decrement INFLIGHT_ALIEN.TempCounter1 [dec  (ix+0x10)]
 	beq.b	0f
-	rts
+	rts                                    	| [ret  nz]
 0:
 
 * When INFLIGHT_ALIEN.TempCounter1 counts down to zero, its time to change the animation frame
-	move.b	#4,(TempCounter1,a2)    | reset INFLIGHT_ALIEN.TempCounter1 
-	subq.b	#1,(AnimationFrame,a2)            | change sprite frame to appear to rotate LEFT
+	move.b	#0x04,(TempCounter1,a2)                 	| reset INFLIGHT_ALIEN.TempCounter1 [ld   (ix+0x10),0x04]
+	subq.b	#1,(AnimationFrame,a2)                    	| change sprite frame to appear to rotate LEFT [dec  (ix+0x05)]
 
 * INFLIGHT_ALIEN.TempCounter2 is used to count down number of animation frames left
-	subq.b	#1,(TempCounter2,a2)            | decrement INFLIGHT_ALIEN.TempCounter2
-	beq.b	2f                  | return if we haven't done 
-	rts
-2:
-* we've done 270 degrees rotation, hand off the remaining 90 to the INFLIGHT_ALIEN_FLIES_IN_ARC 
-	addq.b	#1,(StageOfLife,a2)   | bump INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_COMPLETE_LOOP
-	move.b	#3,(TempCounter1,a2)        | set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame
-	move.b	#0xC,(TempCounter2,a2)        | set INFLIGHT_ALIEN.TempCounter2 to number of animation frames
-	move.b	#0xC,(AnimationFrame,a2)       | set INFLIGHT_ALIEN.AnimationFrame
-	clr.b	(a2,ArcTableLsb)          | set INFLIGHT_ALIEN.ArcTableLsb
-	rts
+	subq.b	#1,(TempCounter2,a2)                    	| decrement INFLIGHT_ALIEN.TempCounter2 [dec  (ix+0x11)]
+	beq.b	0f
+	rts                                    	| return if we haven't done [ret  nz]
+0:
+
+* we've done 270 degrees rotation, hand off the remaining,0x90 to the INFLIGHT_ALIEN_FLIES_IN_ARC
+	addq.b	#1,(StageOfLife,a2)                    	| bump INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_COMPLETE_LOOP [inc  (ix+0x02)]
+	move.b	#0x03,(TempCounter1,a2)                 	| set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame [ld   (ix+0x10),0x03]
+	move.b	#0x0C,(TempCounter2,a2)                 	| set INFLIGHT_ALIEN.TempCounter2 to number of animation frames [ld   (ix+0x11),0x0C]
+	move.b	#0x0C,(AnimationFrame,a2)                 	| set INFLIGHT_ALIEN.AnimationFrame [ld   (ix+0x05),0x0C]
+	clr.b	(ArcTableLsb,a2)                        	| set INFLIGHT_ALIEN.ArcTableLsb [ld   (ix+0x13),0x00]
+	rts                                    	| [ret]
 
 
 * Alien is performing a clockwise loop-the-loop maneuvre
 INFLIGHT_ALIEN_LOOPING_CLOCKWISE:
-	move.b	(inf_alien_Y,a2),d0          | read INFLIGHT_ALIEN.Y
-	add.b	(a3),d0              | add Y component from INFLIGHT_ALIEN_ARC_TABLE
-	move.b	d0,(inf_alien_Y,a2)             | set INFLIGHT_ALIEN.Y
-	                               | bump HL to point to next X,Y pair in INFLIGHT_ALIEN_ARC_TABLE
-	addq.b	#2,d6
-	move.b	d6,(ArcTableLsb,a2)             | set INFLIGHT_ALIEN.ArcTableLsb
-	subq.b	#1,(TempCounter1,a2)            | decrement INFLIGHT_ALIEN.TempCounter1 
-	beq.b	1f
-	rts
-1:
+	move.b	(inf_alien_Y,a2),d0                    	| read INFLIGHT_ALIEN.Y [ld   a,(ix+0x04)]
+	add.b	(a0),d0                          	| add Y component from INFLIGHT_ALIEN_ARC_TABLE [add  a,(hl)]
+	move.b	d0,(inf_alien_Y,a2)                    	| set INFLIGHT_ALIEN.Y [ld   (ix+0x04),a]
+	                            	| bump HL to point to next X,Y pair in INFLIGHT_ALIEN_ARC_TABLE [inc  l]
+	addq.b	#2,(ArcTableLsb,a2)                     	| set INFLIGHT_ALIEN.ArcTableLsb [ld   (ix+0x13),l]
+	subq.b	#1,(TempCounter1,a2)                    	| [dec  (ix+0x10)]
+	beq.b	0f
+	rts                                    	| [ret  nz]
+0:
 
 * When INFLIGHT_ALIEN.TempCounter1 counts down to zero, its time to change the animation frame
-	move.b	#4,(TempCounter1,a2)           |  reset INFLIGHT_ALIEN.TempCounter1 
-	addq.b	#1,(AnimationFrame,a2)         | change sprite frame to appear to rotate RIGHT
-	subq.b	#1,(TempCounter2,a2)
-	beq.b	2f
-	rts
-2:
-* we've done 270 degrees rotation, hand off the remaining 90 to the INFLIGHT_ALIEN_FLIES_IN_ARC
-	addq.b	#1,(StageOfLife,a2)            | bump INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_COMPLETE_LOOP
-	move.b	#3,(TempCounter1,a2)        | set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame
-	move.b	#0xC,(TempCounter2,a2)        | set INFLIGHT_ALIEN.TempCounter2 to number of animation frames
-	move.b	#0xF4,(AnimationFrame,a2)        | set INFLIGHT_ALIEN.AnimationFrame
-	clr.b	(a2,ArcTableLsb)        | set INFLIGHT_ALIEN.ArcTableLsb
-	rts
+	move.b	#0x04,(TempCounter1,a2)                 	| [ld   (ix+0x10),0x04        reset INFLIGHT_ALIEN.TempCounter1]
+	addq.b	#1,(AnimationFrame,a2)                    	| change sprite frame to appear to rotate RIGHT [inc  (ix+0x05)]
+	subq.b	#1,(TempCounter2,a2)                    	| [dec  (ix+0x11)]
+	beq.b	0f
+	rts                                    	| [ret  nz]
+0:
+
+* we've done 270 degrees rotation, hand off the remaining,0x90 to the INFLIGHT_ALIEN_FLIES_IN_ARC
+	addq.b	#1,(StageOfLife,a2)                    	| bump INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_COMPLETE_LOOP [inc  (ix+0x02)]
+	move.b	#0x03,(TempCounter1,a2)                 	| set INFLIGHT_ALIEN.TempCounter1 to delay before changing animation frame [ld   (ix+0x10),0x03]
+	move.b	#0x0C,(TempCounter2,a2)                 	| set INFLIGHT_ALIEN.TempCounter2 to number of animation frames [ld   (ix+0x11),0x0C]
+	move.b	#0xF4,(AnimationFrame,a2)                 	| set INFLIGHT_ALIEN.AnimationFrame [ld   (ix+0x05),0xF4]
+	clr.b	(ArcTableLsb,a2)                        	| set INFLIGHT_ALIEN.ArcTableLsb [ld   (ix+0x13),0x00]
+	rts                                    	| [ret]
 
 
 INFLIGHT_ALIEN_COMPLETE_LOOP:
-		jra		INFLIGHT_ALIEN_FLIES_IN_ARC
+	jra	INFLIGHT_ALIEN_FLIES_IN_ARC                             	| jump to INFLIGHT_ALIEN_FLIES_IN_ARC [jp   0x0D71]
 
 
 INFLIGHT_ALIEN_UNKNOWN_1091:
-	addq.b	#1,(inf_alien_X,a2)               | update INFLIGHT_ALIEN.X
-	move.b	#8,(StageOfLife,a2)        | set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_FULL_SPEED_CHARGE
-	jra		l_0F7B               
+	addq.b	#1,(inf_alien_X,a2)                    	| update INFLIGHT_ALIEN.X [inc  (ix+0x03)]
+	move.b	#0x08,(StageOfLife,a2)                 	| set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_FULL_SPEED_CHARGE [ld   (ix+0x02),0x08]
+	jra	l_0f7b                             	| [jp   0x0F7B]
 
 *
 * When an alien breaks off from the swarm to attack the player, the characters it occupies in the swarm are deleted and an alien sprite is substituted.
@@ -2847,63 +2897,69 @@ SET_INFLIGHT_ALIEN_START_POSITION:
 *
 
 UPDATE_INFLIGHT_ALIEN_YADD:
-	move.b	(Speed,a2),d0   | read INFLIGHT_ALIEN.Speed
-    and.b  #0x03,d0
-	addq.b	#1,d0         | now A is between 1 and 4.
-	move.b	d0,d1
+	move.b	(Speed,a2),d0                    	| read INFLIGHT_ALIEN.Speed [ld   a,(ix+0x18)]
+	and.b	#0x03,d0                         	| [and  0x03]
+	addq.b	#1,d0                           	| now A is between 1 and 4. [inc  a]
+	move.b	d0,d1                           	| [ld   b,a]
 
-    move.b	(PivotYValueAdd,a2),d5          | read INFLIGHT_ALIEN.PivotYValueAdd in h
-    move.b	(PivotYValueAdd+1,a2),d6		| in l
-    move.b	(PivotYValueAdd+2,a2),d3
-    move.b	(PivotYValueAdd+3,a2),d4
-10:
-	move.b	d6,d0  
+    move.b	(PivotYValueAdd,a2),d5          | read INFLIGHT_ALIEN.PivotYValueAdd in h [ld   h,(ix+0x19)]
+    move.b	(PivotYValueAdd+1,a2),d6		| in l                                    [ld   l,(ix+0x1a)]
+    move.b	(PivotYValueAdd+2,a2),d3        |                                          [ld   d,(ix+0x1b)]
+    move.b	(PivotYValueAdd+3,a2),d4        |                                          [ld   e,(ix+0x1c)]
+
+l_117e:
+	move.b	d6,d0                           	| [ld   a,l]
 
 * Part 1 - do H
-	move.b	d5,d2                 | preserve H in C
-	add.b	d0,d0
-	bcc.b	0f
+	move.b	d5,d2                           	| preserve H in C [ld   c,h]
+	add.b	d0,d0                            	| [add  a,a]
+	jcc	l_1184                             	| [jr   nc,0x1184]
 
-    subq.b	#1,d5
-0:
-    add.b	d0,d3
-	move.b	d0,d3
-    clr		d0
-    addx.b	d5,d0
+	subq.b	#1,d5                            	| [dec  h]
+l_1184:
+	add.b	d3,d0                             	| [add  a,d]
+	move.b	d0,d3								| [ld   d,a]
+	clr.b	d0                               	| [ld   a,0x00]
+	addx.b	d5,d0								| [adc  a,h]
 
 * I *think* this is to ensure that the signed byte in H never loses its sign.
 * If it's positive it'll stay positive. If it's negative, it'll stay negative.
-    cmp.b	#0x80,d0
-	bne.b	1f
-	move.b	d2,d0
-1:
-    move.b	d0,d5
+	cmp.b	#0x80,d0                         	| [cp   0x80]
+	jne	l_118e                             	| [jr   nz,0x118E]
+
+	move.b	d2,d0                           	| [ld   a,c]
+l_118e:
+	move.b	d0,d5  | [ld   h,a]
 
 * Part 2 - now do L
-	move.b	d6,d2        | preserve L in C
-	neg.b	d0
-    add.b	d0,d0
-	bcc.b	2f
+	move.b	d6,d2                           	| preserve L in C [ld   c,l]
+	neg.b	d0                               	| [neg]
+	add.b	d0,d0                            	| [add  a,a]
+	jcc	l_1196                             	| [jr   nc,0x1196]
 
-    subq.b	#1,d6
-2:
-	add.b	d0,d4
-	clr		d0
-	addx.b	d6,d0
-    cmp.b	#0x80,d0
-	bne.b	3f
-	move.b	d2,d0
-3:
-	move.b	d0,d6     | restore L from C
-    dbf		D1,10b
+	subq.b	#1,d6                            	| [dec  l]
 
-    move.b	d5,(PivotYValueAdd,a2)          | stpre INFLIGHT_ALIEN.PivotYValueAdd
-    move.b	d6,(PivotYValueAdd+1,a2)
-    move.b	d3,(PivotYValueAdd+2,a2)
-    move.b	d4,(PivotYValueAdd+3,a2)
+l_1196:
+	add.b	d4,d0                             	| [add  a,e]
+	move.b	d0,d4								| [ld   e,a]
+	clr.b	d0                               	| [ld   a,0x00]
+	addx.b	d6,d0								| [adc  a,l]
+	cmp.b	#0x80,d0                         	| [cp   0x80]
+	jne	l_11a0                             	| [jr   nz,0x11A0]
 
-	rts
+	move.b	d2,d0                           	| [ld   a,c]
 
+l_11a0:
+	move.b	d0,d6		| [ld   l,a] restore L from C/A
+
+	subq.b	#1,d1                           	| [...]
+	jne	l_117e                             	| [djnz 0x117E]
+
+	move.b	d5,(PivotYValueAdd,a2)                     	| [ld   (ix+0x19),h]
+	move.b	d6,(PivotYValueAdd+1,a2)                     	| [ld   (ix+0x1a),l]
+	move.b	d3,(PivotYValueAdd+2,a2)                     	| [ld   (ix+0x1b),d]
+	move.b	d4,(PivotYValueAdd+3,a2)                     	| [ld   (ix+0x1c),e]
+	rts                                    	| [ret]
 
 
 
@@ -6292,11 +6348,9 @@ HANDLE_SINGLE_ALIEN_ATTACK:
 	bne.b	0f
 	rts                                    	| return if flag is not set [ret  nc]
 0:
-	moveq	#0,d0                            	| [xor  a]
-	move.b	d0,CAN_ALIEN_ATTACK                       	| reset CAN_ALIEN_ATTACK flag [ld   (0x4228),a]
-	move.b	HAVE_NO_ALIENS_IN_SWARM,d0                       	| read HAVE_NO_ALIENS_IN_SWARM flag. [ld   a,(0x4220)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	bcc.b	0f
+	clr.b	CAN_ALIEN_ATTACK                       	| reset CAN_ALIEN_ATTACK flag [ld   (0x4228),a]
+	tst.b	HAVE_NO_ALIENS_IN_SWARM                       	| read HAVE_NO_ALIENS_IN_SWARM flag. [ld   a,(0x4220)]
+	beq.b	0f
 	rts                                    	| return if no aliens are in the swarm. [ret  c]
 0:
 
@@ -6317,7 +6371,7 @@ l_135e:
 * A = number of slots to scan
 	move.b	d0,d1                          	| save number of slots to scan in B [ld   b,a]
 	lea	INFLIGHT_ALIENS+0x391-0x2B0,a0    | point HL to last INFLIGHT_ALIEN.IsDying flag in INFLIGHT_ALIENS array [ld   hl,0x4391]
-	move.w	#0xFFE1,d3                      	| load DE with -31, which is sizeof(INFLIGHT_ALIEN)-1 [ld   de,0xFFE1]
+	move.w	#-(inflight_alien_size-1),d3       	| load DE with -31, which is sizeof(INFLIGHT_ALIEN)-1 [ld   de,0xFFE1]
 l_1366:	
 	move.b	(a0),d0                         	| read INFLIGHT_ALIEN.IsDying flag [ld   a,(hl)]
 	subq.w	#1,a0                           	| bump HL to point to INFLIGHT_ALIEN.IsActive flag [dec  hl]
@@ -6385,7 +6439,7 @@ SCAN_SPECIFIC_COLUMN_FOR_D_ROWS:
 	move.b	d3,d1                           	| set B to number of rows to scan [ld   b,d]
 l_139b:
 	tst.b	(a0)                         	| test for presence of alien in ALIEN_SWARM_FLAGS [bit  0,(hl)]
-	jne	l_13ce                             	| if there's an alien present, its "volunteered" to attack, goto 0x13CE [jr   nz,0x13CE]
+	jne	WAKEUP_INFLIGHT_ALIEN                             	| if there's an alien present, its "volunteered" to attack, goto 0x13CE [jr   nz,0x13CE]
 											| [ld   a,l]
 	sub.w	#0x10,a0                         	| sizeof(row in ALIEN_SWARM_FLAGS) [sub  0x10]
 											| bump HL to point to alien in row beneath [ld   l,a]
@@ -6451,7 +6505,7 @@ INIT_SCAN_FROM_RED_ALIEN_ROW:
 * IX = pointer to vacant INFLIGHT_ALIEN structure
 *
 
-l_13ce:
+WAKEUP_INFLIGHT_ALIEN:
 	clr.b	(a0)                      	| [ld   (hl),0x00]
 	move.b	d6,(IndexInSwarm,a2)                     	| set INFLIGHT_ALIEN.IndexInSwarm [ld   (ix+0x07),l]
 	move.b	#0x01,(IsActive,a2)                 	| set INFLIGHT_ALIEN.IsActive [ld   (ix+0x00),0x01]
@@ -6819,19 +6873,16 @@ l_1512:
 *
 
 CHECK_IF_ALIEN_CAN_ATTACK:
-	move.b	HAS_PLAYER_SPAWNED,d0                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	bcs.b	0f
+	tst.b	HAS_PLAYER_SPAWNED                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
+	bne.b	0f
 	rts                                    	| return if player has not spawned [ret  nc]
 0:
-	move.b	HAVE_NO_ALIENS_IN_SWARM,d0                       	| read HAVE_NO_ALIENS_IN_SWARM flag [ld   a,(0x4220)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	bcc.b	0f
+	tst.b	HAVE_NO_ALIENS_IN_SWARM                       	| read HAVE_NO_ALIENS_IN_SWARM flag [ld   a,(0x4220)]
+	beq.b	0f
 	rts                                    	| return if we don't have any aliens in the swarm [ret  c]
 0:
-	move.b	IS_FLAGSHIP_HIT,d0                       	| read IS_FLAGSHIP_HIT [ld   a,(0x422B)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	bcc.b	0f
+	tst.b	IS_FLAGSHIP_HIT                       	| read IS_FLAGSHIP_HIT [ld   a,(0x422B)]
+	beq.b	0f
 	rts                                    	| return if the flagship has been hit [ret  c]
 0:
 
@@ -6858,8 +6909,8 @@ l_152d:
 	rts                                    	| [ret]
 
 * When we get here, ALIEN_ATTACK_MASTER_COUNTER is zero.
-* B specifies how many secondary counters in the ALIEN_ATTACK_COUNTERS array we can decrement. (Max value of,0x16)
-*,0xDE points to a default value to reset the ALIEN_ATTACK_MASTER_COUNTER back to.
+* B specifies how many secondary counters in the ALIEN_ATTACK_COUNTERS array we can decrement. (Max value of 16)
+* DE points to a default value to reset the ALIEN_ATTACK_MASTER_COUNTER back to.
 l_1540:
 	move.b	#0x00,d2                        	| [ld   c,0x00]
 	move.b	(a1),d0                         	| read default value from table @ 0x15E3 [ld   a,(de)]
@@ -6878,8 +6929,7 @@ l_1544:
 	jne	l_1544                             	| repeat until B==0 [djnz 0x1544]
 
 * if C is set to a nonzero value then that means that a secondary counter has reached zero. Its time for an alien to attack.
-	move.b	d2,d0                          	| [ld   a,c]
-	tst.b	d0                               	| test if A is zero [and  a]
+	move.b	d2,d0                          	| [ld   a,c] + test if A is zero [and  a]
 	bne.b	0f
 	rts                                    	| exit if so [ret  z]
 0:
@@ -7222,27 +7272,7 @@ l_169f:
 	clr.b	IS_FLAGSHIP_HIT                      	| clear flag. Aliens can break off from the swarm to attack again. [ld   (hl),0x00]
 	rts                                    	| [ret]
 
-*
-* Looks like this might be legacy code imported from an older game	| it writes to a port that does nothing
-*
 
-*	move.b	l_4007,d0                       	| read IS_GAME_OVER flag [ld   a,(0x4007)]
-*	ror.b	#1,d0                           	| move bit 0 into carry [rrca]
-*	bcc.b	0f
-*	rts                                    	| if carry set, return [ret  c]
-*0:
-*	lea	ALIEN_DEATH_SOUND,a0                      	| [ld   hl,0x41DF]
-*	move.b	(a0),d0                         	| [ld   a,(hl)]
-*	tst.b	d0                               	| [and  a]
-*	bne.b	0f
-*	rts                                    	| [ret  z]
-*0:
-*	ror.b	#1,d0                           	| [rrca]
-*	ror.b	#1,d0                           	| [rrca]
-*	move.b	d0,l_6804                       	| Does nothing - this port is not connected [ld   (0x6804),a]
-*	subq.b	#1,(a0)                         	| [dec  (hl)]
-*	rts                                    	| [ret]
-*
 
 *
 * You may have noticed that when you're close to obliterating the swarm, that the background swarm noises

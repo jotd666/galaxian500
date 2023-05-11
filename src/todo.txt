@@ -7,6 +7,8 @@ transcode:
 - sprite animation frames are wrong
 - wrong score when shooting aliens: test it, but DAA isn't emulated
 - send corrected transcode to Scott
+- re-convert GENERATE_RANDOM_NUMBER and CALCULATE_TANGENT
+- debug HANDLE_SINGLE_ALIEN_ATTACK
 
 amiga:
 - emulate stars with sprites (mockup in python first)
@@ -14,10 +16,8 @@ amiga:
 - game should run at 60Hz
 - sound volume seems a bit low
 - support more dip switches (CLI but should be 1.3 compliant eeek & whdload)
-- alien kill sound: not working
-- flagship kill sound: not working
+- if credit inserted while sprites are shown in demo, sprites remain!
 - extra life sound: implement
-- alien sprite issue / sprite 0 (player shot) gets set to 0
 - implement cheat/debug key: stop aliens from attacking
 - if not fire first pressed & game not playing
   * credit 0: fire = insert coin
