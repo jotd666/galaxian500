@@ -3,17 +3,21 @@ transcode:
 - swarm sound loop
 - stars LFSR API
 - wrong score when shooting aliens: test it, but DAA isn't emulated
+- aliens attack only from left now, and only purple ones attack
+- player killed: ship remains in exploding state until end of play
+- bullets don't seem to hit the player
 - send corrected transcode to Scott
 - re-convert GENERATE_RANDOM_NUMBER and CALCULATE_TANGENT
 - debug HANDLE_SINGLE_ALIEN_ATTACK
 
 amiga:
-- draw alien bullets on back screen (setting white as colors 4-7)
+- bullets aren't erased properly, sprites aren't either
 - game should run at 60Hz
 - sound volume seems a bit low
 - support more dip switches (CLI but should be 1.3 compliant eeek & whdload)
 - if credit inserted while sprites are shown in demo, sprites remain!
 - big graphical bugs when aliens attack
+- flying alien shot: animation is wrong and seems to destroy other sprites
 - when to play attack sound?
 - extra life sound: implement
 - implement cheat/debug key: stop aliens from attacking

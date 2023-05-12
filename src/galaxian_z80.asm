@@ -2951,7 +2951,7 @@ HANDLE_ENEMY_BULLETS:
 
 0A84: 11 05 00      ld   de,0x0005            | sizeof(ENEMY_BULLET)
 0A87: DD 19         add  ix,de
-0A89: FD 21 81 40   ld   iy,0x4081            | pointer to OBJRAM_BACK_BUF_BULLETS
+0A89: FD 21 81 40   ld   iy,0x4081            | pointer to OBJRAM_BACK_BUF_BULLETS+1
 0A8D: 06 07         ld   b,0x07               | number of bullets
 
 * main bullet loop

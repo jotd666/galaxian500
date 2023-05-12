@@ -47,13 +47,7 @@ violet
 tile_palette = [black]*4+[white]*4
 bob_palette = base_palette + [brown]  # all aliens are represented
 
-ship_sprite_palette = [black,red,cyan,gray]   # could also be used for level flags
-flagship_sprite_palette = [black,brown,yellow,deep_blue]
-sprite_palette = (ship_sprite_palette +  # 0: ship
-flagship_sprite_palette +   # 2-3: 2 flagships
-flagship_sprite_palette +   # 4-5: 2 flagships
-[black,pink,pink,pink]    # 6: score, 7: starfield
-)
+
 
 block_dict = {}
 
@@ -92,7 +86,7 @@ for clut in block_dict["clut"]["data"]:
         cuclut = []
 
 
-palette = tile_palette + bob_palette + sprite_palette
+palette = tile_palette + bob_palette
 
 with open(os.path.join(src_dir,"palette.68k"),"w") as f:
     bitplanelib.palette_dump(palette,f,pformat=bitplanelib.PALETTE_FORMAT_ASMGNU)

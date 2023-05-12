@@ -5718,10 +5718,10 @@ HANDLE_ENEMY_BULLETS:
 	jcs	l_0a89                             	| if TIMING_VARIABLE is an odd number, goto 0x0A89 [jr   c,0x0A89]
 	addq.b	#2,(0x01,a2)                    	| Increment ENEMY_BULLET.X by 2.. [inc  (ix+0x01) * 2]
 
-	move.w	#5,d3                      	| sizeof(ENEMY_BULLET) [ld   de,0x0005]
-	add.w	d3,a2
+	                      	| sizeof(ENEMY_BULLET) [ld   de,0x0005]
+	addq.w	#5,a2
 l_0a89:
-	lea	OBJRAM_BACK_BUF_BULLETS,a3                      	| pointer to OBJRAM_BACK_BUF_BULLETS [ld   iy,0x4081]
+	lea	OBJRAM_BACK_BUF_BULLETS+1,a3                      	| pointer to OBJRAM_BACK_BUF_BULLETS+1 [ld   iy,0x4081]
 	move.b	#0x07,d1                        	| number of bullets [ld   b,0x07]
 
 * main bullet loop

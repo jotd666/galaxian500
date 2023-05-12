@@ -870,7 +870,7 @@ osd_reset_attributes:
 * 2 bytes: offset 0: scroll value, 1: palette clut
 * 5800-583F   01011AAAAAAAAAAA R/W DDDDDDDD   !OBJRAM Screen attributes
 * 5840-585F   01011AAAAAAAAAAA R/W DDDDDDDD   !OBJRAM Sprites
-* 5860-5FFF   01011AAAAAAAAAAA R/W DDDDDDDD   !OBJRAM Bullets
+* 5860-5880   01011AAAAAAAAAAA R/W DDDDDDDD   !OBJRAM Bullets
 * so pointer points to
 * - 0x40 bytes of attributes (2 byte per "column" - actually a row)
 * - 0x20 bytes of sprites
@@ -917,37 +917,35 @@ osd_update_graphics:
 
 	* delete previous sprites
 	bsr		delete_previous_sprites
+	
+	lea	(0x20,a5),a5
 	bsr		delete_previous_bullets
 	
-	* now A0 contains sprite data
+	* now A0 contains sprite/bullet data
 
 	move.l	a0,-(a7)		| save it
 	**lea		test_sprite_data(pc),a0
 	
-	bsr		draw_sprites
+	jbsr		draw_sprites
 	
 	* now A0 contains bullet data
-	* +0x1D: player bullet Y (amiga: x)
-	* +0x1D: player bullet X (amiga: y)
-	lea		(0x1D,a0),a1
-	move.l	a0,0x100
-	moveq	#0,d0
-	moveq	#0,d1
-	* get X and Y
-	move.b	(a1),d0
-	move.b	(2,a1),d1
-	neg.b	d1
-	add.w	#256-6,d1
-	lea		HW_SpriteYTable_8,a1	
-	bsr		store_sprite_pos
-	lea		player_shot_sprite,a1
-	* set X/Y coords for sprite
-	move.l	d0,(a1)
+	jbsr		draw_enemy_bullets
+	jbsr		draw_player_bullet
 	
+	
+	* restore a0 from the start
+	move.l	(a7),a0
+	bsr		delete_old_hw_sprites
+
+	* restore a0 from the start
 	move.l	(a7),a0
 	
-	bsr		delete_old_hw_sprites
-	
+	move.l		previous_sprite_state_ptr(pc),a5
+	move.w	#SPRITE_SAVE_BUFFER_SIZE/4-1,d0
+0:
+	move.l	(a0)+,(a5)+		| for bobs & bullets (double buffering)
+	dbf		d0,0b
+
 	move.l	(a7)+,a0
 
 	* save previous state for HW sprites now (we needed the "previous" data earlier)
@@ -960,6 +958,71 @@ osd_update_graphics:
 	movem.l	(a7)+,d0-d7/a0-a6
 	rts
 
+	.macro	CONVERT_BULLET_Y
+	neg.b	d1
+	add.w	#256-6,d1	
+	.endm
+	
+* < A0: bullet table
+draw_enemy_bullets:
+	move.l	a0,a1
+	move.b	#1,0x110
+	moveq	#6,d7
+	moveq	#0,d0
+	moveq	#0,d1
+	lea		mulNB_BYTES_PER_ROW_table(pc),a2
+	move.l	bg_drawed_screen_ptr(pc),a3
+	add.l	#BG_SCREEN_PLANE_SIZE*2,a3		| third plane
+0:
+	| is the position legal?
+	move.b	(1,a1),d0
+	move.b	(3,a1),d1
+	bne.b	1f
+	tst.b	d0
+	beq.b	2f
+1:
+	cmp.b	#0xFE,d1
+	beq.b	2f
+	
+	CONVERT_BULLET_Y
+	add.b	d1,d1
+	move.w	(a2,d1.w),d1	| Y times 40
+	move.w	d0,d2
+	lsr.w	#3,d2		| X in bytes
+	and.b	#7,d0		| pixel shift
+	neg.b	d0
+	addq.b	#7,d0		| bit 0 means left position so bit 7
+	add.w	d1,d2		| Y*40+Xbytes
+	lea		(a3,d2.w),a4
+	| draw 3 pixels vertically
+	bset	d0,(a4)
+	bset	d0,(NB_BYTES_PER_ROW,a4)
+	bset	d0,(NB_BYTES_PER_ROW*2,a4)
+
+2:	
+	addq.w	#4,a1
+	dbf		D7,0b
+	rts
+	
+* < A0: bullet table
+draw_player_bullet:
+	* +0x1D: player bullet Y (amiga: x)
+	* +0x1D: player bullet X (amiga: y)
+	lea		(0x1D,a0),a1
+	
+	moveq	#0,d0
+	moveq	#0,d1
+	* get X and Y
+	move.b	(a1),d0
+	move.b	(2,a1),d1
+	CONVERT_BULLET_Y
+	lea		HW_SpriteYTable_8,a1	
+	bsr		store_sprite_pos
+	lea		player_shot_sprite,a1
+	* set X/Y coords for sprite
+	move.l	d0,(a1)
+	rts
+	
 * hide hw sprite if no longer a real sprite in slot 
 * check current sprite state vs hw_sprite_slots in the end
 
@@ -1158,12 +1221,38 @@ current_sprite_palette:
 current_sprite_frame_table:
 	.long	0
 	
+* < A5: previous bullets
 delete_previous_bullets:
+	moveq	#0,d0	| make sure .W value is correct
+	moveq	#0,d1
+	moveq	#7-1,d2	| 7 bullets
+	lea		mulNB_BYTES_PER_ROW_table(pc),a2
+	move.l	bg_drawed_screen_ptr(pc),a3
+0:
+	move.b	(1,a5),d0
+	move.b	(3,a5),d1
+	bne.b	1f
+	move.b	(1,a5),d0
+	tst.b	d0
+	beq.b	2f
+1:
+	cmp.b	#0xFE,d1
+	beq.b	2f
+	CONVERT_BULLET_Y
+	move.w	(a2,d1.w),d1
+	lsr.w	#3,d0
+	lea		(a3,d0.w),a4
+	lea		(a4,d1.w),a4
+	clr.b	(a4)
+	clr.b	(NB_BYTES_PER_ROW,a4)
+	clr.b	(NB_BYTES_PER_ROW*2,a4)
+2:
+	addq.w	#4,a5
+	dbf		d2,0b
 	rts
 	
 delete_previous_sprites:
 	movem.l	a0-a5,-(a7)
-	move.w	#10,0x110
 
 	lea		hw_sprite_flag_table,a3
 	move.l	a5,a4
