@@ -1028,7 +1028,6 @@ delete_old_hw_sprites:
 	lea		amiga_sprite_slots(pc),a3
 
 	moveq	#0,d0
-	moveq	#0,d3
 0:
 	move.w	(a0),d1
 	move.b	d1,d3	| get sprite code
@@ -1036,6 +1035,7 @@ delete_old_hw_sprites:
 	tst.b	(a4,d3.w)
 	beq.b	1f			| is not a HW sprite
 	lsr.w	#8,d1
+	beq.b	1f		| not active
 	cmp.b	#0xF8,d1
 	bne.b	2f	| current position is a sprite, active
 	
@@ -1049,8 +1049,8 @@ delete_old_hw_sprites:
 	beq.b	2f			| was not a HW sprite
 	* it was a sprite
 	move.l	(a2,d0.w),a1
-	clr.l	(a1)+		| clear control word: undisplay sprite
-	move.w	(a1),d7		| now get amiga hw sprite index
+	clr.l	(a1)		| clear control word: undisplay sprite
+	move.w	(4,a2,d0.w),d7		| now get amiga hw sprite index
 	clr.b	(a3,d7.w)	| unreserve from amiga sprite table
 2:
 	addq.w	#4,a0
@@ -1155,14 +1155,14 @@ draw_sprites:
 100:
 	* get previous value
 	move.w	(4,a5),d2
+	* if it's zero, it means that
+	* all slots were previously taken (sprite 0 is reserved)
+	* so don't display anything
+	beq.b	11f
 101:
 	* set palette
 	add.w	d2,d2
 	add.w	d2,d2
-	bne.b	102f
-	* should not happen, slot 0 is reserved
-	bsr		osd_break
-102:
 	move.w	d2,-(a7)
 	add.w	d2,d2
 	bclr	#3,d2		| same palette for 2 sprites
