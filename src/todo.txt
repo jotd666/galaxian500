@@ -8,7 +8,6 @@ transcode:
   it seems that the alien positions are completely off
 - send corrected transcode to Scott
 - re-convert GENERATE_RANDOM_NUMBER
-- debug/compare CALCULATE_TANGENT
 - debug HANDLE_SINGLE_ALIEN_ATTACK
 
 amiga:

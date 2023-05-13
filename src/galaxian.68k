@@ -696,23 +696,31 @@ GENERATE_RANDOM_NUMBER:
 * A (d0) = distance
 * D (d3) = X coordinate
 *
+*
+* we have to heavily adapt the algorithm as it's relying on carry
+* and use rl. Problem is CMP only sets C bit and not X so ROXL can't
+* be used to check if carry is present. We're going to emulate that
+* with tests on carry
 
 CALCULATE_TANGENT:
 	move.w	d4,-(a7)
 	moveq	#0,d2
-	moveq	#8-1,d1	| do it 8 ties
+	moveq	#8-1,d1	| do it 8 times
 0:
 	cmp.b	d3,d0
-	bcs.b	1f
+	bcs.b	2f
 	sub.b	d3,d0
-1:
-	* inverts carry (JOTD: clumsy & slow, but works)
-	* z80 ccf instruction
-	clr.b	d4
-	roxl.b	#1,d4	| get carry in bit 0
-	bchg	#0,d4	| change bit
-	roxr.b	#1,d4	| set inverted carry back
+	* carry is clear here as cmp already pre-checked it
+	* z80 ccf instruction inverts carry
+	* carry is clear, ccf inverts it, set bit 1
 	roxl.b	#1,d2
+	bset	#0,d2
+	bra.b	3f
+2:
+	* carry is set, ccf inverts it, nothing to do
+	roxl.b	#1,d2
+3:	
+	* now we can use rox again
 	roxr.b	#1,d3
 	dbf		d1,0b
 	move.w	(a7)+,d4
@@ -2435,7 +2443,7 @@ l_0ead:
 * add some unpredictability to where it reappears, so that player can't wait for it and shoot it easily
 l_0ebf:
 	move.b	(inf_alien_Y,a2),d0                    	| read INFLIGHT_ALIEN.Y [ld   a,(ix+0x04)]
-	roxr.b	#1,d0                           	| divide by 2 (don't worry about carry, it was cleared by AND above) [rra]
+	lsr.b	#1,d0                           	| divide by 2 (don't worry about carry, it was cleared by AND above) [rra]
 	move.b	d0,d2                           	| preserve in C [ld   c,a]
 	jbsr	GENERATE_RANDOM_NUMBER                            	| call GENERATE_RANDOM_NUMBER [call 0x003C]
 	and.b	#0x1F,d0                         	| ensure random number is between 0..31 decimal [and  0x1F]
@@ -4662,7 +4670,7 @@ GET_ALIEN_CHAR_RAM_ADDR:
 	and.b	#0x07,d0                         	| Ensure A falls between 0 and 7. >7 is invalid. *also clears carry flag* [and  0x07]
 * row 7 = flagship row.  row 2 = blue alien bottom row
 	move.b	d0,d2                           	| save row index in C. [ld   c,a]
-	* here carry is 0, so roxr is safe (but could also be ror on 68000)
+	* here carry is 0, so roxr is safe (but could also be ror/lsr on 68000)
 	roxr.b	#1,d0                           	| divide row index by 2. if row index is odd, then set carry flag [rra]
 
 * very important that we preserve the carry flag here (inD7), because DRAW_ALIEN @ 2131 needs it
