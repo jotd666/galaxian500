@@ -4854,7 +4854,7 @@ l_218f:
 	move.b	#0x04,d1                        	| column counter: 4 characters wide [ld   b,0x04]
 l_2191:
 	jbsr	osd_w_bg_videoram                   	| ordinal for empty character [ld   (hl),0x40]
-	addq.w	#1,a0                           	| bump to next character on same column [inc  hl]
+	addq.w	#1,d6                           	| bump to next character on same column [inc  hl]
 	subq.b	#1,d1                           	| [...]
 	jne	l_2191                             	| do until B==0 [djnz 0x2191]
 	add.w	d3,d6                              	| add offset to HL to point to row beneath
@@ -6249,7 +6249,7 @@ l_12da:
 
 HANDLE_PLAYER_HIT:
 	lea	IS_PLAYER_HIT,a0                      	| pointer to IS_PLAYER_HIT flag [ld   hl,0x4204]
-	btst.b	#0,(a0)                         	| test flag to see if player has been hit. [bit  0,(hl)]
+	tst.b	(a0)                         	| test flag to see if player has been hit. [bit  0,(hl)]
 	bne.b	0f
 	rts                                    	| bit is not set so player not hit, return [ret  z]
 0:
@@ -6282,8 +6282,7 @@ l_130e:
 	move.b	#0x05,(a0)                      	| otherwise, clamp number of lives max to 5 (is this anti-hack code?) [ld   (hl),0x05]
 l_131c:
 	move.b	IS_GAME_IN_PLAY,d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	bcs.b	0f
+	bne.b	0f
 	rts                                    	| return if game is not in play [ret  nc]
 0:
 

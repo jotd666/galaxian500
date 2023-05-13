@@ -966,7 +966,6 @@ osd_update_graphics:
 * < A0: bullet table
 draw_enemy_bullets:
 	move.l	a0,a1
-	move.b	#1,0x110
 	moveq	#6,d7
 	moveq	#0,d0
 	moveq	#0,d1
