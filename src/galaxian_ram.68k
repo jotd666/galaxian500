@@ -687,6 +687,7 @@ ENEMY_BULLETS:                       |  $4260
 ENEMY_BULLETS_START:                 |  $4260                                                                        
 	ds.b	0x45
 ENEMY_BULLETS_END:                   |  $42A5
+	ds.b	0x0b
 	
 * INFLIGHT_ALIENS is an array of type INFLIGHT_ALIEN. 
 * An "Inflight alien" is my term for an alien that has broken off from the main swarm body to attack the player. 
@@ -710,7 +711,6 @@ ENEMY_BULLETS_END:                   |  $42A5
 *  - sizeof(INFLIGHT_ALIEN) is 32 bytes
 
 
-	ds.b	0x0b
 	.align	2
 INFLIGHT_ALIENS:                     |  $42B0
 	ds.b	0x20*8   | size*8

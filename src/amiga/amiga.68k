@@ -914,9 +914,9 @@ osd_update_graphics:
 	
 	move.l		previous_sprite_state_ptr(pc),a4
 
-	bsr		delete_previous_sprites
+	bsr		delete_sprites
 	
-	bsr		delete_previous_bullets
+	bsr		delete_enemy_bullets
 	
 	* now A0 contains sprite/bullet data
 
@@ -952,6 +952,11 @@ osd_update_graphics:
 	neg.b	d1
 	add.w	#256-6,d1	
 	.endm
+	.macro	CONVERT_BULLET_Y_MUL
+	CONVERT_BULLET_Y
+	add.b	d1,d1
+	move.w	(a2,d1.w),d1	| Y times 40
+	.endm
 	
 * < A0: bullet table
 * < A4: previous positions
@@ -965,18 +970,17 @@ draw_enemy_bullets:
 	add.l	#BG_SCREEN_PLANE_SIZE*2,a3		| third plane
 0:
 	| is the position legal?
-	move.b	(1,a0),d0
-	move.b	(3,a0),d1
+	move.l	(a0)+,d4
+	move.l	d4,d0
+	swap	d0
+	move.b	d4,d1
 	bne.b	1f
 	tst.b	d0
 	beq.b	2f
 1:
 	cmp.b	#0xFE,d1
 	beq.b	2f
-	
-	CONVERT_BULLET_Y
-	add.b	d1,d1
-	move.w	(a2,d1.w),d1	| Y times 40
+	CONVERT_BULLET_Y_MUL
 	move.w	d0,d2
 	lsr.w	#3,d2		| X in bytes
 	and.b	#7,d0		| pixel shift
@@ -988,9 +992,10 @@ draw_enemy_bullets:
 	bset	d0,(a5)
 	bset	d0,(NB_BYTES_PER_ROW,a5)
 	bset	d0,(NB_BYTES_PER_ROW*2,a5)
+	bset	d0,(NB_BYTES_PER_ROW*3,a5)
 
 2:
-	move.l	(a0)+,(a4)+		| save for next time
+	move.l	d4,(a4)+		| save for next time
 	dbf		D7,0b
 	rts
 	
@@ -1132,9 +1137,7 @@ draw_sprites:
 	bmi.b	11f			| no slot available
 	* check if that slot is available
 	tst.b	(a3,d2.w)
-	beq.b	7f
-	bra.b	6b
-7:
+	bne.b	6b
 	* slot is available: amiga hardware sprite d2 is free
 	st.b	(a3,d2.w)		| reserve it
 10:
@@ -1155,7 +1158,10 @@ draw_sprites:
 	* set palette
 	add.w	d2,d2
 	add.w	d2,d2
-	
+	bne.b	102f
+	* should not happen, slot 0 is reserved
+	bsr		osd_break
+102:
 	move.w	d2,-(a7)
 	add.w	d2,d2
 	bclr	#3,d2		| same palette for 2 sprites
@@ -1216,7 +1222,7 @@ current_sprite_frame_table:
 * < A4: previous bullets
 * most registers are trashed
 
-delete_previous_bullets:
+delete_enemy_bullets:
 	moveq	#0,d0	| make sure .W value is correct
 	moveq	#0,d1
 	moveq	#7-1,d2	| 7 bullets
@@ -1232,14 +1238,14 @@ delete_previous_bullets:
 1:
 	cmp.b	#0xFE,d1
 	beq.b	2f
-	CONVERT_BULLET_Y
-	move.w	(a2,d1.w),d1
+	CONVERT_BULLET_Y_MUL
 	lsr.w	#3,d0
 	lea		(a3,d0.w),a6
 	lea		(a6,d1.w),a6
 	clr.b	(a6)
 	clr.b	(NB_BYTES_PER_ROW,a6)
 	clr.b	(NB_BYTES_PER_ROW*2,a6)
+	clr.b	(NB_BYTES_PER_ROW*3,a6)
 2:
 	addq.w	#4,a4
 	dbf		d2,0b
@@ -1247,7 +1253,7 @@ delete_previous_bullets:
 	
 * < A4: previous sprite data (updated on exit)
 
-delete_previous_sprites:
+delete_sprites:
 	movem.l	a0-a3,-(a7)
 
 	clr	nb_deleted
@@ -1283,10 +1289,6 @@ delete_previous_sprites:
 	move.w	(a7)+,d5
 11:
 	dbf		d5,2b
-	tst		nb_deleted
-	bne.b	20f
-	move.w	#1,0x120
-20:
 	movem.l	(a7)+,a0-a3
 	rts
 	
@@ -2321,7 +2323,9 @@ player_shot_sprite:
 	.long	0x00800000
 	.long	0x00800000
 	.long	0x00800000
-	.rept	24
+	.long	0x00800000
+	.long	0x00800000
+	.rept	22
 	.long	0
 	.endr
 	.long	0

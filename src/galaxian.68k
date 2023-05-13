@@ -648,31 +648,25 @@ ldir:
 
 
 * < D0: char to write
-* < D1: number of chars to write
+* < D1: number of chars to write (updated: 0 on exit)
 * < A0: address
 rst_10:
-	move.w	d1,-(a7)
-	and.w	#0xFF,d1
-	subq.w	#1,d1
 0:
 	move.b	d0,(a0)+
-	dbf		d1,0b
-	move.w	(a7)+,d1
+	subq.b	#1,d1
+	bne.b	0b
 	rts
 
 * "write" to video ram (calls osd_w_bg_videoram)
 * < D0: char to write
-* < D1: number of chars to write
+* < D1: number of chars to write (updated: 0 on exit)
 * < D6: address
 rst_10_video:
-	move.w	d1,-(a7)
-	and.w	#0xFF,d1
-	subq.w	#1,d1
 0:
 	jbsr	osd_w_bg_videoram
 	addq.w	#1,d6
-	dbf		d1,0b
-	move.w	(a7)+,d1
+	subq.b	#1,d1
+	bne.b	0b
 	rts
 
 
@@ -1327,24 +1321,19 @@ SCROLL_ON_CONVOY_CHARGER_POINTS:
 *
 * In plain English: the sprite back buffer is filled by this routine :) 
 * 
-* JOTD: removed cocktail mode
+* JOTD:
+* - removed cocktail mode
+* - no hardware specialties: offset all sprites by 8
 
 HANDLE_INFLIGHT_ALIEN_SPRITE_UPDATE:
 	lea		INFLIGHT_ALIENS,a2
 	lea		OBJRAM_BACK_BUF_SPRITES,a3
 *
-** for the first 3 alien sprites, their Y coordinates need to be offset 7 pixels vertically so that the hardware can render them correctly.
-	move.w	#3-1,d1                            | number of sprites to set sprite state for
-	moveq	#7,d2							   | set pixel offset to 7
-0:
-	jbsr	SET_SPRITE_STATE
-	add.w	#inflight_alien_size,a2
-	addq.w	#0x4,a3
-	dbf		d1,0b
-*
-** for the next 5 alien sprites, their Y coordinates need to be offset 8 pixels vertically.
-	move.w	#5-1,d1                            | number of sprites to set sprite state for
-	moveq	#8,d2							   | set pixel offset to 8
+** on the real hardware for the first 3 alien sprites,
+* their Y coordinates need to be offset 7 pixels vertically so that the hardware can render them correctly.
+* here we don't care and make it 8 for all sprites
+	move.w	#8-1,d1                            | number of sprites to set sprite state for
+	moveq	#8,d2							   | set pixel offset to 7
 0:
 	jbsr	SET_SPRITE_STATE
 	add.w	#inflight_alien_size,a2
@@ -3134,9 +3123,10 @@ INIT_0408:
 
 * hide all bullets and inflight aliens
 	lea	ENEMY_BULLETS_START,a0                      	| load HL with address of ENEMY_BULLETS_START [ld   hl,0x4260]
+	move.b	#0x50,d1
 	jbsr	rst_10			| Fill B bytes of memory from HL with value in A.
-	lea	INFLIGHT_ALIENS,a0		| JOTD: added this, cleaner
-	move.b	#0x50,d1                        	| [ld   b,0x50]
+	lea	INFLIGHT_ALIENS,a0		| JOTD: changed this, cleaner, as game expects continuous memory
+	move.b	#0,d1                        	| 256 bytes 0x20*8
 	jbsr	rst_10                               	| Fill B bytes of memory from HL with value in A.
 
 	clr.b	DISABLE_SWARM_ANIMATION                       	| clear DISABLE_SWARM_ANIMATION [ld   (0x4238),a]

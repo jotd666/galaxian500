@@ -1550,7 +1550,7 @@ INIT_0408:
 
 * hide all bullets and inflight aliens
 0415: 21 60 42      ld   hl,0x4260            | load HL with address of ENEMY_BULLETS_START
-0418: D7            rst  0x10                 | Fill B bytes of memory from HL with value in A.  
+0418: D7            rst  0x10                 | Fill 256 bytes of memory from HL with value in A.  
 0419: 06 50         ld   b,0x50
 041B: D7            rst  0x10                 | Fill B bytes of memory from HL with value in A. 
 
