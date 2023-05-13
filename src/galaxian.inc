@@ -10,8 +10,8 @@
     OPT_DISABLE_SPRITES=0
     OPT_DISABLE_DISPLAY_MASKS=0
    
-    * score is BCD format
-    OPT_START_SCORE=0x0000000
+    * score is BCD format, only 6 digits
+    OPT_START_SCORE=0x000000
 	
 ***
 *** end of BUILD OPTIONS

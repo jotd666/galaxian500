@@ -633,7 +633,7 @@ l_18b2:
 	rts                                    	| [ret]
 
 	
-* JOTD: added utility functions to emulate rst 10 & ldir
+* JOTD: added utility functions to emulate ldir
 
 * < A0: source (HL)
 * < A1: destination (DE)
@@ -646,6 +646,12 @@ ldir:
 	clr.w	d1
 	rts
 
+rst_08:
+	tst.b	IS_GAME_OVER
+	beq.b	0f
+	addq.w	#4,a7		| if game over, pops the stack, discard current call
+0:
+	rts
 
 * < D0: char to write
 * < D1: number of chars to write (updated: 0 on exit)
@@ -668,9 +674,6 @@ rst_10_video:
 	subq.b	#1,d1
 	bne.b	0b
 	rts
-
-
-* start of code
 
 *
 * A very primitive pseudo-random number generator.
@@ -2976,16 +2979,16 @@ l_11a0:
 DISPLAY_SCORE_COMMAND:	
 	cmp.b	#3,d0
 	bcc.b		DISPLAY_ALL_SCORES       	| if A>= #0x03, goto 0x224D, DISPLAY_ALL_SCORES
-	lea			PLAYER_ONE_SCORE+2,a0	| pointer to last 2 BCD digits of PLAYER_ONE_SCORE
-	tst.b	d0
+	lea			PLAYER_ONE_SCORE+2,a1	| pointer to last 2 BCD digits of PLAYER_ONE_SCORE [ld   de,0x40A4]
+	tst.b	d0							| test if A is 0 [and  a]
 	beq.b		DECIDE_TO_DISPLAY_PLAYER_ONE_OR_PLAYER_TWO_SCORE	| if A is 0
-	subq.b		#1,d0				    | if A was 1 on entry, then Z flag is now set
+	subq.b		#1,d0				    | if A was 1 on entry, then Z flag is now set [dec  a]
 	bne.b		DISPLAY_HIGH_SCORE
 	tst.b		IS_TWO_PLAYER_GAME
 	bne.b		0f
 	rts					| if it's zero, then we're just in a single player game, return
 0:
-	lea			PLAYER_TWO_SCORE+2,a0	        | pointer to last 2 BCD digits of PLAYER_TWO_SCORE
+	lea			PLAYER_TWO_SCORE+2,a1	        | pointer to last 2 BCD digits of PLAYER_TWO_SCORE [ld   de,0x40AA]
 	jra			DECIDE_TO_DISPLAY_PLAYER_ONE_OR_PLAYER_TWO_SCORE
 
 DISPLAY_HIGH_SCORE:
@@ -3023,7 +3026,7 @@ DECIDE_TO_DISPLAY_PLAYER_ONE_OR_PLAYER_TWO_SCORE:
 *
 * Expects:
 *
-* DE = pointer to *last* byte of 3 BCD bytes representing a score (ie: player 1 score, player 2 score, or high score)
+* DE/A1 = pointer to *last* byte of 3 BCD bytes representing a score (ie: player 1 score, player 2 score, or high score)
 *      See docs for PLAYER_ONE_SCORE to understand how scores are packed as BCD 
 *
 * D6 = pointer to character RAM to begin plotting characters from
@@ -3037,12 +3040,12 @@ PLOT_SCORE_CHARACTERS:
                                              | when you start the game you have a score of zero. It renders as "00". 
                                              | So this says "skip the first 4 zeros in the score, but display the rest"
 0:
-	move.b	(a0),d0		| read BCD digits from score byte
+	move.b	(a1),d0		| read BCD digits from score byte
 	lsr.b	#4,d0       | move high nibble (first digit of BCD number)...
 	jbsr	PLOT_LOWER_NIB_AS_DIGIT   | call  to plot the first digit                 
-	move.b	(a0),d0		| read BCD digits from score byte
+	move.b	(a1),d0		| read BCD digits from score byte
 	jbsr	PLOT_LOWER_NIB_AS_DIGIT     | call to plot the second digit 
-	subq.w	#1,a0		| bump to *previous* BCD byte
+	subq.w	#1,a1		| bump to *previous* BCD byte
 	dbf		d3,0b       | do until all BCD digits in score have been drawn
 	rts
 
@@ -3137,6 +3140,7 @@ INIT_0408:
 	move.b	#0,d1                        	| 256 bytes 0x20*8
 	jbsr	rst_10                               	| Fill B bytes of memory from HL with value in A.
 
+	
 	clr.b	DISABLE_SWARM_ANIMATION                       	| clear DISABLE_SWARM_ANIMATION [ld   (0x4238),a]
 	clr.b	IS_COLUMN_SCROLLING                       	| clear IS_COLUMN_SCROLLING [ld   (0x40B0),a]
 	move.w	#0x5002,TEMP_CHAR_RAM_PTR                       	| set TEMP_CHAR_RAM_PTR [ld   (0x400B),hl]
@@ -4873,22 +4877,24 @@ DRAW_PLAYER_SHIP:
 *
 * Value in register A       Points added to score
 * ===============================================
-* 0x0,0x30
-* 0x1,0x40
-* 0x2,0x50
-* 0x3,0x60
-* 0x4,0x70
-* 0x5,0x80
-* 0x6,0x90
-* 0x7                         100
-* 0x8                         150
-* 0x9                         200
-*,0x10                        300
-*,0x11                        800
+* 0x00                      0x030
+* 0x01                      0x040
+* 0x02                      0x050
+* 0x03                      0x060
+* 0x04                      0x070
+* 0x05                      0x080
+* 0x06                      0x090
+* 0x07                      0x100
+* 0x08                      0x150
+* 0x09                      0x200
+* 0x10                      0x300
+* 0x11                      0x800
 
+	
 UPDATE_PLAYER_SCORE_COMMAND:
 	moveq	#0,d2
 	move.b	d0,d2                           	| save A in C as the rst corrupts A [ld   c,a]
+	bsr		rst_08
 	jbsr	LEA_DE_OF_CURRENT_PLAYER_SCORE    	| call LEA_DE_OF_CURRENT_PLAYER_SCORE. Now DE = pointer to current player's score [call 0x2290]
 	move.b	d2,d0                           	| restore A (points value ID) from C [ld   a,c]
 	add.b	d2,d0                            	| And then multiply .. [add  a,c]
@@ -4898,22 +4904,17 @@ UPDATE_PLAYER_SCORE_COMMAND:
 	lea	ALIEN_SCORE_TABLE(pc),a0                      	| pointer to ALIEN_SCORE_TABLE [ld   hl,0x22D0]
     add.w	d2,a0                         	 	| now HL points to an entry in the score table [add  hl,bc]
 	tst.b	d0                               	| clear carry flag [and  a]
-	move.b	#0x03,d1                        	| Players score is 3 bytes in size [ld   b,0x03]
+	moveq	#3-1,d1                        	| Players score is 3 bytes in size [ld   b,0x03]
 l_21b8:
 	move.b	(a1),d0                         	| read byte from players score [ld   a,(de)]
-	add.b  (a0),d0                            	| add byte from the score table [adc  a,(hl)]
-
-* When this instruction is executed, the A register is BCD corrected using the contents of the flags. The exact process is the following:
-* if the least significant four bits of A contain a non-BCD digit (i. e. it is greater than 9) 
-* or the H flag is set, then $06 is added to the register.
-* Then the four most significant bits are checked. If this more significant digit also happens to be greater than 9
-* or the C flag is set, then $60 is added.
-	**TODO daa                                     	| ensure that the result is valid BCD [daa]
+	move.b	(a0)+,d3
+	abcd	 d3,d0                            	| add byte from the score table [adc  a,(hl)]
+												| ensure that the result is valid BCD [daa]
 	move.b	d0,(a1)+                         	| update player score [ld   (de),a]
 												| bump to next BCD digits in players score [inc  de]
-	addq.w	#1,a0                           	| bump to next BCD digits in alien score [inc  hl]
-	subq.b	#1,d1                           	| [...]
-	jne	l_21b8                             	| repeat until all digits in player score have been updated. [djnz 0x21B8]
+												| bump to next BCD digits in alien score [inc  hl]
+	* use dbf here to preserve X flag
+	dbf		D1,l_21b8                            | repeat until all digits in player score have been updated. [djnz 0x21B8]
 	subq.w	#1,a1                           	| point to first 2 digits of player score [dec  de]
 	move.l	a1,-(a7)
 	subq.w	#1,a1                           	| point to 3rd and 4th digits of player score [dec  de]
@@ -4923,9 +4924,9 @@ l_21b8:
 												| [ld   a,(de)]
 	move.b	(a1),d5								| load L with 3rd and 4th digits of player score [ld   l,a]
 	
-	lsl.w	#4,d5								| [add  hl,hl] multiply HL * 16, which shifts all bits left 4 places.
+	lsl.w	#4,d5								| [add  hl,hl]*4 multiply HL * 16, which shifts all bits left 4 places.
 	move.w	d5,d0                           	| [ld   a,h]
-	lsr.w	#8,d0
+	lsr.w	#8,d0								| to get h
 	cmp.b	BONUS_GALIXIP_FOR,d0                      	| read BONUS_GALIXIP_FOR value [ld   hl,0x40AC]
 	bcs.b	0f
 	jbsr	AWARD_EXTRA_LIFE                            	| call AWARD_EXTRA_LIFE if our score is higher [call nc,0x229C]
@@ -4935,7 +4936,7 @@ l_21b8:
 	jbsr	DECIDE_TO_DISPLAY_PLAYER_ONE_OR_PLAYER_TWO_SCORE           	| call DECIDE_TO_DISPLAY_PLAYER_ONE_OR_PLAYER_TWO_SCORE [call 0x2256]
 	move.l	(a7)+,a1
 	lea	HI_SCORE+2,a0                      	| point to last byte (first 2 digits) of HI_SCORE [ld   hl,0x40AA]
-	move.b	#0x03,d1                        	| Players score is 3 bytes in size [ld   b,0x03]
+	moveq	#3-1,d1                        	| Players score is 3 bytes in size [ld   b,0x03]
 l_21df:
 	move.b	(a1),d0                         	| read byte from player score [ld   a,(de)]
 	cmp.b	(a0),d0                               	| compare to byte from high score [cp   (hl)]
@@ -4945,8 +4946,7 @@ l_21df:
 	jne	UPDATE_HIGH_SCORE                             	| if byte is different, we have a new high score, goto 0x21E9 [jr   nz,0x21E9]
 	subq.w	#1,a1                           	| otherwise, bump de [dec  de]
 	subq.w	#1,a0                           	| and bump hl [dec  hl]
-	subq.b	#1,d1                           	| [...]
-	jne	l_21df                             	| repeat until b==0 [djnz 0x21DF]
+	dbf	d1,l_21df                             	| repeat until b==0 [djnz 0x21DF]
 	rts                                    	| [ret]
 
 
@@ -4991,10 +4991,20 @@ RESET_SCORE_COMMAND:
 	lea	HI_SCORE,a0                      	| address of HI_SCORE [ld   hl,0x40A8]
     move.l	a0,a1                           	| DE = HL   [ld   e,l] [ld   d,h]
 l_221a:
-	clr.b	(a0)+                             	| clear first byte [ld   (hl),0x00]	                           	| [inc  hl]
-	clr.b	(a0)+                             	| clear second byte [ld   (hl),0x00]
+	* init score with 0 or something else (test mode)
+	lea		PLAYER_ONE_SCORE,a0
+	move.l	#OPT_START_SCORE,d0
+	move.b	d0,(a0)+
+	lsr.l	#8,d0
+	move.b	d0,(a0)+
+	lsr.l	#8,d0
+	move.b	d0,(a0)
+
+*	clr.b	(a0)+                             	| clear first byte [ld   (hl),0x00]	                           	| [inc  hl]
+*	clr.b	(a0)+                             	| clear second byte [ld   (hl),0x00]
 	                           	| [inc  hl]
-	clr.b	(a0)                             	| clear third byte [ld   (hl),0x00]
+*	clr.b	(a0)                             	| clear third byte [ld   (hl),0x00]
+	
 	exg		a0,a1
 	clr.b	(a0)                             	| reset the AWARDED_EXTRA_LIFE flag [ld   (hl),0x00]
 	move.w	(a7)+,d0
@@ -5181,6 +5191,7 @@ DISPLAY_BOTTOM_OF_SCREEN_COMMAND:
 	jeq		DISPLAY_BONUS_GALIXIP_FOR	| if parameter was 2
 	
 	move.b	PLAYER_LIVES,d1
+	jbsr	rst_08			| assert that it's not GAME OVER
 	jra		DISPLAY_PLAYER_SHIPS_REMAINING
 	
 
@@ -5262,6 +5273,7 @@ DISPLAY_AVAILABLE_CREDIT:
 *
 
 DISPLAY_LEVEL_FLAGS:
+	  jbsr	rst_08					| assert that it's not GAME OVER
       tst.b	HAVE_NO_ALIENS_IN_SWARM   | test if flag is set
       beq.b	0f             | if flag is not set, goto 0x252C
       move.b  #1,RESET_SWARM_SOUND_TEMPO     | set  flag to 1. The swarm tempo will be slow again. 

@@ -2,7 +2,6 @@ transcode:
 - SCORE ADVANCE TABLE: missing dashes
 - swarm sound loop
 - stars LFSR API
-- wrong score when shooting aliens: test it, but DAA isn't emulated
 - aliens attack only from left now, and only purple ones attack,
   others attack but seem unshown, and given some bogus positions of some bullets
   it seems that the alien positions are completely off
