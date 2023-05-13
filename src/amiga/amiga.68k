@@ -1065,12 +1065,14 @@ delete_old_hw_sprites:
 draw_sprites:
 	movem.l	a2-a3,-(a7)
 	moveq	#0,d3
-	moveq	#0,d0
-	moveq	#0,d1
 	moveq	#0,d6
 	moveq	#0,d5
 	move.l	a0,a2
 2:
+	* d0 and d1 are changed at each loop
+	* make sure that their bits 8-15 are cleared
+	moveq	#0,d0
+	moveq	#0,d1
 	* get sprite x,y,clut,index
 	move.l	(a2)+,d4
 	move.l	d4,(a4)+		| save for next time
@@ -1087,7 +1089,6 @@ draw_sprites:
 	move.l	(a1,d6.w),d7
 	jeq	11f			| invalid sprite
 	move.l	d7,a1
-	* todo check attributes (flip X/Y)
 	and.w	#7,d5		| mask attributes
 	add.w	d5,d5
 	add.w	d5,d5
@@ -1180,6 +1181,7 @@ draw_sprites:
 	* get sprite frame for current amiga hw sprite
 	move.l	(a0,d2.w),a0
 	* and store it in hw_sprite_slots table
+	
 	move.l	a0,(a5)
 
 	* set sprite X,Y
@@ -1195,6 +1197,7 @@ draw_sprites:
 	move.w	d2,(6,a5)
 	swap	d2
 	move.w	d2,(2,a5)
+
 11:
 	addq.w	#1,d3
 	cmp.w	#NB_SPRITES_TOTAL,d3
@@ -1277,8 +1280,6 @@ delete_sprites:
 	* is hardware sprite)
 
 	move.w	#4,d2	| width
-	* depending on double height/width properties, double amounts
-
     move.w  #16,d4		| max single size height
 
     lea _custom,a5

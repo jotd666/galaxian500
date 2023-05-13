@@ -3393,6 +3393,8 @@ l_0550:
 
 	move.b	d0,TIMING_VARIABLE                       	| set TIMING_VARIABLE [ld   (0x425F),a]
 
+	* note: this also clears swarm scroll value & direction
+	* as those variables are following in the memory
 	lea	HAS_PLAYER_SPAWNED,a0                      	| pointer to HAS_PLAYER_SPAWNED. Also start of player state [ld   hl,0x4200]
 	move.b	#0x17,d1                        	| 0x17 (23 decimal) bytes to clear [ld   b,0x17]
 	jbsr	rst_10                               	| Clear all player state

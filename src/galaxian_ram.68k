@@ -168,6 +168,11 @@
 
     .bss
 
+* CAREFUL! game sometimes uses pointer on variables then clears/sets memory on the following
+* addresses (using rst 0x10 call), so for instance in 0550, it resets HAS_PLAYER_SPAWNED
+* to 0 on 0x17 bytes, which also clears swarm scroll, and aliens always start by moving
+* to the right!
+
 VARIABLES_START:
 DIP_SWITCH_1_2_STATE:                |  $4000         ; holds state of dip switches 1 & 2 in bits 0 & 1.
 	ds.b	0x01
@@ -570,7 +575,6 @@ IS_PLAYER_BULLET_DONE:               |  $420B         | set 1 when player bullet
 	ds.b	0x02
 SWARM_DIRECTION:                     |  $420D         | Direction of swarm (really? ;) )  0 = Moving left, 1 = moving right . See $0945              
 	ds.b	0x01
-	.align	0x100
 SWARM_SCROLL_VALUE:                  |  $420E         | 16 bit value. Used to set the scroll values for the character columns containing the swarm.                            
 	ds.b	0x02
 SWARM_SCROLL_MAX_EXTENTS:            |  $4210         | Used to limit the scrolling of the swarm so no alien goes "off screen". See $09CE 
