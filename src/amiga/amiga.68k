@@ -594,8 +594,7 @@ play_music:
 	rts
 	
 	
-osd_kick_wdog:
-    rts
+
 	.ifne	OPT_ENABLE_DOUBLE_BUFFERING
 switch_screen_buffers:	
 	* let's switch screen buffers, background (chars)
@@ -913,12 +912,10 @@ osd_update_graphics:
 	* load previous sprite state base
 	* (depending on screen buffer, double buffering)
 	
-	move.l		previous_sprite_state_ptr(pc),a5
+	move.l		previous_sprite_state_ptr(pc),a4
 
-	* delete previous sprites
 	bsr		delete_previous_sprites
 	
-	lea	(0x20,a5),a5
 	bsr		delete_previous_bullets
 	
 	* now A0 contains sprite/bullet data
@@ -926,25 +923,18 @@ osd_update_graphics:
 	move.l	a0,-(a7)		| save it
 	**lea		test_sprite_data(pc),a0
 	
+	move.l		previous_sprite_state_ptr(pc),a4
 	jbsr		draw_sprites
 	
 	* now A0 contains bullet data
 	jbsr		draw_enemy_bullets
-	jbsr		draw_player_bullet
-	
-	
 	* restore a0 from the start
 	move.l	(a7),a0
+	jbsr		draw_player_bullet
+		
 	bsr		delete_old_hw_sprites
 
 	* restore a0 from the start
-	move.l	(a7),a0
-	
-	move.l		previous_sprite_state_ptr(pc),a5
-	move.w	#SPRITE_SAVE_BUFFER_SIZE/4-1,d0
-0:
-	move.l	(a0)+,(a5)+		| for bobs & bullets (double buffering)
-	dbf		d0,0b
 
 	move.l	(a7)+,a0
 
@@ -964,8 +954,9 @@ osd_update_graphics:
 	.endm
 	
 * < A0: bullet table
+* < A4: previous positions
+* all registers potentially trashed
 draw_enemy_bullets:
-	move.l	a0,a1
 	moveq	#6,d7
 	moveq	#0,d0
 	moveq	#0,d1
@@ -974,8 +965,8 @@ draw_enemy_bullets:
 	add.l	#BG_SCREEN_PLANE_SIZE*2,a3		| third plane
 0:
 	| is the position legal?
-	move.b	(1,a1),d0
-	move.b	(3,a1),d1
+	move.b	(1,a0),d0
+	move.b	(3,a0),d1
 	bne.b	1f
 	tst.b	d0
 	beq.b	2f
@@ -992,22 +983,22 @@ draw_enemy_bullets:
 	neg.b	d0
 	addq.b	#7,d0		| bit 0 means left position so bit 7
 	add.w	d1,d2		| Y*40+Xbytes
-	lea		(a3,d2.w),a4
+	lea		(a3,d2.w),a5
 	| draw 3 pixels vertically
-	bset	d0,(a4)
-	bset	d0,(NB_BYTES_PER_ROW,a4)
-	bset	d0,(NB_BYTES_PER_ROW*2,a4)
+	bset	d0,(a5)
+	bset	d0,(NB_BYTES_PER_ROW,a5)
+	bset	d0,(NB_BYTES_PER_ROW*2,a5)
 
-2:	
-	addq.w	#4,a1
+2:
+	move.l	(a0)+,(a4)+		| save for next time
 	dbf		D7,0b
 	rts
 	
-* < A0: bullet table
+* < A0: sprite table
 draw_player_bullet:
 	* +0x1D: player bullet Y (amiga: x)
 	* +0x1D: player bullet X (amiga: y)
-	lea		(0x1D,a0),a1
+	lea		(0x1D+0x20,a0),a1
 	
 	moveq	#0,d0
 	moveq	#0,d1
@@ -1064,8 +1055,10 @@ delete_old_hw_sprites:
 	bne.b	0b
 	rts
 	
+* < a0: sprite structures (4 bytes)
+* < a4: backup previous data (A4 is updated to previous bullets on exit)
 draw_sprites:
-	movem.l	a2-a4,-(a7)
+	movem.l	a2-a3,-(a7)
 	moveq	#0,d3
 	moveq	#0,d0
 	moveq	#0,d1
@@ -1075,7 +1068,7 @@ draw_sprites:
 2:
 	* get sprite x,y,clut,index
 	move.l	(a2)+,d4
-	move.l	d4,(a5)+		| save for next time
+	move.l	d4,(a4)+		| save for next time
 	move.l	d4,d7
 	and.l	#0xFF0000FF,d7
 	cmp.l	#0xF80000F8,d7	| X=Y=0xF8: means disabled
@@ -1122,8 +1115,8 @@ draw_sprites:
 	* active: was it a hw sprite?
 	move.b	(1,a6,d7.w),d7	| get previous sprite code
 	and.w	#0x3F,d7
-	lea		hw_sprite_flag_table,a4
-	tst.b	(a4,d7.w)
+	lea		hw_sprite_flag_table,a5
+	tst.b	(a5,d7.w)
 	beq.b	5f			| was not a HW sprite
 	st.b	d2
 	* already active: reuse current slot as it is the same hardware
@@ -1148,16 +1141,16 @@ draw_sprites:
 	* update hw sprite table
 	move.w	d3,d7
 	lsl.w	#3,d7
-	lea		hw_sprite_slots,a4
-	add.w	d7,a4		| select proper slot
+	lea		hw_sprite_slots,a5
+	add.w	d7,a5		| select proper slot
 	tst.b	d2
 	bmi.b	100f
 	* new sprite: must set amiga sprite index value
-	move.w	d2,(4,a4)
+	move.w	d2,(4,a5)
 	bra.b	101f
 100:
 	* get previous value
-	move.w	(4,a4),d2
+	move.w	(4,a5),d2
 101:
 	* set palette
 	add.w	d2,d2
@@ -1181,27 +1174,27 @@ draw_sprites:
 	* get sprite frame for current amiga hw sprite
 	move.l	(a0,d2.w),a0
 	* and store it in hw_sprite_slots table
-	move.l	a0,(a4)
+	move.l	a0,(a5)
 
 	* set sprite X,Y
 	bsr		store_sprite_pos_16
 	move.l	d0,(a0)
 	
 	* set in copperlist at the proper location
-	lea		sprites,a4
+	lea		sprites,a5
 	add.w	d2,d2		| hw sprite index times 8
-	add.w	d2,a4
+	add.w	d2,a5
 	move.l	a0,d2		| sprite pointer
 	
-	move.w	d2,(6,a4)
+	move.w	d2,(6,a5)
 	swap	d2
-	move.w	d2,(2,a4)
+	move.w	d2,(2,a5)
 11:
 	addq.w	#1,d3
 	cmp.w	#NB_SPRITES_TOTAL,d3
 	jne	2b
 	move.l	a2,a0
-	movem.l	(a7)+,a2-a4
+	movem.l	(a7)+,a2-a3
 	rts
 
 * 8 slots (indexed with the target sprite index, not
@@ -1220,18 +1213,20 @@ current_sprite_palette:
 current_sprite_frame_table:
 	.long	0
 	
-* < A5: previous bullets
+* < A4: previous bullets
+* most registers are trashed
+
 delete_previous_bullets:
 	moveq	#0,d0	| make sure .W value is correct
 	moveq	#0,d1
 	moveq	#7-1,d2	| 7 bullets
 	lea		mulNB_BYTES_PER_ROW_table(pc),a2
 	move.l	bg_drawed_screen_ptr(pc),a3
+	add.l	#BG_SCREEN_PLANE_SIZE*2,a3		| third plane
 0:
-	move.b	(1,a5),d0
-	move.b	(3,a5),d1
+	move.b	(1,a4),d0
+	move.b	(3,a4),d1
 	bne.b	1f
-	move.b	(1,a5),d0
 	tst.b	d0
 	beq.b	2f
 1:
@@ -1240,29 +1235,33 @@ delete_previous_bullets:
 	CONVERT_BULLET_Y
 	move.w	(a2,d1.w),d1
 	lsr.w	#3,d0
-	lea		(a3,d0.w),a4
-	lea		(a4,d1.w),a4
-	clr.b	(a4)
-	clr.b	(NB_BYTES_PER_ROW,a4)
-	clr.b	(NB_BYTES_PER_ROW*2,a4)
+	lea		(a3,d0.w),a6
+	lea		(a6,d1.w),a6
+	clr.b	(a6)
+	clr.b	(NB_BYTES_PER_ROW,a6)
+	clr.b	(NB_BYTES_PER_ROW*2,a6)
 2:
-	addq.w	#4,a5
+	addq.w	#4,a4
 	dbf		d2,0b
 	rts
 	
-delete_previous_sprites:
-	movem.l	a0-a5,-(a7)
+* < A4: previous sprite data (updated on exit)
 
+delete_previous_sprites:
+	movem.l	a0-a3,-(a7)
+
+	clr	nb_deleted
 	lea		hw_sprite_flag_table,a3
-	move.l	a5,a4
 	
 	move.w	#NB_SPRITES_TOTAL-1,d5
 2:
 	move.l	(a4)+,d4
 	move.l	d4,d7
+	beq.w	11f				| 0 means not used yet (bootup)
 	and.l	#0xFF0000FF,d7
 	cmp.l	#0xF80000F8,d7	| X=Y=0xF8: means disabled
 	beq.w	11f
+	addq	#1,nb_deleted
 	* get data
 	bsr		decode_sprite_data_2
 	tst.b	(a3,d6.w)
@@ -1284,9 +1283,15 @@ delete_previous_sprites:
 	move.w	(a7)+,d5
 11:
 	dbf		d5,2b
-	movem.l	(a7)+,a0-a5
+	tst		nb_deleted
+	bne.b	20f
+	move.w	#1,0x120
+20:
+	movem.l	(a7)+,a0-a3
 	rts
 	
+nb_deleted:
+	.word	0
 * < D4: sprite properties
 *     Y code+attrs clut X
 * > D0,D1: X,Y.B
@@ -1664,8 +1669,7 @@ osd_debug_hook:
 *    bits 2: lives (0=2/1=3).
 osd_read_dipswitches:
 	move.b	#0x03,d0
-	*move.w	#0xC0,d1	| free play: 0xC0, insert coin doesn't work ATM
-	move.w	#0x00,d1	| 1 coin 1 credit
+	move.w	free_play_dsw(pc),d1
 
 	movem.l	a0,-(a7)
 	lea keyboard_table(pc),a0
