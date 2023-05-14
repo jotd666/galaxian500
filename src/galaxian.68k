@@ -1897,8 +1897,6 @@ JUST_RTS:
 *
 
 INFLIGHT_ALIEN_PACKS_BAGS:
-	move.b	#1,0x201
-	
 	clr.b	(SortieCount,a2)                        	| clear INFLIGHT_ALIEN.SortieCount [ld   (ix+0x17),0x00]
 	move.b	#0x01,d0                        	| [ld   a,0x01]
 	move.b	d0,ENABLE_ALIEN_ATTACK_SOUND                       	| set ENABLE_ALIEN_ATTACK_SOUND to 1. [ld   (0x41C2),a]
@@ -1915,6 +1913,7 @@ INFLIGHT_ALIEN_PACKS_BAGS:
 										| .. by 8. [rrca]
 							| [ld   e,a]
 	and.w	#0xFF,d0							| Extend A into DE  [ld   d,0x00]
+	move.b	d0,d3								| save value for later (flagship)
 	add.w	d0,a0                              	| HL = 0x1DD1 + (row number of alien /8)
 	move.b	(a0),d0                         	| [ld   a,(hl)]
 	move.b	d0,(Colour,a2)                    	| set INFLIGHT_ALIEN.Colour [ld   (ix+0x16),a]
@@ -6519,7 +6518,6 @@ INIT_SCAN_FROM_RED_ALIEN_ROW:
 *
 
 WAKEUP_INFLIGHT_ALIEN:
-	move.b	#1,0x200
 	clr.b	(a0,d6.w)                      	| [ld   (hl),0x00]
 0:
 	move.b	d6,(IndexInSwarm,a2)                     	| set INFLIGHT_ALIEN.IndexInSwarm [ld   (ix+0x07),l]
@@ -6713,7 +6711,7 @@ INIT_FLAGSHIP_ATTACK_FROM_LEFT_FLANK:
 	move.b	#0x03,d1                        	| we're scanning 3 entries in red aliens row max [ld   b,0x03]
 	move.b	#0x02,d2                        	| But we only want 2 red aliens as an escort. [ld   c,0x02]
 l_1485:
-	btst.b	#0,(a0)                         	| test for presence of red alien [bit  0,(hl)]
+	tst.b	(a0)                         	| test for presence of red alien [bit  0,(hl)]
 	beq.b	0f
 	jbsr	l_148E                                	| if we have a red alien, try to create an inflight alien [call nz,0x148E]
 	subq.w	#1,a0                            	| bump HL to point to slot of sibling alien [dec  l]
@@ -6824,7 +6822,7 @@ l_148E:
 * HL = pointer to entry in ALIEN_SWARM_FLAGS
 	jbsr	TRY_INIT_ESCORT_INFLIGHT_ALIEN                            	| call TRY_INIT_ESCORT_INFLIGHT_ALIEN [call 0x149B]
 	
-	add.w	#inflight_alien_size,a2                           	| bump IY to point to next member of INFLIGHT_ALIENS array [add  iy,de]
+	add.w	#inflight_alien_size,a3                           	| bump IY to point to next member of INFLIGHT_ALIENS array [add  iy,de]
 	subq.b	#1,d2                           	| reduce count of red aliens left to check for use as escort [dec  c]
 	beq.b	0f
 	rts                                    	| return if we have all the escort we need [ret  nz]

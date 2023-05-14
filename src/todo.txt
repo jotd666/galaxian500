@@ -1,14 +1,16 @@
 transcode:
 - swarm sound loop
 - stars LFSR API
-- alien attacking but animation frame oscillates between 2 frames
-- flagships attack but are lost forever when attacking. Only one red alien attacks!
+- alien attacking but animation frame sometimes oscillates between 2 frames
+- at the end of the level (not a lot of aliens), aliens joining swarm seems bogus
 - send corrected transcode to Scott
-- re-convert GENERATE_RANDOM_NUMBER
+- re-convert/check GENERATE_RANDOM_NUMBER
 
 amiga:
 
-- player ship explosion sound sometimes not working
+- player ship explosion sound sometimes not working (also kills other sounds)
+- flagship sound not playing
+- flagship kill score displayed wrong (hw sprite?) check if score is correct??
 - shift hw sprites too? (explosions?)
 - game should run at 60Hz
 - sound volume seems a bit low
@@ -23,11 +25,6 @@ amiga:
 - joypad controls: insert coin/start/play for pause
 - emulate stars with sprites (mockup in python first)
 
-
-Galaxian - like a lot of earlier games -
-has a few 'nuances' for the sprites. For instance, all sprites have a
-1-pixel adjustment for X, and sprites #0-2 have a 1-pixel adjustment for
-Y (see the MAME source galaxian_v.cpp for details)
 
 To rip the sounds:
 
