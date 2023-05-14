@@ -4876,7 +4876,7 @@ FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_RIGHT:
 
 * we've found an occupied column
 13B7: 1E 41         ld   e,0x41
-13B9: 2D            dec  l						| adjust L because CPDR will have incremented it one time too many 
+13B9: 2D            dec  l						| adjust L because CPIR will have incremented it one time too many 
 13BA: C3 8A 13      jp   0x138A               | jump to TRY_FIND_ALIEN_TO_ATTACK:
 
 
@@ -4899,7 +4899,7 @@ INIT_SCAN_FROM_RED_ALIEN_ROW:
 * HL = pointer to occupied entry in ALIEN_SWARM_FLAGS
 * IX = pointer to vacant INFLIGHT_ALIEN structure
 *
-
+WAKEUP_INFLIGHT_ALIEN:
 13CE: 36 00         ld   (hl),0x00
 13D0: DD 75 07      ld   (ix+0x07),l          | set INFLIGHT_ALIEN.IndexInSwarm
 13D3: DD 36 00 01   ld   (ix+0x00),0x01        | set INFLIGHT_ALIEN.IsActive 

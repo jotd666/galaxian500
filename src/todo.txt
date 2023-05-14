@@ -2,12 +2,10 @@ transcode:
 - SCORE ADVANCE TABLE: missing dashes
 - swarm sound loop
 - stars LFSR API
-- aliens attack only from left now, and only purple ones attack,
-  others attack but seem unshown, and given some bogus positions of some bullets
-  it seems that the alien positions are completely off
+- some bullet positions look complete bogus / blink
+- alien attacking but animation frame oscillates between 2 frames
 - send corrected transcode to Scott
 - re-convert GENERATE_RANDOM_NUMBER
-- debug HANDLE_SINGLE_ALIEN_ATTACK; LEFT ok now RIGHT doesn't work
 
 amiga:
 

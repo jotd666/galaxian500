@@ -1080,6 +1080,7 @@ draw_sprites:
 	and.l	#0xFF0000FF,d7
 	cmp.l	#0xF80000F8,d7	| X=Y=0xF8: means disabled
 	beq.w	11f
+
 	bsr		decode_sprite_data
 	lea		sprite_table,a1
 	move.b	d6,d2		| save attributes xflip/yflip

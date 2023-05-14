@@ -1897,6 +1897,8 @@ JUST_RTS:
 *
 
 INFLIGHT_ALIEN_PACKS_BAGS:
+	move.b	#1,0x201
+	
 	clr.b	(SortieCount,a2)                        	| clear INFLIGHT_ALIEN.SortieCount [ld   (ix+0x17),0x00]
 	move.b	#0x01,d0                        	| [ld   a,0x01]
 	move.b	d0,ENABLE_ALIEN_ATTACK_SOUND                       	| set ENABLE_ALIEN_ATTACK_SOUND to 1. [ld   (0x41C2),a]
@@ -1907,13 +1909,13 @@ INFLIGHT_ALIEN_PACKS_BAGS:
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
 	move.b	d3,d0                           	| load A with INFLIGHT_ALIEN.IndexInSwarm [ld   a,e]
 	and.b	#0x70,d0                         	| keep the row start, remove the column number [and  0x70]
-	lea		l_1DD1(pc),a0                      	| [ld   hl,0x1DD1]
+	lea		ALIEN_PARAMS_TABLE(pc),a0                      	| [ld   hl,0x1DD1]
 	ror.b	#3,d0                            	| divide the row offset... [rrca]
 										| [rrca]
 										| .. by 8. [rrca]
 							| [ld   e,a]
-	and.w	#0xFF,d3							| Extend A into DE  [ld   d,0x00]
-	add.w	d3,a0                              	| HL = 0x1DD1 + (row number of alien /8)
+	and.w	#0xFF,d0							| Extend A into DE  [ld   d,0x00]
+	add.w	d0,a0                              	| HL = 0x1DD1 + (row number of alien /8)
 	move.b	(a0),d0                         	| [ld   a,(hl)]
 	move.b	d0,(Colour,a2)                    	| set INFLIGHT_ALIEN.Colour [ld   (ix+0x16),a]
 
@@ -1932,7 +1934,7 @@ l_0d39:
 	clr.b	(ArcTableLsb,a2)                        	| set INFLIGHT_ALIEN.ArcTableLsb [ld   (ix+0x13),0x00]
 	addq.b	#1,(StageOfLife,a2)                    	| set INFLIGHT_ALIEN.StageOfLife to INFLIGHT_ALIEN_FLIES_IN_ARC [inc  (ix+0x02)]
 
-	btst.b	#0,(ArcClockwise,a2)                    	| test INFLIGHT_ALIEN.ArcClockwise [bit  0,(ix+0x06)]
+	tst.b	(ArcClockwise,a2)                    	| test INFLIGHT_ALIEN.ArcClockwise [bit  0,(ix+0x06)]
 	jne	l_0d53                             	| if alien will be facing right when it breaks away from swarm, goto 0x0D53 [jr   nz,0x0D53]
 	move.b	#0x0C,(AnimationFrame,a2)                 	| set INFLIGHT_ALIEN.AnimationFrame [ld   (ix+0x05),0x0C]
 	rts                                    	| [ret]
@@ -1949,7 +1951,7 @@ l_0d58:
 	jeq	l_0d64                             	| no, goto 0x0D64 [jr   z,0x0D64]
 	addq.b	#1,d0                           	| increment escort count [inc  a]
 l_0d64:
-	btst.b	#0,(inflight_alien_size*2+IsActive,a2)                    	| test if we have an escort [bit  0,(ix+0x40)]
+	tst.b	(inflight_alien_size*2+IsActive,a2)                    	| test if we have an escort [bit  0,(ix+0x40)]
 	jeq	l_0d6b                             	| no, goto 0x0D6B [jr   z,0x0D6B]
 	addq.b	#1,d0                           	| increment escort count [inc  a]
 l_0d6b:
@@ -2884,9 +2886,9 @@ SET_INFLIGHT_ALIEN_START_POSITION:
 	and.b	#0x0F,d0                         	| compute column that alien is in [and  0x0F]
 	lsl.b	#4,d0   							| multiply by 16.. [rlca]*4
 	addq.b	#0x07,d0                        	| [add  a,0x07]
-	move.b	d0,d2                           	| [ld   c,a]
-	move.b	SWARM_SCROLL_VALUE+1,d0                       	| read SWARM_SCROLL_VALUE [ld   a,(0x420E)]
-	add.b	d2,d0                            	| [add  a,c]
+												| [ld   c,a]
+	add.b	SWARM_SCROLL_VALUE+1,d0            	| read SWARM_SCROLL_VALUE [ld   a,(0x420E)]
+												| [add  a,c]
 	move.b	d0,(inf_alien_Y,a2)                    	| set INFLIGHT_ALIEN.Y [ld   (ix+0x04),a]
 	rts                                    	| [ret]
 
@@ -6380,7 +6382,7 @@ l_135e:
 * Take the first slot that has clear IsActive and IsDying flags.
 * A = number of slots to scan
 	move.b	d0,d1                          	| save number of slots to scan in B [ld   b,a]
-	lea	INFLIGHT_ALIENS+0x391-0x2B0,a0    | point HL to last INFLIGHT_ALIEN.IsDying flag in INFLIGHT_ALIENS array [ld   hl,0x4391]
+	lea	INFLIGHT_ALIENS+IsDying+inflight_alien_size*7,a0    | point HL to last INFLIGHT_ALIEN.IsDying flag in INFLIGHT_ALIENS array [ld   hl,0x4391]
 	move.w	#-(inflight_alien_size-1),d3       	| load DE with -31, which is sizeof(INFLIGHT_ALIEN)-1 [ld   de,0xFFE1]
 l_1366:	
 	move.b	(a0),d0                         	| read INFLIGHT_ALIEN.IsDying flag [ld   a,(hl)]
@@ -6398,7 +6400,7 @@ l_136f:
 	move.l	a0,a2								| IX = HL
 	move.b	ALIENS_ATTACK_FROM_RIGHT_FLANK,d0                       	| read ALIENS_ATTACK_FROM_RIGHT_FLANK flag [ld   a,(0x4215)]
 	move.b	d0,(ArcClockwise,a2)                    	| update INFLIGHT_ALIEN.ArcClockwise flag [ld   (ix+0x06),a]
-	*tst.b	d0                               	| test if flag is set [and  a]
+	tst.b	d0                               	| test if flag is set [and  a]
 	jne	FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_RIGHT      	| if flag is set, goto FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_RIGHT [jr   nz,0x13AB]
 
 * If we get here, we want an alien to break off from the left flank of the swarm.
@@ -6421,7 +6423,7 @@ FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_LEFT:
 	sub.l	a1,a0
 	move.l	a0,d6		| word is okay
 	
-* HL now points to an entry in ALIEN_IN_COLUMN_FLAGS where we have an alien present.
+* HL now points to an entry in ALIEN_IN_COLUMN_FLAGS where we have an alien present (not true on 68000)
 * If we have flagships in the swarm, then only purple and blue aliens can be sent to attack by this routine.
 * If we have no flagships in the swarm, then any remaining red aliens are also considered. (See 0x13BD)
 * < D6: offset in ALIEN_IN_COLUMN_FLAGS (68k adaptation, as ALIEN_IN_COLUMN_FLAGS is aligned on 0x100 boundary on z80 code)
@@ -6441,7 +6443,7 @@ INIT_SCAN_FROM_PURPLE_ALIEN_ROW:
 	add.w	#0x50,d6                         	| effectively: HL = 0x4150 + (L & 0x0f) [add  a,0x50]
 												| HL (a0+d6.w) now points to slot for purple alien in ALIEN_SWARM_FLAGS  [ld l,a]
 	
-* HL/A0 now points to a slot in ALIEN_SWARM_FLAGS. D is a row counter.
+* HL/A0+D6.W now points to a slot in ALIEN_SWARM_FLAGS. D/D3 is a row counter.
 * If the slot is occupied, the occupying alien will be sent to attack the player.
 * If the slot is unoccupied, we'll scan the same column in the rows beneath until we find an occupied slot or we've done D rows.
 * If we find an alien, we'll send it to attack the player.
@@ -6515,7 +6517,9 @@ INIT_SCAN_FROM_RED_ALIEN_ROW:
 *
 
 WAKEUP_INFLIGHT_ALIEN:
+	move.b	#1,0x200
 	clr.b	(a0,d6.w)                      	| [ld   (hl),0x00]
+0:
 	move.b	d6,(IndexInSwarm,a2)                     	| set INFLIGHT_ALIEN.IndexInSwarm [ld   (ix+0x07),l]
 	move.b	#0x01,(IsActive,a2)                 	| set INFLIGHT_ALIEN.IsActive [ld   (ix+0x00),0x01]
 	clr.b	(StageOfLife,a2)                 	| set INFLIGHT_ALIEN.StageOfLife [ld   (ix+0x02),0x00]
@@ -6740,11 +6744,11 @@ l_1485:
 * Otherwise this routine exits.
 
 TRY_INIT_ESCORT_INFLIGHT_ALIEN:
-	btst.b	#0,(IsActive,a3)                    	| test INFLIGHT_ALIEN.IsActive [bit  0,(iy+0x00)]
+	tst.b	(IsActive,a3)                    	| test INFLIGHT_ALIEN.IsActive [bit  0,(iy+0x00)]
 	beq.b	0f
 	rts                                    	| return if flag is set [ret  nz]
 0:
-	btst.b	#0,(IsDying,a3)                    	| test INFLIGHT_ALIEN.IsDying [bit  0,(iy+0x01)]
+	tst.b	(IsDying,a3)                    	| test INFLIGHT_ALIEN.IsDying [bit  0,(iy+0x01)]
 	beq.b	0f
 	rts                                    	| return if flag is set [ret  nz]
 0:
@@ -7381,7 +7385,7 @@ COLOUR_ATTRIBUTE_TABLE_3:
 * ",".join("0x{}".format(x) for x in s.split())
 
 * Referenced by code @ 0x0D1D
-l_1DD1:
+ALIEN_PARAMS_TABLE:
 	.byte	0x00,0x00,0x00,0x00,0x04,0x01,0x04,0x02,0x04,0x01,0x03,0x03,0x02,0x02,0x01,0x02
 
 * address to print followed by text
