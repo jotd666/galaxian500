@@ -4870,7 +4870,7 @@ FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_RIGHT:
 13AB: 21 F3 41      ld   hl,0x41F3            | address of flag for rightmost column of aliens 
 13AE: 01 0A 00      ld   bc,0x000A            | 10 aliens maximum on a row  
 13B1: 3E 01         ld   a,0x01               | we are scanning for a value of 1, meaning "column occupied"
-13B3: ED B1         cpir                     | scan 0x41F3 up to 0x41F3 for value #0x01. 
+13B3: ED B1         cpir                     | scan 0x41F3 up to 0x41FC for value #0x01. 
 13B5: C0            ret  nz                  | if we have no aliens in the swarm - return
 13B6: E0            ret  po                  | if BC has overflowed, return
 

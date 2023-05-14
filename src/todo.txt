@@ -7,7 +7,7 @@ transcode:
   it seems that the alien positions are completely off
 - send corrected transcode to Scott
 - re-convert GENERATE_RANDOM_NUMBER
-- debug HANDLE_SINGLE_ALIEN_ATTACK
+- debug HANDLE_SINGLE_ALIEN_ATTACK; LEFT ok now RIGHT doesn't work
 
 amiga:
 

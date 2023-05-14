@@ -6398,7 +6398,7 @@ l_136f:
 	move.l	a0,a2								| IX = HL
 	move.b	ALIENS_ATTACK_FROM_RIGHT_FLANK,d0                       	| read ALIENS_ATTACK_FROM_RIGHT_FLANK flag [ld   a,(0x4215)]
 	move.b	d0,(ArcClockwise,a2)                    	| update INFLIGHT_ALIEN.ArcClockwise flag [ld   (ix+0x06),a]
-	tst.b	d0                               	| test if flag is set [and  a]
+	*tst.b	d0                               	| test if flag is set [and  a]
 	jne	FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_RIGHT      	| if flag is set, goto FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_RIGHT [jr   nz,0x13AB]
 
 * If we get here, we want an alien to break off from the left flank of the swarm.
@@ -6415,7 +6415,7 @@ FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_LEFT:
 	dbf		d1,1b
 	rts                                    	| if we have no aliens in the swarm (all flags are 0) - return [ret  nz]
 0:
-	move.b	#0x3F,d4
+	move.b	#0x3F,d4		| offset to add in SCAN_SPECIFIC_COLUMN_FOR_D_ROWS loop
 	* compute d6 (l) as the word offset from A0
 	lea	ALIEN_IN_COLUMN_FLAGS,a1
 	sub.l	a1,a0
@@ -6424,10 +6424,10 @@ FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_LEFT:
 * HL now points to an entry in ALIEN_IN_COLUMN_FLAGS where we have an alien present.
 * If we have flagships in the swarm, then only purple and blue aliens can be sent to attack by this routine.
 * If we have no flagships in the swarm, then any remaining red aliens are also considered. (See 0x13BD)
+* < D6: offset in ALIEN_IN_COLUMN_FLAGS (68k adaptation, as ALIEN_IN_COLUMN_FLAGS is aligned on 0x100 boundary on z80 code)
 TRY_FIND_ALIEN_TO_ATTACK:
-	move.b	HAVE_ALIENS_IN_TOP_ROW,d0                       	| load a with HAVE_ALIENS_IN_TOP_ROW flag [ld   a,(0x41EF)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	jcc	INIT_SCAN_FROM_RED_ALIEN_ROW                             	| if no flagships in swarm, goto INIT_SCAN_FROM_RED_ALIEN_ROW [jr   nc,0x13BD]
+	tst.b	HAVE_ALIENS_IN_TOP_ROW                       	| load a with HAVE_ALIENS_IN_TOP_ROW flag [ld   a,(0x41EF)]
+	jeq	INIT_SCAN_FROM_RED_ALIEN_ROW                             	| if no flagships in swarm, goto INIT_SCAN_FROM_RED_ALIEN_ROW [jr   nc,0x13BD]
 
 * we have flagships, so send a purple or blue alien.
 INIT_SCAN_FROM_PURPLE_ALIEN_ROW:
@@ -6439,7 +6439,7 @@ INIT_SCAN_FROM_PURPLE_ALIEN_ROW:
 	                           	| [ld   a,l]
 	and.w	#0x0F,d6                         	| A = index of column containing alien [and  0x0F]
 	add.w	#0x50,d6                         	| effectively: HL = 0x4150 + (L & 0x0f) [add  a,0x50]
-    add.w	d6,a0                            	| HL now points to slot for purple alien in ALIEN_SWARM_FLAGS  [ld l,a]
+												| HL (a0+d6.w) now points to slot for purple alien in ALIEN_SWARM_FLAGS  [ld l,a]
 	
 * HL/A0 now points to a slot in ALIEN_SWARM_FLAGS. D is a row counter.
 * If the slot is occupied, the occupying alien will be sent to attack the player.
@@ -6448,10 +6448,10 @@ INIT_SCAN_FROM_PURPLE_ALIEN_ROW:
 SCAN_SPECIFIC_COLUMN_FOR_D_ROWS:
 	move.b	d3,d1                           	| set B to number of rows to scan [ld   b,d]
 l_139b:
-	tst.b	(a0)                         	| test for presence of alien in ALIEN_SWARM_FLAGS [bit  0,(hl)]
+	tst.b	(a0,d6.w)                         	| test for presence of alien in ALIEN_SWARM_FLAGS [bit  0,(hl)]
 	jne	WAKEUP_INFLIGHT_ALIEN                             	| if there's an alien present, its "volunteered" to attack, goto 0x13CE [jr   nz,0x13CE]
 											| [ld   a,l]
-	sub.w	#0x10,a0                         	| sizeof(row in ALIEN_SWARM_FLAGS) [sub  0x10]
+	sub.w	#0x10,d6                         	| sizeof(row in ALIEN_SWARM_FLAGS) [sub  0x10]
 											| bump HL to point to alien in row beneath [ld   l,a]
 	subq.b	#1,d1                           	| [...]
 	jne	l_139b                             	| repeat until B==0 [djnz 0x139B]
@@ -6464,7 +6464,7 @@ l_139b:
 * Bump HL to point to the purple alien in the column to the right of the one we just scanned. We'll scan that column.
 	and.w	#0xFF,d0
 	add.b	d4,d0                             	| add 0X3F (or more) to A. [add  a,e]
-	add.w	d0,a0                               	| Now HL points to purple alien slot
+	add.w	d0,d6                               	| Now HL points to purple alien slot
 	subq.b	#1,d2                           	| decrement count of columns remaining that we *can* scan [dec  c]
 	jne	SCAN_SPECIFIC_COLUMN_FOR_D_ROWS                             	| if non-zero, repeat the column scan [jr   nz,0x139A]
 	rts                                    	| [ret]
@@ -6478,15 +6478,14 @@ FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_RIGHT:
 	move.w	#10-1,d1							| 10 aliens maximum on a row
 	move.b	#0x01,d0                        	| we are scanning for a value of 1, meaning "column occupied" [ld   a,0x01]
 1:
-	cmp.b	(a0),d0
-	beq.b	0f
-	addq.w	#1,a0							| scan 0x41FC down to 0x41F3 for value #0x01 [cpir]
+	cmp.b	(a0)+,d0			| scan 0x41F3 up to 0x41FC for value #0x01.  [cpir]
+	beq.b	0f		
 	dbf		d1,1b
 	rts                                    	| if we have no aliens in the swarm - return [ret  nz]
 0:
-
+	subq.w	#1,a0			| adjust L because CPDR will have incremented it one time too many  [dec l]
 * we've found an occupied column
-	move.b	#0x41,d4		| probably not useful, only for legacy/debug code
+	move.b	#0x41,d4		| offset to add
 	* compute d6 (l) as the word offset from A0
 	lea	ALIEN_IN_COLUMN_FLAGS,a1
 	sub.l	a1,a0
@@ -6502,7 +6501,7 @@ INIT_SCAN_FROM_RED_ALIEN_ROW:
 			                  	| [ld   a,l]
 	and.w	#0x0F,d6                         	| A = index of column [and  0x0F]
 	add.w	#0x60,d6                         	| effectively: HL = 0x4150 + (L & 0x0f) [add  a,0x60]
-	add.w	d6,a0                                	| HL now points to slot for red alien in ALIEN_SWARM_FLAGS
+	                                	| HL (a0+d6.w) now points to slot for red alien in ALIEN_SWARM_FLAGS
 	                           	| [ld   a,e]
 	add.b	#0x10,d4          | [add  a,0x10]
 								| [ld   e,a]
@@ -6511,12 +6510,12 @@ INIT_SCAN_FROM_RED_ALIEN_ROW:
 
 *
 * Expects:
-* HL = pointer to occupied entry in ALIEN_SWARM_FLAGS
+* HL (A0+D6.w) = pointer to occupied entry in ALIEN_SWARM_FLAGS
 * IX = pointer to vacant INFLIGHT_ALIEN structure
 *
 
 WAKEUP_INFLIGHT_ALIEN:
-	clr.b	(a0)                      	| [ld   (hl),0x00]
+	clr.b	(a0,d6.w)                      	| [ld   (hl),0x00]
 	move.b	d6,(IndexInSwarm,a2)                     	| set INFLIGHT_ALIEN.IndexInSwarm [ld   (ix+0x07),l]
 	move.b	#0x01,(IsActive,a2)                 	| set INFLIGHT_ALIEN.IsActive [ld   (ix+0x00),0x01]
 	clr.b	(StageOfLife,a2)                 	| set INFLIGHT_ALIEN.StageOfLife [ld   (ix+0x02),0x00]
