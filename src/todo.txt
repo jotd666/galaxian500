@@ -4,6 +4,7 @@ transcode:
 - stars LFSR API
 - some bullet positions look complete bogus / blink
 - alien attacking but animation frame oscillates between 2 frames
+- flagships attack but are lost forever when attacking. Only one red alien attacks!
 - send corrected transcode to Scott
 - re-convert GENERATE_RANDOM_NUMBER
 
