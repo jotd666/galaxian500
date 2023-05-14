@@ -6593,19 +6593,16 @@ l_1403:
 *
 
 HANDLE_FLAGSHIP_ATTACK:
-	move.b	HAVE_NO_ALIENS_IN_SWARM,d0                       	| read HAVE_NO_ALIENS_IN_SWARM flag [ld   a,(0x4220)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	bcc.b	0f
+	tst.b	HAVE_NO_ALIENS_IN_SWARM                       	| read HAVE_NO_ALIENS_IN_SWARM flag [ld   a,(0x4220)]
+	beq.b	0f
 	rts                                    	| return if no aliens in the swarm. [ret  c]
 0:
-	move.b	HAS_PLAYER_SPAWNED,d0                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	bcs.b	0f
+	tst.b	HAS_PLAYER_SPAWNED                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
+	bne.b	0f
 	rts                                    	| return if player has not spawned. [ret  nc]
 0:
-	move.b	CAN_FLAGSHIP_OR_RED_ALIENS_ATTACK,d0                       	| read CAN_FLAGSHIP_OR_RED_ALIENS_ATTACK [ld   a,(0x4229)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	bcs.b	0f
+	tst.b	CAN_FLAGSHIP_OR_RED_ALIENS_ATTACK                       	| read CAN_FLAGSHIP_OR_RED_ALIENS_ATTACK [ld   a,(0x4229)]
+	bne.b	0f
 	rts                                    	| return if flag is not set [ret  nc]
 0:
 	clr.b	CAN_FLAGSHIP_OR_RED_ALIENS_ATTACK                       	| reset CAN_FLAGSHIP_OR_RED_ALIENS_ATTACK flag [ld   (0x4229),a]
@@ -6613,9 +6610,9 @@ HANDLE_FLAGSHIP_ATTACK:
 * Test if the slot in INFLIGHT_ALIENS reserved for the flagship is in use. If so - do nothing.
 	lea		INFLIGHT_ALIENS+inflight_alien_size,a0
 	tst.b	(IsActive,a0)                      	| read from INFLIGHT_ALIENS[1] which is the 2nd array element [ld   hl,(0x42D0)]
-	beq.b	0f
+	bne.b	0f
 	tst.b	(IsDying,a0)                      	| read from INFLIGHT_ALIENS[1] which is the 2nd array element [ld   hl,(0x42D0)]
-	bne.b	1f
+	beq.b	1f
 0:	
 	rts                                    	| return if alien is active or dying - the slot for the flagship is in use. [ret  c]
 1:
@@ -6623,8 +6620,7 @@ HANDLE_FLAGSHIP_ATTACK:
 * from what side should the flagship/red aliens attack from?
 	move.b	ALIENS_ATTACK_FROM_RIGHT_FLANK,d0                       	| read ALIENS_ATTACK_FROM_RIGHT_FLANK flag [ld   a,(0x4215)]
 	move.b	d0,d2                          	| C is used to set INFLIGHT_ALIEN.ArcClockwise flag @ 0x1466 [ld   c,a]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	jcs	TRY_FIND_FLAGSHIP_OR_RED_ALIEN_TO_ATTACK_FROM_RIGHT_FLANK                             	| if attacking from right flank, jump to TRY_FIND_FLAGSHIP_OR_RED_ALIEN_TO_ATTACK_FROM_RIGHT_FLANK [jp   c,0x14BE]
+	jne	TRY_FIND_FLAGSHIP_OR_RED_ALIEN_TO_ATTACK_FROM_RIGHT_FLANK                             	| if attacking from right flank, jump to TRY_FIND_FLAGSHIP_OR_RED_ALIEN_TO_ATTACK_FROM_RIGHT_FLANK [jp   c,0x14BE]
 
 
 TRY_FIND_FLAGSHIP_OR_RED_ALIEN_TO_ATTACK_FROM_LEFT_FLANK:
@@ -6658,7 +6654,7 @@ l_143e:
 *
 
 TRY_INIT_INFLIGHT_ALIEN:
-	lea	INFLIGHT_ALIENS+0x390-0x2B0,a2                      	| address of very last INFLIGHT_ALIEN record in INFLIGHT_ALIENS array [ld   ix,0x4390]
+	lea	INFLIGHT_ALIENS+7*inflight_alien_size,a2     	| address of very last INFLIGHT_ALIEN record in INFLIGHT_ALIENS array [ld   ix,0x4390]
 	move.w	#inflight_alien_size,d3                      	| -32 decimal, which is -sizeof(INFLIGHT_ALIEN) [ld   de,0xFFE0]
 	move.b	#0x04,d1                        	| [ld   b,0x04]
 l_144f:
@@ -6956,24 +6952,20 @@ l_1544:
 *
 
 UPDATE_ATTACK_COUNTERS:
-	move.b	HAS_PLAYER_SPAWNED,d0                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	bcs.b	0f
+	tst.b	HAS_PLAYER_SPAWNED                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
+	bne.b	0f
 	rts                                    	| return if player has not spawned [ret  nc]
 0:
-	move.b	HAVE_ALIENS_IN_TOP_ROW,d0                       	| read HAVE_ALIENS_IN_TOP_ROW [ld   a,(0x41EF)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	bcs.b	0f
+	tst.b	HAVE_ALIENS_IN_TOP_ROW                       	| read HAVE_ALIENS_IN_TOP_ROW [ld   a,(0x41EF)]
+	bne.b	0f
 	rts                                    	| return if we have no flagships [ret  nc]
 0:
-	move.b	IS_FLAGSHIP_HIT,d0                       	| read IS_FLAGSHIP_HIT [ld   a,(0x422B)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	bcc.b	0f
+	tst.b	IS_FLAGSHIP_HIT                       	| read IS_FLAGSHIP_HIT [ld   a,(0x422B)]
+	beq.b	0f
 	rts                                    	| return if a flagship has been hit [ret  c]
 0:
-	move.b	IS_GAME_IN_PLAY,d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	jcc	l_15a7                             	| if game is not in play, goto 0x15A7 [jr   nc,0x15A7]
+	tst.b	IS_GAME_IN_PLAY                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	jeq	l_15a7                             	| if game is not in play, goto 0x15A7 [jr   nc,0x15A7]
 
 * wait until FLAGSHIP_ATTACK_MASTER_COUNTER_1 counts down to zero.
 	lea	FLAGSHIP_ATTACK_MASTER_COUNTER_1,a0                      	| load HL with address of FLAGSHIP_ATTACK_MASTER_COUNTER_1 [ld   hl,0x4245]
@@ -7083,11 +7075,9 @@ CHECK_IF_FLAGSHIP_CAN_ATTACK:
 	bne.b	0f
 	rts                                    	| return if player has not spawned [ret  nc]
 0:
-
 * check if we have any flagship
-	move.b	HAVE_ALIENS_IN_TOP_ROW,d0                       	| read HAVE_ALIENS_IN_TOP_ROW flag [ld   a,(0x41EF)]
-	ror.b	#1,d0                           	| move flag bit into carry [rrca]
-	bcs.b	0f
+	tst.b	HAVE_ALIENS_IN_TOP_ROW                       	| read HAVE_ALIENS_IN_TOP_ROW flag [ld   a,(0x41EF)]
+	bne.b	0f
 	rts                                    	| return if no flagships [ret  nc]
 0:
 
