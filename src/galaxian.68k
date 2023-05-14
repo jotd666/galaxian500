@@ -5054,7 +5054,7 @@ l_2228:
 
 
 PRINT_TEXT_COMMAND:
-*	cmp.b	#10,d0
+*	cmp.b	#8,d0
 *	bne.b	0f
 *	bsr		osd_break
 *0:
@@ -5786,9 +5786,11 @@ l_0ac6:
     not.b   d0                                     	| A = (255 - A)
 	move.b	d0,d2                           	| [ld   c,a]
 	move.b	d1,d0                           	| get index of enemy bullet we are processing into A [ld   a,b]
-	cmp.b	#0x05,d0                         	| are we processing bullet #5 or more? [cp   0x05]
-	jcs	l_0adf                             	| no, goto 0x0ADF [jr   c,0x0ADF]
-	addq.b	#1,d2                           	| adjust Y coordinate [inc  c]
+	* JOTD: disabled that "feature" as we"d have to make that up on the host side
+	* since we're not really emulating the ROM but transcoding it, just fix it here
+*	cmp.b	#0x05,d0                         	| are we processing bullet #5 or more? [cp   0x05]
+*	jcs	l_0adf                             	| no, goto 0x0ADF [jr   c,0x0ADF]
+*	addq.b	#1,d2                           	| adjust Y coordinate [inc  c]
 l_0adf:
 	move.b	d2,(0x00,a3)                    	| write to OBJRAM_BACK_BUF_BULLETS sprite Y coordinate [ld   (iy+0x00),c]
 
@@ -7425,7 +7427,9 @@ TXT_CONVOY_CHARGER:
 	.align	2
 TXT___SCORE_ADVANCE_TABLE__:
 	.word	0x534F
-	.ascii	"[@SCORE@ADVANCE@TABLE@[?"
+	.byte	0x5B		| dash
+	.ascii	"@SCORE@ADVANCE@TABLE@"
+	.byte	0x5B,0x3F
 	.align	2
 TXT_MISSION__DESTROY_ALIENS:
 	.word	0x5369

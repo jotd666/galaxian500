@@ -16,6 +16,8 @@ NO68020 = 1
 
 SCREEN_ADDRESS = 0x5000
 
+SPRITE_X_OFFSET = 8
+SPRITE_Y_OFFSET = 1
 
 SCORE_FILE_SIZE = 16*5
 BOB_16X16_PLANE_SIZE = 4*16
@@ -950,11 +952,12 @@ osd_update_graphics:
 
 	.macro	CONVERT_BULLET_Y
 	neg.b	d1
-	add.w	#256-6,d1	
+	add.w	#256-6,d1
+	and.w	#0xFF,d1
 	.endm
 	.macro	CONVERT_BULLET_Y_MUL
 	CONVERT_BULLET_Y
-	add.b	d1,d1
+	add.w	d1,d1
 	move.w	(a2,d1.w),d1	| Y times 40
 	.endm
 	
@@ -981,6 +984,7 @@ draw_enemy_bullets:
 	cmp.b	#0xFE,d1
 	beq.b	2f
 	CONVERT_BULLET_Y_MUL
+	addq.w	#SPRITE_X_OFFSET,d0
 	move.w	d0,d2
 	lsr.w	#3,d2		| X in bytes
 	and.b	#7,d0		| pixel shift
@@ -1064,18 +1068,20 @@ delete_old_hw_sprites:
 * < a4: backup previous data (A4 is updated to previous bullets on exit)
 draw_sprites:
 	movem.l	a2-a3,-(a7)
-	moveq	#0,d3
 	moveq	#0,d6
 	moveq	#0,d5
-	move.l	a0,a2
+	* start by the end, sprite 0 has max priority, draw it last
+	moveq	#NB_SPRITES_TOTAL-1,d3
+	lea		(4*NB_SPRITES_TOTAL,a0),a2
+	lea		(4*NB_SPRITES_TOTAL,a4),a4
 2:
 	* d0 and d1 are changed at each loop
 	* make sure that their bits 8-15 are cleared
 	moveq	#0,d0
 	moveq	#0,d1
 	* get sprite x,y,clut,index
-	move.l	(a2)+,d4
-	move.l	d4,(a4)+		| save for next time
+	move.l	-(a2),d4
+	move.l	d4,-(a4)		| save for next time
 	move.l	d4,d7
 	and.l	#0xFF0000FF,d7
 	cmp.l	#0xF80000F8,d7	| X=Y=0xF8: means disabled
@@ -1105,6 +1111,12 @@ draw_sprites:
 	addq.w	#4,a1
 3:
 	move.l	(a1),a0		| BOB data
+	.ifne	SPRITE_X_OFFSET
+	addq.w	#SPRITE_X_OFFSET,d0
+	.endif
+	.ifne	SPRITE_Y_OFFSET
+	addq.w	#SPRITE_Y_OFFSET,d0
+	.endif
 	jbsr		blit_16x16_bob
 	jra			11f
 4:
@@ -1186,6 +1198,12 @@ draw_sprites:
 	move.l	a0,(a5)
 
 	* set sprite X,Y
+	.ifne	SPRITE_X_OFFSET
+	addq.w	#SPRITE_X_OFFSET,d0
+	.endif
+	.ifne	SPRITE_Y_OFFSET
+	addq.w	#SPRITE_Y_OFFSET,d0
+	.endif
 	bsr		store_sprite_pos_16
 	move.l	d0,(a0)
 	
@@ -1200,10 +1218,9 @@ draw_sprites:
 	move.w	d2,(2,a5)
 
 11:
-	addq.w	#1,d3
-	cmp.w	#NB_SPRITES_TOTAL,d3
-	jne	2b
-	move.l	a2,a0
+	dbf	d3,2b
+	lea		(4*NB_SPRITES_TOTAL,a2),a0		| restore A0 pointing to the end
+	lea		(4*NB_SPRITES_TOTAL,a4),a4	
 	movem.l	(a7)+,a2-a3
 	rts
 
@@ -1243,6 +1260,7 @@ delete_enemy_bullets:
 	cmp.b	#0xFE,d1
 	beq.b	2f
 	CONVERT_BULLET_Y_MUL
+	addq.w	#SPRITE_X_OFFSET,d0	
 	lsr.w	#3,d0
 	lea		(a3,d0.w),a6
 	lea		(a6,d1.w),a6
@@ -1286,6 +1304,12 @@ delete_sprites:
     lea _custom,a5
 	move.l	fg_drawed_screen_ptr(pc),a1
 	moveq	#3,d3
+	.ifne	SPRITE_X_OFFSET
+	addq.w	#SPRITE_X_OFFSET,d0
+	.endif
+	.ifne	SPRITE_Y_OFFSET
+	addq.w	#SPRITE_Y_OFFSET,d0
+	.endif
 	move.w	d5,-(a7)
 	bsr		clear_planes_any_blitter_internal
 	move.w	(a7)+,d5
@@ -1348,7 +1372,6 @@ osd_w_bg_videoram:
 	cmp.w	#0x800,d6
 	bcs.b	1f
 	* should not happen
-	bsr		osd_break
 	move.w	#0,d6
 1:
 	lea		bg_videoram,a1
@@ -1491,7 +1514,7 @@ update_bg_tile:
 	* empty character is passed
 	cmp.b	#0x10,d0	| empty character
 	jeq	1f
-	cmp.b	#0x2B,d0	| empty characters (0x2C-0x2F)
+	cmp.b	#0x2C,d0	| empty characters (0x2C-0x2F)
 	jcs	0f
 	cmp.b	#0x30,d0
 	jcs	1f

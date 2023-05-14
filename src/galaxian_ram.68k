@@ -331,6 +331,7 @@ COLUMN_SCROLL_ATTR_BACKBUF_PTR:      |  $40B1         | pointer to scroll attrib
 COLUMN_SCROLL_NEXT_CHAR_PTR:         |  $40B3         | pointer to ordinal of next character to scroll on
 	ds.l	1
 * this is a value 0x5000-0x5400 (character RAM)
+	.align	2
 COLUMN_SCROLL_CHAR_RAM_PTR:          |  $40B5         | pointer to character RAM where next character will be plotted. 
 	ds.w	1
 
@@ -502,6 +503,7 @@ HAVE_ALIENS_IN_3RD_ROW:              |  $41ED         ; flag set to 1 if there a
 HAVE_ALIENS_IN_2ND_ROW:              |  $41EE         ; flag set to 1 if there are any aliens in the 2nd row (red aliens)
 	ds.b	0x01
 HAVE_ALIENS_IN_TOP_ROW:              |  $41EF         ; flag set to 1 if there are any aliens in the top row (flagships)
+	ds.b	0x01
 
 
 * ALIEN_IN_COLUMN_FLAGS is an array 16 bytes in size. Each byte contains a bit flag specifying if there are any aliens in a specific column. 
@@ -543,7 +545,6 @@ HAVE_ALIENS_IN_TOP_ROW:              |  $41EF         ; flag set to 1 if there a
 * 0 is also written to the flags when the only alien in a column breaks off from the swarm to attack the player.
 * 
                                            
-	ds.b	0x01
 ALIEN_IN_COLUMN_FLAGS:               |  $41F0          
 	ds.b	0x0f
 ALIEN_IN_COLUMN_FLAGS_END:           |  $41FF     
@@ -575,6 +576,7 @@ IS_PLAYER_BULLET_DONE:               |  $420B         | set 1 when player bullet
 	ds.b	0x02
 SWARM_DIRECTION:                     |  $420D         | Direction of swarm (really? ;) )  0 = Moving left, 1 = moving right . See $0945              
 	ds.b	0x01
+	.align	2
 SWARM_SCROLL_VALUE:                  |  $420E         | 16 bit value. Used to set the scroll values for the character columns containing the swarm.                            
 	ds.b	0x02
 SWARM_SCROLL_MAX_EXTENTS:            |  $4210         | Used to limit the scrolling of the swarm so no alien goes "off screen". See $09CE 
