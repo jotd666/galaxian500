@@ -9,7 +9,6 @@ transcode:
 amiga:
 
 - player ship explosion sound sometimes not working (also kills other sounds)
-- flagship sound not playing
 - flagship kill score displayed wrong (hw sprite?) check if score is correct??
 - shift hw sprites too? (explosions?)
 - game should run at 60Hz
@@ -23,7 +22,10 @@ amiga:
   * credit != 0: fire to start game
   * same for second player
 - joypad controls: insert coin/start/play for pause
-- emulate stars with sprites (mockup in python first)
+- stars as sprites:
+  * priority?
+  * blink/change from time to time
+  * try to display after PAL limit
 
 
 To rip the sounds:

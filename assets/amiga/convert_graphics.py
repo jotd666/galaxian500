@@ -18,7 +18,7 @@ black = (0,0,0)
 # brown only used for flagship
 brown = (222,71,0)
 # white used for shots
-white = (222,222,247)
+white = (239, 239, 151)
 # cyan for aliens & ship
 cyan = (0,222, 247)
 # for ship & flags
@@ -37,7 +37,7 @@ base_palette = [black,
 red,
 light_blue,
 deep_blue,
-blue,    # blue
+blue,
 yellow,
 violet
 ]

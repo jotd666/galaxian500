@@ -27,7 +27,7 @@ sound_dict = {
 "INTRO_SND"               :{"index":2,"channel":1,"sample_rate":lq_sample_rate},
 "ALIEN_SHOT_SND"               :{"index":3,"channel":2,"sample_rate":hq_sample_rate},
 "FLAGSHIP_SHOT_SND"               :{"index":4,"channel":0,"sample_rate":hq_sample_rate,"priority":10},
-"PLAYER_SHOT_SND"              :{"index":4,"channel":3,"sample_rate":lq_sample_rate,"priority":10}
+"PLAYER_SHOT_SND"              :{"index":5,"channel":3,"sample_rate":lq_sample_rate,"priority":10}
 }
 
 max_sound = max(x["index"] for x in sound_dict.values())+1

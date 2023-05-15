@@ -777,6 +777,8 @@ platform_init:
 	bsr		set_fg_bitplanes
 	bsr		set_bg_bitplanes
 
+	* stars
+	bsr		show_stars
 	
 	* load palette
 	bsr		load_palette_in_copperlist
@@ -2149,6 +2151,61 @@ blit_planes_any_internal_cookie_cut:
     movem.l (a7)+,d0-d7/a0-a6
     rts
 
+NB_STAR_LINES = 28
+
+show_stars:
+	lea	color_row_0,a1
+	lea	stars_palette_rgb4,a2
+	
+	move.w	#NB_STAR_LINES-1,d7
+	clr.w	d2
+2:
+	add.w	#copper_stars_offset,a1
+	moveq	#7,d6
+3:
+4:
+	* pick random x
+	bsr		random
+	btst	#15,d0
+	beq.b	1f	| 50% chance of displaying a star
+	and.w	#0xFF,d0
+	cmp.w	#240,d0		| empiric
+	bcc.b	4b
+	add.w	#6*8,d0	| add 48 offset because of screen centering
+	move.w	#100,d1	| doesn't matter
+	bsr		store_sprite_pos_16
+	* store color
+	move.w	(a2,d2.w),(2,a1)		| change offset if copper sprite struct changes
+	addq.w	#2,d2
+	cmp.w	#128,d2		| 64 colors?
+	bne.b	0f
+	clr.w	d2			| wrap
+0:
+
+	* D0 is the sprite pos/control word
+	move.w	d0,6(a1)		| change offset if struct changes
+	swap	d0
+	move.w	d0,10(a1)		| change offset if struct changes
+
+	add.w	#32,a1			| next row for sprite
+	dbf		d6,3b
+	dbf		d7,2b
+	rts
+1:
+	clr.l	d0
+	bra.b	0b
+	
+random:
+    move.l  previous_random(pc),d0
+	* EAB simple random generator
+    * thanks meynaf
+    mulu #0xa57b,d0
+    addi.l #0xbb40e62d,d0
+    rol.l #6,d0
+    move.l  d0,previous_random
+    rts
+previous_random:
+	.long	0
 	
 	MUL_TABLE	NB_BYTES_PER_ROW,256
 
@@ -2266,13 +2323,18 @@ palette:
 irq_cnt:											ds.w		1
 		.data
 
+copper_stars_offset = 16
+copper_row_size = copper_stars_offset+32*8
+
 * 32 rows = 256 pixels
 * table of the colors for fg tiles in the copperlist
 	.set	row_offset,0
 bg_color_table:
 	.rept	29
 	.long	color_row_0+4+row_offset
-	.set	row_offset,row_offset+16
+	* warning: this offset increase depends on what's in color_row_0
+	* 16=4 colors to change, 32 bytes per star pattern * 8 patterns per row
+	.set	row_offset,row_offset+copper_row_size
 	.endr
 	.long	color_row_30
 	.set	row_offset,0
@@ -2355,6 +2417,8 @@ player_shot_sprite:
 	.endr
 	.long	0
 	
+STAR_SPRITE_INDEX = 7
+
 	* main copperlist
 copperlist:
 fg_bitplanes:
@@ -2394,37 +2458,71 @@ end_color_copper:
    * dynamic colors for fg tile color each 8 lines
 	.set    beampos,0x1C01
 	.set	start_color,color
+	.word	beampos,0xFFFE
 color_row_0:
-	.rept	29
-	dc.w	beampos,0xFFFE
-	dc.w	start_color+2,0 
-	dc.w	start_color+4,0 
-	dc.w	start_color+6,0   
-	.set	beampos,beampos+0x800
+	.rept	28
+	* set 4 colors for that 8-high row: 16 bytes
+	.word	start_color+2,0 	| TODO remove this
+	.word	start_color+2,0 
+	.word	start_color+4,0 
+	.word	start_color+6,0   
+	* set sprite slots for stars: 32*8 bytes
+	.rept	8
+    * we use sprite #7 (last) for the stars, multiplexing it
+	.word	color+(STAR_SPRITE_INDEX/2)*8+34,0xF00	   | 4
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_ctl,0   | 8
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_pos,0   | 12
+	* sprite pattern
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_dataa,0x8000	| 16
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_dataB,0x0000	| 20
+	.set	beampos,beampos+0x100
+	.word	beampos,0xFFFE              | 24
+    .word    spr+sd_SIZEOF*7+sd_dataa,0	| 28
+    .word    spr+sd_SIZEOF*7+sd_dataB,0	| 32	
 	.endr
+	.endr
+color_row_28:
+	.word	start_color+2,0 
+	.word	start_color+2,0 
+	.word	start_color+4,0 
+	.word	start_color+6,0   
+	.rept	3
+    * we use sprite #7 (last) for the stars, multiplexing it
+	.word	color+(STAR_SPRITE_INDEX/2)*8+34,0xF00	   | 4
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_ctl,0   | 8
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_pos,0   | 12
+	* sprite pattern
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_dataa,0x8000	| 16
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_dataB,0x0000	| 20
+	.set	beampos,beampos+0x100
+	.word	beampos,0xFFFE              | 24
+    .word    spr+sd_SIZEOF*7+sd_dataa,0	| 28
+    .word    spr+sd_SIZEOF*7+sd_dataB,0	| 32	
+	.endr
+
 	* pal limit
-    dc.w  0xFFDF,0xFFFE       | PAL wait (should be 0xFFDF but probably fmode=3 changes it)
-    dc.w  0x0401,0xFFFE
+    .word  0xFFDF,0xFFFE       | PAL wait (should be 0xFFDF but probably fmode=3 changes it)
+    .word  0x0401,0xFFFE
 	
 color_row_30:
-	dc.w	start_color+2,0 
-	dc.w	start_color+4,0 
-	dc.w	start_color+6,0   
-    dc.w  0x0C01,0xFFFE           
+	.word	start_color+2,0 
+	.word	start_color+4,0 
+	.word	start_color+6,0   
+    .word  0x0C01,0xFFFE           
 	.set    testcol,0xF0
 	.set    beampos,0x1401
 	
 color_row_30_plus:
 	.rept	4
-	dc.w	color+2,0 
-	dc.w	color+4,0 
-	dc.w	color+6,0   
-	dc.w	beampos,0xFFFE
+	.word	color+2,0 
+	.word	color+4,0 
+	.word	color+6,0   
+	.word	beampos,0xFFFE
 	.set	beampos,beampos+0x800
 	.endr
- 	dc.w	beampos+0x400,0xFFFE   | wait before interrupt, avoid losing last bobs lines
-    dc.w	 intreq,0x8010
-    dc.l    -2					
+ 	.word	beampos+0x400,0xFFFE   | wait before interrupt, avoid losing last bobs lines
+    .word	 intreq,0x8010
+    .long    -2					
 	
 
 	* aligning on 8 bytes so .align will work
