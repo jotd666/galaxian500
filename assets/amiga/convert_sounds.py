@@ -27,7 +27,9 @@ sound_dict = {
 "INTRO_SND"               :{"index":2,"channel":1,"sample_rate":lq_sample_rate},
 "ALIEN_SHOT_SND"               :{"index":3,"channel":2,"sample_rate":hq_sample_rate},
 "FLAGSHIP_SHOT_SND"               :{"index":4,"channel":0,"sample_rate":hq_sample_rate,"priority":10},
-"PLAYER_SHOT_SND"              :{"index":5,"channel":3,"sample_rate":lq_sample_rate,"priority":10}
+"PLAYER_SHOT_SND"              :{"index":5,"channel":3,"sample_rate":lq_sample_rate,"priority":10},
+"ATTACK_END_SND"              :{"index":6,"channel":1,"sample_rate":hq_sample_rate},
+"SWARM_1_SND"              :{"index":7,"channel":0,"sample_rate":hq_sample_rate}
 }
 
 max_sound = max(x["index"] for x in sound_dict.values())+1
@@ -104,8 +106,9 @@ with open(sndfile,"w") as fst,open(outfile,"w") as fw:
         with open(raw_file,"rb") as f:
             contents = f.read()
 
-        # compute max amplitude so we can feed the sound chip with a amped sound sample
+        # compute max amplitude so we can feed the sound chip with an amped sound sample
         # and reduce the replay volume. this gives better sound quality than replaying at max volume
+        # (thanks no9 for the tip!)
         signed_data = [x if x < 128 else x-256 for x in contents]
         maxsigned = max(signed_data)
         minsigned = min(signed_data)
@@ -123,8 +126,8 @@ with open(sndfile,"w") as fst,open(outfile,"w") as fw:
         if signed_contents[0] != b'\x00' and signed_contents[1] != b'\x00':
             # add zeroes
             signed_contents = struct.pack(">H",0) + signed_contents
-        with open(raw_file,"rb") as f:
-            contents = f.read().rstrip(b"\x00")
+
+        contents = signed_contents
         # align on 16-bit
         if len(contents)%2:
             contents += b'\x00'
