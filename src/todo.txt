@@ -1,6 +1,6 @@
 transcode:
 - swarm sound loop
-- alien attacking but animation frame sometimes oscillates between 2 frames
+- alien attacking but animation frame sometimes oscillates between 2 frames (CALCULATE_TANGENT issue in CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME ?)
 - at the end of the level (not a lot of aliens), aliens joining swarm seems bogus
 - no swarm: alien still joins non-existing swarm for a little while before attacking
 - send corrected transcode to Scott
@@ -15,7 +15,6 @@ amiga:
 - game should run at 60Hz
 - support more dip switches (CLI but should be 1.3 compliant eeek & whdload)
 - when to play attack sound?
-- extra life sound: implement
 - implement cheat/debug key: stop aliens from attacking
 - if not fire first pressed & game not playing
   * credit 0: fire = insert coin
@@ -25,7 +24,8 @@ amiga:
 - stars as sprites:
   * priority?
   * blink/change from time to time
-  * try to display after PAL limit
+  * try to display after PAL limit: ok but namco color is trashed: end of copperlist is buggy
+  * scrolling: working but with glitches
 
 
 To rip the sounds:

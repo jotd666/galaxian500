@@ -28,6 +28,7 @@
     .equ  ALIEN_SHOT_SND,      0x03
     .equ  FLAGSHIP_SHOT_SND,      0x04
     .equ  PLAYER_SHOT_SND,      0x05
+    .equ  EXTRA_LIFE_SND,      0x08
 
 
     

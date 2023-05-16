@@ -534,6 +534,8 @@ HANDLE_EXTRA_LIFE_SOUND:
 	             	| store 0 in PLAY_EXTRA_LIFE_SOUND and 0x80 in EXTRA_LIFE_SOUND_COUNTER [ld   hl,0x8000]
 	clr.b	PLAY_EXTRA_LIFE_SOUND                       	| [ld   (0x41C7),hl]
 	move.b	#0x80,EXTRA_LIFE_SOUND_COUNTER                       	| [ld   (0x41C7),hl]
+	move.w	#EXTRA_LIFE_SND,d0
+	jra		osd_sound_start
 	rts                                    	| [ret]
 
 * play the extra life sound
@@ -699,6 +701,7 @@ GENERATE_RANDOM_NUMBER:
 * A (d0) = distance
 * D (d3) = X coordinate
 *
+* Returns: A (d0), C (d2)
 *
 * we have to heavily adapt the algorithm as it's relying on carry
 * and use rl. Problem is CMP only sets C bit and not X so ROXL can't
@@ -5975,7 +5978,7 @@ l_0bb4:
 * Calculate the animation frame that makes an attacking alien "look" directly at the player.
 *
 * Expects:
-* IX = pointer to INFLIGHT_ALIEN structure with valid X and Y fields.
+* IX (A2) = pointer to INFLIGHT_ALIEN structure with valid X and Y fields.
 *
 * Returns:
 *  INFLIGHT_ALIEN.AnimationFrame is updated
@@ -5983,7 +5986,7 @@ l_0bb4:
 
 CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME:
 	move.b	#0xF0,d0                        	| [ld   a,0xF0]
-	sub.b	(0x03,a2),d0                     	| subtract from INFLIGHT_ALIEN.X [sub  (ix+0x03)]
+	sub.b	(inf_alien_X,a2),d0         	| subtract from INFLIGHT_ALIEN.X [sub  (ix+0x03)]
 	move.b	d0,d3			| CALCULATE_TANGENT parameter
 	move.b	PLAYER_Y,d0                       	| read PLAYER_Y [ld   a,(0x4202)]
 	sub.b	(inf_alien_Y,a2),d0                     	| subtract from INFLIGHT_ALIEN.Y [sub  (ix+0x04)]
