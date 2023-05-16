@@ -24,6 +24,11 @@ BOB_16X16_PLANE_SIZE = 4*16
 
 SPRITE_LIFETIME = 2
 
+copper_stars_offset = 12
+copper_row_size = 32
+copper_8x8_row_size = copper_stars_offset+copper_row_size*8
+
+
 	.ifdef	RELEASE
 OPT_ENABLE_PROFILING = 0
 OPT_ENABLE_LOGGING = 0
@@ -2151,17 +2156,22 @@ blit_planes_any_internal_cookie_cut:
     movem.l (a7)+,d0-d7/a0-a6
     rts
 
-NB_STAR_LINES = 28
+NB_STAR_LINES = 34
 
 show_stars:
-	lea	color_row_0,a1
+	lea	bg_color_table,a3
 	lea	stars_palette_rgb4,a2
 	
-	move.w	#NB_STAR_LINES-1,d7
-	clr.w	d2
+	clr.w	d7		| 8-row counter
+	clr.w	d2		| palette index
 2:
+	* get address for the next 8 rows
+	move.l	(a3)+,a1
 	add.w	#copper_stars_offset,a1
 	moveq	#7,d6
+	cmp.w	#28,d7
+	bne.b	3f
+	moveq	#3,d6		| special row
 3:
 4:
 	* pick random x
@@ -2183,13 +2193,15 @@ show_stars:
 0:
 
 	* D0 is the sprite pos/control word
-	move.w	d0,6(a1)		| change offset if struct changes
+	move.w	d0,(6,a1)		| change offset if struct changes
 	swap	d0
-	move.w	d0,10(a1)		| change offset if struct changes
+	move.w	d0,(10,a1)		| change offset if struct changes
 
-	add.w	#32,a1			| next row for sprite
+	add.w	#32,a1
 	dbf		d6,3b
-	dbf		d7,2b
+	addq.w	#1,d7
+	cmp.w	#NB_STAR_LINES,d7
+	bne.b	2b
 	rts
 1:
 	clr.l	d0
@@ -2323,8 +2335,6 @@ palette:
 irq_cnt:											ds.w		1
 		.data
 
-copper_stars_offset = 12
-copper_row_size = copper_stars_offset+32*8
 
 * 32 rows = 256 pixels
 * table of the colors for fg tiles in the copperlist
@@ -2334,13 +2344,14 @@ bg_color_table:
 	.long	color_row_0+row_offset
 	* warning: this offset increase depends on what's in color_row_0
 	* 16=4 colors to change, 32 bytes per star pattern * 8 patterns per row
-	.set	row_offset,row_offset+copper_row_size
+	.set	row_offset,row_offset+copper_8x8_row_size
 	.endr
+	.long	color_row_28
 	.long	color_row_30
 	.set	row_offset,0
 	.rept	6
 	.long	color_row_30_plus+row_offset
-	.set	row_offset,row_offset+16
+	.set	row_offset,row_offset+copper_8x8_row_size
 	.endr
 
 		.bsschip
@@ -2419,6 +2430,20 @@ player_shot_sprite:
 	
 STAR_SPRITE_INDEX = 7
 
+	.macro STAR_COPPER_ROW
+    * we use sprite #7 (last) for the stars, multiplexing it
+	.word	color+(STAR_SPRITE_INDEX/2)*8+34,0xF00	   | 4
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_ctl,0   | 8
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_pos,0   | 12
+	* sprite pattern
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_dataa,0x8000	| 16
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_dataB,0x0000	| 20
+	.word	beampos,0xFFFE              | 24
+    .word    spr+sd_SIZEOF*7+sd_dataa,0	| 28
+    .word    spr+sd_SIZEOF*7+sd_dataB,0	| 32	
+	
+	.endm
+	
 	* main copperlist
 copperlist:
 fg_bitplanes:
@@ -2467,17 +2492,8 @@ color_row_0:
 	.word	start_color+6,0   
 	* set sprite slots for stars: 32*8 bytes
 	.rept	8
-    * we use sprite #7 (last) for the stars, multiplexing it
-	.word	color+(STAR_SPRITE_INDEX/2)*8+34,0xF00	   | 4
-    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_ctl,0   | 8
-    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_pos,0   | 12
-	* sprite pattern
-    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_dataa,0x8000	| 16
-    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_dataB,0x0000	| 20
 	.set	beampos,beampos+0x100
-	.word	beampos,0xFFFE              | 24
-    .word    spr+sd_SIZEOF*7+sd_dataa,0	| 28
-    .word    spr+sd_SIZEOF*7+sd_dataB,0	| 32	
+	STAR_COPPER_ROW
 	.endr
 	.endr
 color_row_28:
@@ -2485,39 +2501,39 @@ color_row_28:
 	.word	start_color+4,0 
 	.word	start_color+6,0   
 	.rept	3
-    * we use sprite #7 (last) for the stars, multiplexing it
-	.word	color+(STAR_SPRITE_INDEX/2)*8+34,0xF00	   | 4
-    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_ctl,0   | 8
-    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_pos,0   | 12
-	* sprite pattern
-    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_dataa,0x8000	| 16
-    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_dataB,0x0000	| 20
 	.set	beampos,beampos+0x100
-	.word	beampos,0xFFFE              | 24
-    .word    spr+sd_SIZEOF*7+sd_dataa,0	| 28
-    .word    spr+sd_SIZEOF*7+sd_dataB,0	| 32	
+	STAR_COPPER_ROW
 	.endr
 
 	* pal limit
     .word  0xFFDF,0xFFFE       | PAL wait (should be 0xFFDF but probably fmode=3 changes it)
     .word  0x0401,0xFFFE
+
+	.set    beampos,0x0401
+    .word   beampos,0xFFFE	
 	
 color_row_30:
 	.word	start_color+2,0 
 	.word	start_color+4,0 
-	.word	start_color+6,0   
-    .word  0x0C01,0xFFFE           
-	.set    testcol,0xF0
+	.word	start_color+6,0
+	.rept	8
+	.set	beampos,beampos+0x100
+	STAR_COPPER_ROW
+	.endr
+	
 	.set    beampos,0x1401
 	
 color_row_30_plus:
 	.rept	4
-	.word	color+2,0 
-	.word	color+4,0 
-	.word	color+6,0   
-	.word	beampos,0xFFFE
-	.set	beampos,beampos+0x800
+	.word	start_color+2,0 
+	.word	start_color+4,0 
+	.word	start_color+6,0   
+	.rept	8
+	.set	beampos,beampos+0x100
+	STAR_COPPER_ROW
 	.endr
+	.endr
+
  	.word	beampos+0x400,0xFFFE   | wait before interrupt, avoid losing last bobs lines
     .word	 intreq,0x8010
     .long    -2					
