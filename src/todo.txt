@@ -8,6 +8,7 @@ transcode:
 
 amiga:
 
+- run in 68000 mode cycle exact to check if it runs properly
 - player ship explosion sound sometimes not working (also kills other sounds)
 - flagship kill score displayed wrong (hw sprite?) check if score is correct??
 - shift hw sprites too? (explosions?)

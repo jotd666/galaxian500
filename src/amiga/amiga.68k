@@ -2323,7 +2323,7 @@ palette:
 irq_cnt:											ds.w		1
 		.data
 
-copper_stars_offset = 16
+copper_stars_offset = 12
 copper_row_size = copper_stars_offset+32*8
 
 * 32 rows = 256 pixels
@@ -2331,7 +2331,7 @@ copper_row_size = copper_stars_offset+32*8
 	.set	row_offset,0
 bg_color_table:
 	.rept	29
-	.long	color_row_0+4+row_offset
+	.long	color_row_0+row_offset
 	* warning: this offset increase depends on what's in color_row_0
 	* 16=4 colors to change, 32 bytes per star pattern * 8 patterns per row
 	.set	row_offset,row_offset+copper_row_size
@@ -2462,7 +2462,6 @@ end_color_copper:
 color_row_0:
 	.rept	28
 	* set 4 colors for that 8-high row: 16 bytes
-	.word	start_color+2,0 	| TODO remove this
 	.word	start_color+2,0 
 	.word	start_color+4,0 
 	.word	start_color+6,0   
@@ -2482,7 +2481,6 @@ color_row_0:
 	.endr
 	.endr
 color_row_28:
-	.word	start_color+2,0 
 	.word	start_color+2,0 
 	.word	start_color+4,0 
 	.word	start_color+6,0   
