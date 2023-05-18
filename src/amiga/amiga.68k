@@ -490,8 +490,8 @@ _vblank:
 	
 	tst.b	pause_flag
 	bne.b	23f
-	jbsr		galaxian_irq
 	jbsr		scroll_stars
+	jbsr		galaxian_irq
 	.ifne  OPT_ENABLE_DOUBLE_BUFFERING
 	bsr		switch_screen_buffers
 	.endif
@@ -2294,7 +2294,7 @@ scroll_stars:
 	add.w	d6,d6
 	add.w	d6,d6
 	add.w	d6,a5		| point at the end of the row pointers
-
+	subq.w	#1,d7
 	* save last line first
 
 	

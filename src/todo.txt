@@ -1,19 +1,21 @@
 transcode:
 - swarm sound loop
-- alien attacking but animation frame sometimes oscillates between 2 frames (CALCULATE_TANGENT issue in CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME ?)
-- at the end of the level (not a lot of aliens), aliens joining swarm seems bogus
 - no swarm: alien still joins non-existing swarm for a little while before attacking
-- collisions player vs aliens seem not to work
+- collisions player vs aliens seem not to work very well but maybe it's the same with MAME
+ (test it with mame no shoot cheat)
 - send corrected transcode to Scott
 - re-convert/check GENERATE_RANDOM_NUMBER
 
 amiga:
 
-- run in 68000 mode cycle exact to check if it runs properly
+- run in 68000 mode cycle exact to check if it runs properly: too slow!!
+- include ram source to allow assembler to use PC-relative optimizations on variables
+- maybe optimize player ship rows update: only blit where the ship is
+  and only delete ship position depending on previous 2 values of scroll (double buffering)
 - player ship explosion sound sometimes not working (also kills other sounds)
+- playing flagship sound seems to mute some other sounds
 - flagship kill score displayed wrong (hw sprite?) check if score is correct??
 - shift hw sprites too? (explosions?)
-- game should run at 60Hz
 - support more dip switches (CLI but should be 1.3 compliant eeek & whdload)
 - when to play attack sound?
 - if not fire first pressed & game not playing
@@ -24,7 +26,7 @@ amiga:
 - stars as sprites:
   * priority?
   * blink/change from time to time
-  * scrolling: working but with glitches
+  * scrolling: working but with big glitches
 
 
 To rip the sounds:

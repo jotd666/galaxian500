@@ -10,9 +10,10 @@
     OPT_DISABLE_SPRITES=0
     OPT_DISABLE_DISPLAY_MASKS=0
    
+	* cheats to test game
     * score is BCD format, only 6 digits
     OPT_START_SCORE=0x000000
-	
+	OPT_ALIENS_DONT_SHOOT=0	
 ***
 *** end of BUILD OPTIONS
 ***

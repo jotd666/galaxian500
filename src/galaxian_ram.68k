@@ -158,6 +158,7 @@
 	.global	CHARACTER_RAM
 	.global	bg_colorram
 	.global	ATTRIBUTE_RAM
+	.global	current_ticks_count
 
     .global infinite_lives_flag
     .global invincible_flag
@@ -738,4 +739,6 @@ invincible_flag:
 infinite_lives_flag:
 	.byte	0
 vb_ticks_count:
+	.byte	0
+current_ticks_count:
 	.byte	0

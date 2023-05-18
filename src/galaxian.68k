@@ -756,6 +756,10 @@ galaxian_irq:
 														| read coin, p1 control, test & service state [ld   a,(0x6000)]
 	move.b	d0,PORT_STATE_6000                       	| and write to PORT_STATE_6000 holder [ld   (0x4010),a]
 
+	* update is done once or twice
+	move.b	vb_ticks_count,current_ticks_count
+
+update_loop:
 		subq.b	#1,TIMING_VARIABLE             | decrement value
 
 		jbsr CHECK_IF_COIN_INSERTED
@@ -771,7 +775,10 @@ galaxian_irq:
 	add.w	d0,d0
 	lea		SCRIPT_TABLE(pc),a0
 	move.l	(a0,d0.w),a0
-	jmp		(a0)
+	jsr		(a0)
+	subq.b	#1,current_ticks_count
+	bne.b	update_loop
+	rts
 	
 
 SCRIPT_TABLE:
@@ -6026,6 +6033,7 @@ l_11da:
 * maincpu.mb@11E0 =,0xC9
 
 TRY_SPAWN_ENEMY_BULLET:
+	.ifeq	OPT_ALIENS_DONT_SHOOT
 	move.w	#5,d3                      	| sizeof(ENEMY_BULLET) [ld   de,0x0005]
 	lea	ENEMY_BULLETS_START,a0                      	| load HL with address of ENEMY_BULLETS_START [ld   hl,0x4260]
 	move.b	#0x0E,d1                        	| there are 14 elements in the ENEMY_BULLETS_START array [ld   b,0x0E]
@@ -6035,6 +6043,7 @@ l_11e8:
 	add  d3,a0                              	| otherwise bump HL to point to next enemy bullet in the array
 	subq.b	#1,d1                           	| [...]
 	jne	l_11e8                             	| repeat until B==0 [djnz 0x11E8]
+	.endif
 	rts                                    	| [ret]
 
 
@@ -6192,9 +6201,8 @@ ASSERT_BOTH_FLAGSHIP_ESCORTS_ARE_ALIVE:
 *
 
 HANDLE_PLAYER_TO_INFLIGHT_ALIEN_COLLISION_DETECTION:
-	move.b	HAS_PLAYER_SPAWNED,d0                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	bcs.b	0f
+	tst.b	HAS_PLAYER_SPAWNED                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
+	bne.b	0f
 	rts                                    	| return if carry not set [ret  nc]
 0:
 	lea	INFLIGHT_ALIENS,a2                      	| pointer to INFLIGHT_ALIENS[1] [ld   ix,0x42D0]
@@ -6221,7 +6229,7 @@ l_12ac:
 *
 
 TEST_IF_INFLIGHT_ALIEN_HIT_PLAYER:
-	btst.b	#0,(0x00,a2)                    	| read INFLIGHT_ALIEN.IsActive flag [bit  0,(ix+0x00)]
+	tst.b	(IsActive,a2)                    	| read INFLIGHT_ALIEN.IsActive flag [bit  0,(ix+0x00)]
 	bne.b	0f
 	rts                                    	| exit if alien isn't active [ret  z]
 0:
@@ -6274,7 +6282,7 @@ HANDLE_PLAYER_HIT:
 0:
 
 * OK, player's hit.
-	move.b	#0x00,(a0)                      	| clear IS_PLAYER_HIT flag [ld   (hl),0x00]
+	clr.b	(a0)                      	| clear IS_PLAYER_HIT flag [ld   (hl),0x00]
 	clr.b	HAS_PLAYER_SPAWNED                  	| [ld   hl,0x0100]
 	move.b	#1,IS_PLAYER_DYING                      	| Clear HAS_PLAYER_SPAWNED and set IS_PLAYER_DYING flags [ld   (0x4200),hl]
 
@@ -6289,8 +6297,8 @@ HANDLE_PLAYER_HIT:
 	move.b	DIFFICULTY_EXTRA_VALUE,d0                       	| read DIFFICULTY_EXTRA_VALUE [ld   a,(0x421A)]
 	jeq	l_130e                             	| if zero, then - wait a second, why is it updating an already zero field? Should be: jr z, 0x1311 [jr   z,0x130E]
 	subq.b	#1,d0                           	| reduce game difficulty slightly [dec  a]
-l_130e:
 	move.b	d0,DIFFICULTY_EXTRA_VALUE                       	| update DIFFICULTY_EXTRA_VALUE [ld   (0x421A),a]
+l_130e:
 
 * decrement number of player lives
 	lea	PLAYER_LIVES,a0                      	| pointer to address of PLAYER_LIVES [ld   hl,0x421D]
