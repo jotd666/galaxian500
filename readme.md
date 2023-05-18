@@ -79,10 +79,10 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 
 - make -f makefile.ng OUTPUT={cart|cd} MAMEDIR={mamedir} install
   - (mamedir defaults to '.')
-- paste xevious.xml into MAME's hash/neogeo.xml file
+- paste galaxian.xml into MAME's hash/neogeo.xml file
 
 #### To run in MAME:
 
-- cart : 'mame neogeo xevious'
-- cd : 'mame neocdz -cdrom roms/neocdz/xevious.iso'
+- cart : 'mame neogeo galaxian'
+- cd : 'mame neocdz -cdrom roms/neocdz/galaxian.iso'
   
