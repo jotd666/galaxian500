@@ -1,0 +1,979 @@
+*
+* Neo Geo-specific portions of Xevious
+*
+
+* Neo Geo hardware definitions
+.include "regdefs.68k"
+.include "galaxian.inc"
+
+    OPT_DISABLE_FG_LAYER=1
+    OPT_SKIP_SPLASH=0
+
+* exports
+
+    .global _jp_config
+    .global _us_config
+    .global _sp_config
+    .global IRQ1
+    .global IRQ3
+    .global DUMMY
+    .global TRAP
+    .global _user
+    .global _player_start
+    .global _demo_end
+    .global _coin_sound
+
+* osd layer   
+    .global osd_enable_vblank_interrupt
+    .global osd_ack_vblank_interrupt
+    .global osd_disable_vblank_interrupt
+    .global osd_kick_wdog
+    .global osd_w_bg_videoram
+    .global osd_read_dipswitches
+    .global osd_read_coin
+    .global osd_sound_start
+    .global osd_sound_stop
+    .global osd_sound_mute
+    .global osd_sound_unmute
+    .global osd_read_high_scores
+    .global osd_write_high_scores
+    .global osd_debug_hook
+    
+    .global osd_update_graphics
+    .global osd_stars_on
+    .global osd_reset_attributes
+    
+* debugging only
+    .global osd_debug1
+    .global osd_debug2
+    .global _tile_colour
+    .global _tile_scroll
+    .global _end_of_ng_code
+    .global _end_of_ng_data
+    
+    .text
+
+TRAP00=TRAP
+TRAP01=TRAP
+TRAP02=TRAP
+TRAP03=TRAP
+TRAP04=TRAP
+TRAP05=TRAP
+TRAP06=TRAP
+TRAP07=TRAP
+TRAP08=TRAP
+TRAP09=TRAP
+TRAP10=TRAP
+TRAP11=TRAP
+TRAP12=TRAP
+TRAP13=TRAP
+TRAP14=TRAP
+TRAP15=TRAP
+
+* Cartridge/CD header
+.nolist
+.include "header.68k"
+.list
+
+    .align 4
+_jp_config:
+_us_config:
+_sp_config:
+    .ascii    "GALAXIAN        "
+    .word     0xffff
+    .word     0xffff
+    .byte     0xff
+    .byte     0xff
+    .byte     0x02                | service mode (off)
+    .byte     0x34                | coinage (free play)
+    .byte     0x04                | bonus life (7000)
+    .byte     0x12                | lives (3)
+    .byte     0x02                | cabinet
+    .byte     0x00
+    .byte     0x00
+    .byte     0x00
+    .byte     0x00
+    .byte     0x00
+* item names are 12 characters    
+    .ascii    "SERVICE MODE"      | item 6
+    .ascii    "OFF         "
+    .ascii    "ON          "
+    .ascii    "COINAGE     "      | item 7
+    .ascii    "1C 1C       "
+    .ascii    "2C 1C       "
+    .ascii    "1C 2C       "
+    .ascii    "FREE PLAY   "
+    .ascii    "BONUS LIFE  "      | item 8
+    .ascii    "7000        "
+    .ascii    "10000       "
+    .ascii    "12000       "
+    .ascii    "20000       "
+    .ascii    "LIVES       "      | item 9
+    .ascii    "2           "
+    .ascii    "3           "
+    .ascii    "CABINET     "      | item 10
+    .ascii    "VERTICAL    "
+    .ascii    "HORIZONTAL  "
+
+  .align 4
+IRQ1:
+  move.w  #2, 0x3C000C
+  rte
+    
+  .align 4
+IRQ3:
+  move.w  #1, 0x3C000C
+  rte
+
+DUMMY:
+  rte
+      
+TRAP:
+  rte
+      
+_user:
+    moveq     #0,d0
+    move.b    (BIOS_USER_REQUEST),d0
+    lsl.w     #2,d0
+    movea.l   1f(pc,d0.w),a0
+    jmp       (a0)
+    .align 4
+1:  .long     startup_init
+    .long     eye_catcher
+    .long     demo_game
+    .long     title_display
+
+startup_init:
+* we're not doing things the NeoGeo way
+    jmp       BIOSF_SYSTEM_RETURN
+
+eye_catcher:
+* we're not doing things the NeoGeo way
+    jmp       BIOSF_SYSTEM_RETURN
+
+demo_game:
+    move    #0x2700,sr            | disable interrupts
+    lea     0x10F300,sp
+    move.b  #2,BIOS_USER_MODE     | tell BIOS we're running the game
+    bsr.b   platform_init         | neo geo-specific init
+    jmp     galaxian_reset        | pass control to the galaxian core
+
+title_display:
+* we're not doing things the NeoGeo way
+    move.b  BIOS_SELECT_TIMER,d0
+    jmp     BIOSF_SYSTEM_RETURN
+
+_player_start:
+* we're not doing things the NeoGeo way
+    rts
+        
+_demo_end:
+* we're not doing things the NeoGeo way
+    rts
+        
+_coin_sound:
+* we're not doing things the NeoGeo way
+    rts
+        
+_vblank:
+    btst    #7,BIOS_SYSTEM_MODE
+    bne.b   .gamemode
+    jmp     BIOSF_SYSTEM_INT1
+.gamemode:
+    movem.l d0-d7/a0-a6,-(a7)
+    KICK_WDOG
+    jsr     galaxian_irq
+    jsr     BIOSF_SYSTEM_IO
+.nothing:
+    movem.l (a7)+,d0-d7/a0-a6
+    move.w  #4,REG_IRQACK
+    rte
+
+osd_kick_wdog:
+    KICK_WDOG
+    rts
+
+    .equ    SPRITEX_0,              8
+    .equ    SPRITEY_0,              (0x1F0-4)
+                                    
+    .equ    SCB3_STICKY,            (1<<6)
+
+* NEO GEO FIX LAYER tile allocations
+    
+    .equ    FG_FIX_BASE,            0x0400
+    .equ    FG_ASCII_TRANS_BASE,    0x0500
+    .equ    FG_ASCII_OPAQUE_BASE,   0x0600
+    
+* NEO GEO sprite allocations
+* -   0- 31 (unused)
+* -  32- 63 (32) foreground tilemap
+* -  64- 71 (8) Galaxian sprites
+* -  72- 79 (8) Bullets/missiles
+
+    .equ    FGSS,                   32
+    .equ    GSSS,                   64
+    .equ    GBSS,                   72
+                                     
+    .equ    FGNS,                   32
+    .equ    GSNS,                   8
+    .equ    GBNS,                   8
+
+    .equ    BG_TILE_BASE,           0x0200
+    .equ    GS_TILE_BASE,           0x0400
+    .equ    GB_TILE_BASE,           0x0600
+    
+    .equ    GB_TILE_CODE,           GB_TILE_BASE+0xf0
+    
+platform_init:
+
+    KICK_WDOG
+*   acknowledge interrupts
+    move.w    #7,REG_IRQACK
+
+* clear fix layer (not used)
+    jsr       BIOSF_FIX_CLEAR
+    jsr       BIOSF_LSP_1ST
+
+* setup palette(s)
+    clr.b     REG_PALBANK0
+    lea       _galaxian_palette.l,a0
+    lea       PALETTES,a1                       | start at palette #0
+    move.w    #10-1,d7                          | 10 palettes
+1:  moveq     #16-1,d6                          | 16 colours/palette
+    KICK_WDOG
+2:  move.w    (a0)+,(a1)+
+    dbf       d6,2b
+    dbf       d7,1b
+    move.w    #0x0000,(BACKDROPCOLOR)
+    
+* setup tilemaps and sprites
+
+    lea       VRAM_RW.l,a0
+    move.w    #1,2(a0)                          | VRAM_MOD=1
+
+* clear all sprite tiles & attributes
+    move.w    #SCB1,-2(a0)                      | VRAM_ADDR=SCB1
+    moveq     #0,d7
+    move.w    #448*32-1,d7                      | 448 sprites
+1:  move.w    #0,(a0)                           | clear tile
+    move.w    #0,(a0)                           | clear palette, attributes
+    dbf       d7,1b   
+* set all zoom to 1
+    move.w    #SCB2,-2(a0)                      | VRAM_ADDR=SCB2
+    move.w    #448-1,d7                         | 448 sprites
+2:  move.w    #0xFFF,(a0)                       | clear zoom
+    dbf       d7,2b   
+* set all size to 0 (make inactive)
+    move.w    #SCB3,-2(a0)                      | VRAM_ADDR=SCB3
+    move.w    #448-1,d7                         | 448 sprites
+2:  move.w    #0x0000,(a0)                      | clear size
+    dbf       d7,2b   
+
+.ifeq OPT_DISABLE_BG_LAYER
+
+* background tilemap
+
+*   - shrinking coefficients
+    move.w    #(SCB2+FGSS),-2(a0)               | VRAM_ADDR=SCB2
+    moveq     #FGNS-1,d7
+2:  move.w    #0x077F,(a0)                      | 50% H&V (8x8)
+    dbf       d7,2b
+
+*   - vertical position, sticky, size           
+    move.w    #(SCB3+FGSS),-2(a0)               | VRAM_ADDR=SCB3
+    move.w    #(SPRITEY_0)<<7,d0                | YPOS=0
+    ori.w     #33,d0                            | SIZE=33
+    moveq     #FGNS-1,d7
+3:  move.w    d0,(a0)                           | visible
+    dbf       d7,3b   
+    
+*   - horizontal position
+    move.w    #(SCB4+FGSS),-2(a0)               | VRAM_ADDR=SCB4
+    moveq     #FGNS-1,d7
+    move.w    #(SPRITEX_0+16)<<7,d0              | XPOS=0
+5:  move.w    d0,(a0)             
+    add.w     #(8<<7),d0                        | next XPOS
+    dbf       d7,5b
+
+.endif | OPT_DISABLE_BG_LAYER
+
+    * read cabinet H/V setting
+    lea       BIOS_GAME_DIP,a0
+    move.b    (10,a0),d0                         | cabinet (H/V)
+    move.b    d0,(_cabinet)
+
+    * fix for galaxian coin input debounce
+    move.b    #0,(_coin_pulse_cnt)
+    
+    * generate lookup table for fg offset
+    lea       fg_offset_lookup_tbl,a0
+    moveq     #0,d7
+4:  move.w    d7,d3
+    and.w     #0x1f,d3                          | row (sprite number indirectly)
+    move.w    #31,d2                            | 
+    sub.w     d3,d2                             | sprite #
+    lsl.w     #6,d2                             | d2=sprite offset in SCB1
+    move.w    d7,d3
+    lsr.w     #5,d3                             | sprite tile #
+    not.w     d3                                | reverse column
+    and.w     #0x1f,d3                          | column (tile number)
+    lsl.w     #1,d3                             | d3=tile offset in SCB1
+    add.w     d2,d3                             | combine for SCB1 address
+    add.w     #SCB1+(FGSS*64),d3
+    move.w    d3,(a0)+                          | store entry
+    addq.w    #1,d7
+    cmp.w     #0x0400,d7
+    blt       4b
+    
+    lea       snd_playing,a0
+    moveq     #0x20-1,d7
+8:  clr.b     (a0)+
+    dbf       d7,8b
+    
+* CD hardware only
+.ifdef __cd__
+    move.b    #0,(REG_DISBLSPR)                 | enable sprites
+    move.b    #1,(REG_ENVIDEO)                  | enable video
+.endif
+
+.ifeq OPT_SKIP_SPLASH
+    clr.b     REG_PALBANK1                      | alt palette bank
+    lea       PALETTES,a0
+    * palette 0 - transparent/high score colour/black
+    move.w    #0x8000,(0,a0)
+    move.w    (_galaxian_palette+1*32+2),d0
+    move.w    d0,(2,a0)
+    move.w    #BLACK,(4,a0)
+    * palette 1 - transparent/black/white
+    lea       (32,a0),a0
+    move.w    #0,(0,a0)
+    move.w    #BLACK,(2,a0)
+    move.w    #WHITE,(4,a0)
+    * palette 2 - transparent/solvalou symbol colour/black
+    lea       (32,a0),a0
+    move.w    #0,(0,a0)
+    move.w    (_galaxian_palette+2*32+2),d0
+    move.w    d0,(2,a0)
+    move.w    #BLACK,(4,a0)
+    ** show splash screen on fix layer
+    lea       VRAM_RW.l,a0
+    move.w    #1,(2,a0)                         | VRAM_MOD=1
+    lea       splash,a1
+    move.w    #FIXMAP+(38*32),d1
+    lea       splash_attr,a2
+1:  move.w    d1,(-2,a0)                        | VRAM_ADDR
+    move.w    #FG_ASCII_OPAQUE_BASE,d0          | tile base
+    or.w      (a2)+,d0                          | line attribute
+    moveq     #32-1,d6                          | 32 chars per line
+    
+2:  move.b    (a1)+,d0
+    move.w    d0,(a0)                           | VRAM
+    dbf       d6,2b                             | do line
+    sub.w     #32,d1                            | next line VRAM address
+    tst.b     (a1)                              | last line?
+    bne.b     1b                                | no, loop
+    *
+3:  KICK_WDOG
+    jsr       BIOSF_SYSTEM_IO                   | update inputs etc
+    move.b    BIOS_P1CURRENT,d0                 | read IN1
+    and.b     #0x30,d0                          | any buttons pressed?
+    beq.b     3b                                | no, loop
+4:  jsr       BIOSF_FIX_CLEAR
+    clr.b     REG_PALBANK0                      | main palette bank
+.endif | OPT_SKIP_SPLASH
+    
+5:  KICK_WDOG
+    rts
+
+splash:
+    *         "  [--------------------------]  "
+    .ascii    "                                "
+    .ascii    "           GALAXIAN    Alpha1   "
+    .ascii    "                                "
+    .ascii    "            NGH 422             "
+    .ascii    "                                "
+    .ascii    "  This is a 68K transcode of    "
+    .ascii    "  the arcade game Galaxian      "
+    .ascii    "  released by Namco in 1979.    "
+    .ascii    "                                "
+    .ascii    "  The core is a line-by-line    "
+    .ascii    "  translation of the Z80        "
+    .ascii    "  assembler code. Every         "
+    .ascii    "  nuance and every bug is       "
+    .ascii    "  faithfully replicated in      "
+    .ascii    "  the transcode. The graphics   "
+    .ascii    "  and palette have been         "
+    .ascii    "  ripped as-is from the         "
+    .ascii    "  arcade ROMs for use in this   "
+    .ascii    "  version.                      "
+    .ascii    "                                "
+    .ascii    "  The Neo Geo version supports  "
+    .ascii    "  high score load and save on   "
+    .ascii    "  both BRAM and memory card.    "
+    .ascii    "                                "
+    .ascii    "  Arcade dipswitches are        "
+    .ascii    "  supported via the soft DIPs.  "
+    .ascii    "                                "
+    .ascii    "                                "
+    .ascii    "                                "
+    .ascii    "                                "
+    .ascii    "                                "
+    .ascii    "   Z80 RE by Scott Tunstell     "
+    .ascii    "     68K transcode by jotd      "
+    .ascii    "     Sound samples by jotd      "
+    .ascii    "  NGFX Soundbuilder by Blastar  "
+    .ascii    "                                "
+    .ascii    "     Copyright 2023 tcdev       "
+    .ascii    "    retroports.blogspot.com     "
+    .byte     0
+    .align 2
+
+splash_attr:
+    .word     0x2000, 0x2000, 0x2000, 0x0000
+    .word     0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000
+    .word     0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000
+    .word     0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000
+    .word     0x1000, 0x1000
+    .word     0x1000, 0x0000, 0x0000, 0x0000, 0x0000, 0x1000
+    .word     0x2000, 0x2000
+            
+* 60Hz VBLANK interrupt
+osd_enable_vblank_interrupt:
+    move      #0x2000,sr                        | enable interrupts
+    rts
+
+osd_ack_vblank_interrupt:
+    move.w    #4,REG_IRQACK                     
+    rts
+    
+osd_disable_vblank_interrupt:
+    move      #0x2400,sr                        | enable interrupts
+    rts
+    
+* d6=screen address (preserved), d0=tile (preserved)
+* d6 starts at 0x5000 ends at 0x57FF
+* should preserve all registers
+
+osd_w_bg_videoram:
+    .ifeq OPT_DISABLE_BG_LAYER
+    movem.l   d0-d6/a0/a1,-(a7)
+    lea       bg_videoram,a0
+    and.w     #0x3ff,d6                         | calc offset
+    move.b    d0,(a0,d6.w)                      | save code to bg_videoram
+    lea       fg_offset_lookup_tbl,a0
+    add.w     d6,d6
+    move.w    (a0,d6.w),a1                      | map video offset
+    move      sr,d4                             | save interrupt mask
+    move      #0x2400,sr                        | disable vblank
+    lea       VRAM_RW.l,a0
+    move.w    #1,(2,a0)                         | VRAM_MOD=1
+    move.w    a1,(-2,a0)                        | VRAM_ADDR=SCB1
+    * calculate tile
+    andi.w    #0x00ff,d0
+1:  ori.w     #BG_TILE_BASE,d0
+    move.w    d0,(a0)
+2:  *move.w    #0x0100,d1
+    *move.w    d1,(a0)                           | get/set entry
+    move      d4,sr                             | restore interrupt mask
+9:  movem.l   (a7)+,d0-d6/a0/a1
+    .endif | OPT_DISABLE_BG_LAYER
+    rts
+
+* 6000: in D0
+*    bits 0-1: coin1 & coin2
+*    bit  2: joy move left
+*    bit  3: joy move right
+* 6800: in D1
+*    bits 7-6: if both set, means FREE PLAY
+* 1 COIN = 1 PLAY               OFF           OFF
+* 2 COINS = 1 PLAY              ON            OFF
+* 1 COIN = 2 PLAYS              OFF           ON
+* FREE PLAY                     ON            ON 
+
+* 7000: in D2
+*    bits 0-1: Values for BONUS GALIXIP. 7 = 7000, 10 = 10000, 12 =12000, 20 = 20000
+*    bits 2-3: ????
+
+osd_read_dipswitches:
+    * coin
+    * - need to "pulse-extend" coin input
+    *   because Galaxian core debounces it
+    tst.b     (_coin_pulse_cnt)
+    beq       0f
+    subq.b    #1,(_coin_pulse_cnt)
+    move.b    (_coin_value),d0
+    bra       1f
+0:  lea       BIOS_CREDIT_DEC1.l,a0
+    move.l    a0,-(a7)
+    move.w    #0x0100,(a0)                      | PLAYER1 1C1C
+    jsr       BIOSF_CREDIT_CHECK
+    move.l    (a7)+,a0
+  	move.b	  #0x03,d0                          | bits1,0 active low
+    move.w    (a0),d3                           | read result
+    cmpi.w    #0x0100,d3                        | enough credits?
+    bne.b     1f                                | no, skip
+    move.l    d0,-(a7)
+    jsr       BIOSF_CREDIT_DOWN                 | deduct credit
+    move.l    (a7)+,d0
+    bclr      #0,d0                             | coin1 (active low)
+    move.b    d0,(_coin_value)
+    move.b    #8,(_coin_pulse_cnt)
+    * start
+1:  move.b    BIOS_STATCURNT,d3                 | bit0=P1, bit2=P2
+    andi.b    #1,d3                             | P1 only atm
+    lea       BIOS_GAME_DIP,a0
+    move.b    (7,a0),d1                         | coinage
+    lsl.b     #6,d1                             | ->[7:6]
+    or.b      d3,d1                             | start 1,2
+    * 7000 (dips)
+    move.b    (8,a0),d2                         | bonus {1:0]
+    move.b    (9,a0),d3                         | lives {0]
+    lsl.b     #2,d3                             | ->[2]
+    or.b      d3,d2                             | lives,bonus
+    * inputs
+    * - neogeo   5=B2, 4=B1, 3=right, 2=left, 1=down,  0=up
+    move.b    BIOS_P1CURRENT,d3                 | read IN1
+    and.b     #0x1C,d3                          | B1, right, left
+    or.b      d3,d0                             | add inputs
+    rts
+
+* - neogeo   5=B2, 4=B1, 3=right, 2=left, 1=down,  0=up
+
+* coin in d0 and set Z flag on exit too
+osd_read_coin:
+    tst.b     (BIOS_MVS_FLAG)
+    beq       home_use
+*   The NEO GEO BIOS handles credits and coins for you
+*   so we always use 1C1C here and let Xevious handle the
+*   actual credits itself
+    * check HW dips first
+    moveq     #0,d0                             | default no coin
+    *btst.b    #6,(REG_DIPSW)                    | freeplay (active low)?
+    *bne.b     0f                                | no, go
+    * how do we handle freeplay setting?
+    *bra       9f
+0:  lea       BIOS_CREDIT_DEC1.l,a0
+    move.l    a0,-(a7)
+    move.w    #0x0100,(a0)                      | PLAYER1 1C1C
+    jsr       BIOSF_CREDIT_CHECK
+    move.l    (a7)+,a0
+    move.w    (a0),d1                           | read result
+    cmpi.w    #0x0100,d1                        | enough credits?
+    beq.b     1f                                | yes, skip
+    bra       9f
+1:  jsr       BIOSF_CREDIT_DOWN                 | deduct credit
+    bra       coin_inserted
+home_use:   
+    * fix me
+    move.b    (BIOS_STATCHANGE),d6
+    btst.b    #1,d6                             | <SELECT> changed?
+    beq.b     9f                                | no, skip
+    move.b    BIOS_STATCURNT,d1                 | read start buttons
+    btst.b    #1,d1                             | <SELECT> pressed?
+    beq.b     9f
+coin_inserted:    
+    moveq     #1,d0
+9:  tst.b     d0
+    rts
+    
+.equ  ADPCM_MUTE,           0x16
+.equ  ADPCM_SET_MAX_VOL,    0x17
+.equ  ADPCM_STOP,           0x18
+.equ  ADPCMA_LOOP_STOP,     0x19
+.equ  ADPCMB_LOOP_STOP,     0x1a
+
+* MAIN_THEME, HIGHEST_SCORE, HIGH_SCORE, SOLVALOU 
+* are ADPCM-B BG channel sounds
+* ANDOR_GENESIS is ADPCM-A BG channel sound
+* all other sounds are ADPCM-A foreground (round-robin)
+* - MAIN_THEME uses a timer=380 (clocked by SOLVALOU_SND)
+*   - all other sounds muted while MAIN_THEME plays
+* - HIGHEST_SCORE & HIGH_SCORE should just play until stop
+* - ANDOR_GENESIS uses a timer=4 (clocked by SOLALOU_SND)
+*   that is reset EVERY call
+
+* d0 = sound ordinal
+osd_sound_start:
+    add.w     #0x20,d0                          | calc sound command
+    move.b    d0,(REG_SOUND)
+    rts
+
+* d0 = sound ordinal
+osd_sound_stop:
+    move.b    #ADPCM_STOP,(REG_SOUND)
+9:  rts
+
+osd_sound_mute:
+    move.b    #ADPCM_MUTE,(REG_SOUND)
+    rts
+    
+osd_sound_unmute:
+    move.b    #ADPCM_SET_MAX_VOL,(REG_SOUND)
+    rts
+
+* < A0: pointer on attributes/sprites/bullets
+* 32 couple of values.
+* 2 bytes: offset 0: scroll value, 1: palette clut
+* 5800-583F   01011AAAAAAAAAAA R/W DDDDDDDD   !OBJRAM Screen attributes
+* 5840-585F   01011AAAAAAAAAAA R/W DDDDDDDD   !OBJRAM Sprites
+* 5860-5FFF   01011AAAAAAAAAAA R/W DDDDDDDD   !OBJRAM Bullets
+* so pointer points to
+* - 0x40 bytes of attributes (2 byte per "column" - actually a row)
+* - even addresses are the scroll
+* - odd addresses are colour base (palette)
+* - 0x20 bytes of sprites
+* - 8 sprites, 4 bytes each
+*		uint8_t sy = 240 - (base0 - (m_sfx_adjust ? (sprnum >= 3) : (sprnum < 3)));
+*		uint8_t sx = base[3] + hoffset;
+* - [0] [8:0]=y
+* - [1] [7]=flipy [6]=flipx [5:0]=code
+* - [2] [2:0]=colour
+* - [3] [8:0]=x
+* - 0x20 bytes of bullets
+* - [1] [8:0]=y
+* - [3] [8:0]=x
+
+osd_update_graphics:
+    movem.l   d0-d7/a0-a2,-(a7)
+    ** TILE LAYER
+    lea       VRAM_RW.l,a1
+    move.w    #2,(2,a1)                         | VRAM_MOD=2
+    * clut - only update when required
+    adda.l    #0x40,a0                          | reverse order
+    lea       _tile_colour,a2
+    move.w    #SCB1+FGSS*64+1,d2                | vram address
+    moveq     #32-1,d7                          | 32 columns (rows)
+1:  move.b    -(a0),d1                          | colour
+    move.b    -(a0),d0                          | scroll
+    cmp.b     (a2)+,d1                          | same colour?
+    beq       3f                                | yes, skip
+    move.w    d2,(-2,a1)                        | VRAM_ADDR=SCB1
+    move.b    d1,(-1,a2)                        | update copy
+    lsl.w     #8,d1                             | 15:8 = colour
+    moveq     #32-1,d6
+2:  move.w    d1,(a1)                           | store colour
+    dbf       d6,2b
+3:  add.w     #64,d2                            | update VRAM addr
+    dbf       d7,1b
+    * scroll - always update
+    adda.l    #0x40,a0                          | reverse order
+    move.w    #1,(2,a1)                         | VRAM_MOD=1
+    move.w    #SCB3+FGSS,(-2,a1)                | VRAM_ADDR=SCB3
+    moveq     #32-1,d7                          | 32 columns (rows)
+    moveq     #0,d2
+4:  move.b    -(a0),d1                          | colour
+    move.w    #SPRITEY_0+20,d0
+    move.b    -(a0),d2                          | scroll
+    sub.w     d2,d0
+    lsl.w     #7,d0                             | 15:7 = scroll
+    ori.w     #33,d0                            | size
+    move.w    d0,(a1)                           | store scroll
+    dbf       d7,4b
+
+    ** SPRITES
+    ** FIXME - lower sprites have priority!!!
+    adda.l    #0x40,a0                          | adjust to sprites
+    ** SCB1
+    move.w    #SCB1+GSSS*64,d2
+    moveq     #GSNS-1,d7
+1:  move.w    d2,(-2,a1)                        | VRAM_ADDR=SCB1
+    move.b    (1,a0),d0                         | code
+    andi.w    #0x3f,d0                          | [5:0]
+    ori.w     #GS_TILE_BASE,d0
+    move.w    d0,(a1)                           | store
+    move.b    (2,a0),d0                         | colour
+    and.w     #7,d0                             | [2:0]
+    lsl.w     #8,d0                             | shift to high byte
+    move.b    (1,a0),d1                         | flip
+    lsr.b     #6,d1                             | yflip,xflip->1:0
+    or.b      d1,d0                             | combine
+    move.w    d0,(a1)                           | store
+    lea       (4,a0),a0                         | next sprite
+    add.w     #64,d2                            | next VRAM_ADDR
+    dbf       d7,1b
+    ** SCB3
+    suba.l    #0x20,a0
+    move.w    #SCB3+GSSS,(-2,a1)                | VRAM_ADDR=SCB3
+    moveq     #GSNS-1,d7
+2:  moveq     #0,d1
+    move.b    (0,a0),d1                         | galaxian sprite Y
+    move.w    #SPRITEY_0+16,d0
+    sub.w     d1,d0                             | Neo Geo adjust
+    lsl.w     #7,d0                             | shift up
+    ori.w     #1,d0                             | size=1
+    move.w    d0,(a1)                           | store
+    lea       (4,a0),a0                         | next sprite
+    dbf       d7,2b
+    ** SCB4
+    suba.l    #0x20,a0
+    move.w    #SCB4+GSSS,(-2,a1)                | VRAM_ADDR=SCB4
+    moveq     #GSNS-1,d7
+3:  moveq     #0,d1
+    move.b    (3,a0),d1                         | galaxian sprite X
+    move.w    #0x0109,d0
+    sub.w     d1,d0                             | Neo Geo adjust
+    lsl.w     #7,d0                             | shift up
+    move.w    d0,(a1)                           | store
+    lea       (4,a0),a0                         | next sprite
+    dbf       d7,3b
+
+.if 1
+    ** BULLETS
+    ** SCB1
+    move.w    #SCB1+GBSS*64,d2
+    moveq     #GBNS-1,d7
+1:  move.w    d2,(-2,a1)                        | VRAM_ADDR=SCB1
+    move.w    #GB_TILE_CODE,(a1)                | store code
+    move.w    #0x08,d0                          | colour=white
+    tst.b     d7                                | player bullet?
+    bne       2f                                | no, skip
+    addq.w    #1,d0                             | yellow - faster than move?
+2:  lsl.w     #8,d0                             | shift to high byte
+    move.w    d0,(a1)                           | store
+    lea       (4,a0),a0                         | next sprite
+    add.w     #64,d2
+    dbf       d7,1b
+.endif
+
+    ** SCB3
+    suba.l    #0x20,a0
+    move.w    #SCB3+GBSS,(-2,a1)                | VRAM_ADDR=SCB3
+    moveq     #GBNS-1,d7
+3:  moveq     #0,d1
+    move.b    (1,a0),d1
+    move.w    #SPRITEY_0+20,d0
+    sub.w     d1,d0                             | Neo Geo adjust
+    lsl.w     #7,d0                             | shift up
+    ori.w     #1,d0                             | size=1
+    move.w    d0,(a1)                           | store
+    lea       (4,a0),a0                         | next sprite
+    dbf       d7,3b
+    ** SCB4
+    suba.l    #0x20,a0
+    move.w    #SCB4+GBSS,(-2,a1)                | VRAM_ADDR=SCB4
+    moveq     #GBNS-1,d7
+4:  moveq     #0,d1
+    move.b    (3,a0),d0                         | X
+    add.w     #0x119,d0
+    lsl.w     #7,d0                             | shift up
+    move.w    d0,(a1)                           | store
+    lea       (4,a0),a0                         | next sprite
+    dbf       d7,4b
+
+9:  movem.l   (a7)+,d0-d7/a0-a2
+    rts
+    
+osd_stars_on:
+    rts
+
+* set 0 tile colour and scroll value    
+osd_reset_attributes:
+    lea       VRAM_RW.l,a1
+    move.w    #2,(2,a1)                         | VRAM_MOD=2
+    move.w    #SCB1+FGSS*64+1,(-2,a1)           | VRAM_ADDR=SCB1
+    lea       _tile_colour,a2
+    moveq     #32-1,d7
+1:  move.b    #0,(a2)+                          | store copy
+    moveq     #32-1,d6
+2:  move.w    #0,(a1)                           | store colour
+    dbf       d6,2b
+    dbf       d7,1b
+    move.w    #1,(2,a1)                         | VRAM_MOD=1
+    move.w    #SCB3+FGSS,(-2,a1)                | VRAM_ADDR=SCB3
+    lea       _tile_scroll,a0
+    moveq     #32-1,d7
+3:  move.b    #0,(a0)+                          | store copy
+    move.w    #SPRITEY_0+20,d0
+    lsl.w     #7,d0                             | 15:7 = scroll
+    ori.w     #33,d0                            | size
+    move.w    d0,(a1)                           | store scroll
+    dbf       d7,3b
+    rts
+        
+***
+*** high score format
+*** - high score table (a0) $50 bytes
+***   - 5 entries
+***     - 3 bytes BCD score (MSB-LSB)
+***     - 10 bytes name (xevious encoded)
+***     - 3 bytes filler ($00)
+*** - high score (a1) $3 bytes
+***   - 3 bytes BCD score (MSB-LSB)
+***   - (no need to save this explicitly)
+***
+
+*** BRAM (MVS only)
+*** Memory card (MVS,AES,NGCD)
+
+* a2=mc buffer (add 20+28)
+patch_high_score_table:
+    * extract high score from entry 1
+    lea       (20+28,a2),a2                     | skip title, padding
+1:  move.b    (0,a2),(a1)+
+    move.b    (1,a2),(a1)+
+    move.b    (2,a2),(a1)+
+    * extract high score table
+    move.w    #16*5-1,d7
+2:  move.b    (a2)+,(a0)+
+    dbf       d7,2b
+    rts
+
+osd_read_high_scores:
+    * calc buffer for variant
+    lea       memcard_buf_0,a2
+    cmp.b     #0,(_variant)
+    beq       1f
+    lea       memcard_buf_1,a2
+1:  move.l    a2,(memcard_buf_addr)
+    * try to read from BRAM first
+    * - any memory card saves will overwrite
+.ifndef __cd__
+    tst.b     (BIOS_MVS_FLAG)                   | MVS?
+    beq       check_memcard_data                | no, skip
+check_BRAM_data:
+    move.l    (a2),d0                           | from buffer
+    cmp.l     (memcard_hdr),d0                  | valid save data?
+    bne.b     check_memcard_data                | no, skip
+    movem.l   a0-a1,-(a7)
+    bsr.b     patch_high_score_table
+    movem.l   (a7)+,a0-a1
+.endif | __cd__
+
+check_memcard_data:    
+    movem.l   d0-d7/a0-a6,-(a7)
+    * try reading card data first
+    move.b    #0x01,(BIOS_CRDF)
+    move.w    #__NGH__,(BIOS_CRDNGH)
+    jsr       BIOSF_CARD
+    move.b    (BIOS_CRDRESULT),d0
+    bne.b     2f
+    * found some data for Xevious
+    move.b    #0x02,(BIOS_CRDF)
+    move.w    #__NGH__,(BIOS_CRDNGH)
+    move.b    (_variant),d0                     | xevious/super
+    move.b    d0,(BIOS_CRDFILE)
+    move.l    (memcard_buf_addr),a2
+    move.l    a2,(BIOS_CRDPTR)
+    move.w    #128,(BIOS_CRDSIZE)
+    jsr       BIOSF_CARD
+    move.b    (BIOS_CRDRESULT),d0
+    bne       9f                                | error reading, exit
+    movem.l   (a7)+,d0-d7/a0-a6
+    move.l    (memcard_buf_addr),a2
+    bra       patch_high_score_table
+
+    * handle card search data errors
+2:  cmp.b     #0x80,d0                          | not inserted?
+    beq.b     9f                                | not, return
+    cmp.b     #0x81,d0                          | not formatted?
+    bne.b     3f                                | not, go
+    * format card
+    move.b    #0x00,(BIOS_CRDF)
+    jsr       BIOSF_CARD
+    move.b    (BIOS_CRDRESULT),d0
+    * not much we can do about failure
+    bra.b     9f
+3:  cmp.b     #0x82,d0                          | no data?
+    beq.b     9f                                | no data, return
+    nop
+9:  movem.l   (a7)+,d0-d7/a0-a6
+    rts
+    
+osd_write_high_scores:
+    movem.l   d0-d7/a0-a6,-(a7)
+    * calc buffer for variant
+    lea       memcard_buf_0,a2
+    cmp.b     #0,(_variant)
+    beq       1f
+    lea       memcard_buf_1,a2
+1:  move.l    a2,(memcard_buf_addr)
+    * init memcard buffer
+    lea       memcard_hdr,a1
+    move.l    (memcard_buf_addr),a2
+    move.w    #20+28-1,d7
+2:  move.b    (a1)+,(a2)+
+    dbf       d7,2b
+    * copy high scores to memcard buffer
+    move.w    #16*5-1,d7
+3:  move.b    (a0)+,(a2)+
+    dbf       d7,3b
+    
+    * write to BOTH BRAM and memcard (if valid)
+    
+.ifndef __cd__
+    tst.b     (BIOS_MVS_FLAG)                   | MVS?
+    beq       write_memcard_data                | no, skip
+    *** write to BRAM first
+write_BRAM_data:
+    lea       0x10F300,a5
+    move.b    #1,(0xBBF,a5)                     | mark BRAM as being used
+    jsr       0xC12322                          | init_workbackup_ram
+    clr.b     (0xBBF,a5)                        | unmark BRAM as being used
+.endif | __cd__
+
+    *** write to memcard
+write_memcard_data:
+    move.b    #0x03,(BIOS_CRDF)
+    move.w    #__NGH__,(BIOS_CRDNGH)
+    move.b    (_variant),d0                     | xevious/super
+    move.b    d0,(BIOS_CRDFILE)
+    move.l    (memcard_buf_addr),a2
+    move.l    a2,(BIOS_CRDPTR)
+    move.w    #128,(BIOS_CRDSIZE)
+    jsr       BIOSF_CARD
+    move.b    (BIOS_CRDRESULT),d0
+    bne       9f                                | error writing, exit
+9:  movem.l   (a7)+,d0-d7/a0-a6
+    rts
+
+    .align 4
+memcard_hdr:
+    .byte     'X','E','V','I','O','U','S',' '
+    .byte     ' ',' ',' ',' ',' ',' ',' ',' '
+    .byte     ' ',' ',' ',' '
+    .byte     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    .byte     0,0,0,0,0,0,0,0,0,0,0,0
+        
+* d0=backdropcolour
+osd_debug_hook:
+    move.w    d0,(BACKDROPCOLOR)
+    rts
+        
+_end_of_ng_code:
+    
+    .text
+
+    .align 2  
+.include "palette.68k"
+
+    .bss
+
+    .align 4
+fg_offset_lookup_tbl:         ds.w  0x0400
+
+snd_playing:                  ds.b    0x20
+
+    .align 4
+memcard_buf:
+memcard_buf_0:                | xevious
+    mc_title_0:               ds.b  20
+                              ds.b  28
+    mc_scores_0:              ds.b  16*5
+memcard_buf_1:                | super xevious
+    mc_title_1:               ds.b  20
+                              ds.b  28
+    mc_scores_1:              ds.b  16*5
+
+memcard_buf_addr:             ds.l  1
+
+* Xevious (0x01) / Super Xevious (0x02)
+_variant:                     ds.b  1
+_cabinet:                     ds.b  1
+
+_coin_value:                  ds.b  1
+_coin_pulse_cnt:              ds.b  1
+_tile_colour:                 ds.b  32
+_tile_scroll:                 ds.b  32
+
+_end_of_ng_data:
+    
