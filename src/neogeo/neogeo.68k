@@ -297,6 +297,21 @@ platform_init:
 
 .endif | OPT_DISABLE_BG_LAYER
 
+    * codes and colours for bullets
+    
+    move.w    #SCB1+GBSS*64,d1
+    moveq     #GBNS-1,d7
+6:  move.w    d1,(-2,a0)                        | VRAM_ADDR=SCB1
+    move.w    #GB_TILE_CODE,(a0)                | store code
+    move.w    #0x08,d0                          | colour=white
+    tst.b     d7                                | player bullet?
+    bne       7f                                | no, skip
+    addq.w    #1,d0                             | yellow
+7:  lsl.w     #8,d0                             | shift to high byte
+    move.w    d0,(a0)                           | store
+    add.w     #64,d1                            | next VRAM addr
+    dbf       d7,6b
+
     * read cabinet H/V setting
     lea       BIOS_GAME_DIP,a0
     move.b    (10,a0),d0                         | cabinet (H/V)
@@ -717,26 +732,12 @@ osd_update_graphics:
     lea       (4,a0),a0                         | next sprite
     dbf       d7,3b
 
-.if 1
     ** BULLETS
-    ** SCB1
-    move.w    #SCB1+GBSS*64,d2
-    moveq     #GBNS-1,d7
-1:  move.w    d2,(-2,a1)                        | VRAM_ADDR=SCB1
-    move.w    #GB_TILE_CODE,(a1)                | store code
-    move.w    #0x08,d0                          | colour=white
-    tst.b     d7                                | player bullet?
-    bne       2f                                | no, skip
-    addq.w    #1,d0                             | yellow - faster than move?
-2:  lsl.w     #8,d0                             | shift to high byte
-    move.w    d0,(a1)                           | store
-    lea       (4,a0),a0                         | next sprite
-    add.w     #64,d2
-    dbf       d7,1b
-.endif
+    
+    ** - no need to update SCB1 (colour,code)
 
     ** SCB3
-    suba.l    #0x20,a0
+*    suba.l    #0x20,a0
     move.w    #SCB3+GBSS,(-2,a1)                | VRAM_ADDR=SCB3
     moveq     #GBNS-1,d7
 3:  moveq     #0,d1
