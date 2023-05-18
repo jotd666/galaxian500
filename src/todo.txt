@@ -3,14 +3,13 @@ transcode:
 - alien attacking but animation frame sometimes oscillates between 2 frames (CALCULATE_TANGENT issue in CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME ?)
 - at the end of the level (not a lot of aliens), aliens joining swarm seems bogus
 - no swarm: alien still joins non-existing swarm for a little while before attacking
+- collisions player vs aliens seem not to work
 - send corrected transcode to Scott
 - re-convert/check GENERATE_RANDOM_NUMBER
 
 amiga:
 
 - compare return values for CALCULATE_TANGENT d0 and d2 vs MAME
-- namco/ship row corrupt colors because of sprites
-- pre-check copperlist when writing colors/stars
 - run in 68000 mode cycle exact to check if it runs properly
 - player ship explosion sound sometimes not working (also kills other sounds)
 - flagship kill score displayed wrong (hw sprite?) check if score is correct??
