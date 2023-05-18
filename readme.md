@@ -5,15 +5,15 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 
 ### PROGRESS:
 
-#### Transcode
+#### TRANSCODE
 
 -
 
-#### Amiga
+#### AMIGA
 
 -
 
-#### Neo Geo
+#### NEO GEO
 
 - tested & playable w/sound on MVS, NGCD
 - TBD: background stars
