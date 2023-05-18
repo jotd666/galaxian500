@@ -701,7 +701,7 @@ GENERATE_RANDOM_NUMBER:
 * A (d0) = distance
 * D (d3) = X coordinate
 *
-* Returns: A (d0), C (d2)
+* Returns: C (d2)
 *
 * we have to heavily adapt the algorithm as it's relying on carry
 * and use rl. Problem is CMP only sets C bit and not X so ROXL can't
@@ -723,8 +723,9 @@ CALCULATE_TANGENT:
 	bset	#0,d2
 	bra.b	3f
 2:
-	* carry is set, ccf inverts it, nothing to do
+	* carry is set, ccf inverts it, insert 0
 	roxl.b	#1,d2
+	bclr	#0,d2
 3:	
 	* now we can use rox again
 	roxr.b	#1,d3

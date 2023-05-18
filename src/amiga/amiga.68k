@@ -2277,6 +2277,10 @@ show_stars:
 	addq.w	#1,d7
 	cmp.w	#NB_STAR_ROWS,d7
 	jne		2b
+	sub.l	#stars_copper_row_pointers,a5
+	move.w	A5,d0
+	lsr.w	#2,d0
+	move.w	d0,stars_copper_pointers_count
 	move.l	(a7)+,a5
 	rts
 1:
@@ -2285,8 +2289,7 @@ show_stars:
 	
 scroll_stars:
 	lea		stars_copper_row_pointers(pc),a5
-	move.w	#NB_LINES,d7
-
+	move.w	stars_copper_pointers_count(pc),d7
 	move.w	d7,d6
 	add.w	d6,d6
 	add.w	d6,d6
@@ -2322,7 +2325,8 @@ scroll_stars:
 	
 temp_copper_buffer:
 	ds.w	3
-	
+stars_copper_pointers_count:
+	dc.w	0
 stars_copper_row_pointers:
 	ds.l	NB_LINES+32
 	

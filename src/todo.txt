@@ -9,7 +9,6 @@ transcode:
 
 amiga:
 
-- compare return values for CALCULATE_TANGENT d0 and d2 vs MAME
 - run in 68000 mode cycle exact to check if it runs properly
 - player ship explosion sound sometimes not working (also kills other sounds)
 - flagship kill score displayed wrong (hw sprite?) check if score is correct??
@@ -25,7 +24,6 @@ amiga:
 - stars as sprites:
   * priority?
   * blink/change from time to time
-  * try to display after PAL limit: ok but namco color is trashed: end of copperlist is buggy
   * scrolling: working but with glitches
 
 
