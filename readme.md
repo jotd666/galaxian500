@@ -17,15 +17,17 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 
 - tested & playable w/sound on MVS, NGCD
 - TBD: background stars
+- TBD: high score load/save
 
 ### FEATURES:
 
 #### CREDITS:
 
 - Jean-Francois Fabre (aka jotd): Amiga code and assets
-- Mark McDougall (aka tcdev): Neo Geo code and assets
+- Mark McDougall (aka tcdev): Neo Geo code and assets (conversion)
 - DanyPPC: Amiga icon
 - phx: ptplayer sound/music replay Amiga code
+- blastar: NGFX SoundBuilder (Neo Geo sound tool)
 - Namco: original game :)
 
 #### CONTROLS (Amiga: 2-button joystick required):
