@@ -1407,6 +1407,68 @@ update_rows:
 	jeq		5f
 	subq.b	#1,(a4,d6.w)	| dec counter, eventually ack as clean
 	* now blit the dirty row
+	* but first clear the left or right part depending on scroll value
+	* doing that first, so no need to adjust shifting, just clear on byte boundaries
+	moveq	#0,d0
+	move.b	(1,a4,d6.w),d0	| scroll offset: as signed byte
+	jeq		8f				| if zero, no need to clear anything
+	* issue only on player ship because when player is killed,
+	* game clears and resets scroll immediately, not leaving enough
+	* time for character clear to be applied on other buffer
+	cmp.b	#0x3C,d6
+	jcc		8f				| after player ship rows: not needed
+	cmp.b	#0x34,d6
+	jcs		8f				| before player ship rows: not needed
+	move.w	#NB_BYTES_PER_ROW,d2
+	move.l	a6,a1		| dest (current row)
+	tst.b	d0
+	bpl.b	6f
+	* negative: we have to clear the right part of the screen
+	neg.b	d0
+	move.b	d0,d3
+	lsr.w	#3,d0	| positive so divide by 8
+	and.b	#0xF,d3
+	beq.b	61f
+	* increase width because we truncated it by dividing
+	addq.b	#1,d0
+61:
+	bclr	#0,d0	| even
+	add.w	d0,a1	| adjust A1
+	neg.b	d0
+	add.b	d0,d2	| 40-scroll gives width to clear in d2
+	
+	bra.b	7f
+6:
+	* positive: we have to clear the left part of the screen
+	lsr.w	#3,d0	| divide by 8
+	sub.w	d0,d2	| 40-scroll gives width to clear in d2
+	* A1 is okay (start of row)
+7:
+	* clear the row partially, no shifting
+    move.l  #0x01000000,d5   | minterm useD & rect clear (0xA) 
+
+	move.w #NB_BYTES_PER_ROW,d0
+    sub.w   d2,d0       | sub blit width -> modulo in D0
+
+    lsr.w   #1,d2
+    or.w   #8<<6,d2       | blit height = 8
+
+    * now just wait for blitter ready to write all registers
+	WAIT_BLIT
+    	
+	move.l d5,bltcon0(a5)	
+    move.w  d0,bltdmod(a5)	|D modulo
+	
+	move.l a1,bltdpt(a5)	|destination top left corner
+	move.w  d2,bltsize(a5)	|rectangle size, starts blit
+	lea		(FG_SCREEN_PLANE_SIZE,a1),a1
+	* second plane to clear
+	WAIT_BLIT
+	move.l a1,bltdpt(a5)	|destination top left corner
+	move.w  d2,bltsize(a5)	|rectangle size, starts blit
+	
+8:
+	* now blit the dirty row
 	move.w	#NB_BYTES_PER_ROW,d2
 	moveq	#0,d0
 	move.l	a3,a0		| source (current row)
@@ -1483,12 +1545,15 @@ update_rows:
 	move.l a0,bltapt(a5)	|source graphic top left corner
 	move.l a1,bltdpt(a5)	|destination top (bottom) left corner
 	move.w  d4,bltsize(a5)	|rectangle size, starts blit
+
 5:
 	add.w	#NB_BYTES_PER_ROW*8,a3	| 2 planes
 	add.w	#NB_BYTES_PER_ROW*8,a6	| 2 planes
 	addq.w	#2,d6
 	cmp.w	#NB_LINES/4,d6
 	jne		0b
+	
+
 	movem.l	(a7)+,d0-d7/a0-a6
 	rts
 	
