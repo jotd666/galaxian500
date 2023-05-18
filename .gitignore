@@ -7,3 +7,4 @@ s
 snapshot
 src/datetime
 *.slave
+*.bak
