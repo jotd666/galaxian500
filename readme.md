@@ -15,12 +15,12 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 
 #### Neo Geo
 
-- tested & playable on MVS, NGCD
-- TBD: stars
+- tested & playable w/sound on MVS, NGCD
+- TBD: background stars
 
 ### FEATURES:
 
-### CREDITS:
+#### CREDITS:
 
 - Jean-Francois Fabre (aka jotd): Amiga code and assets
 - Mark McDougall (aka tcdev): Neo Geo code and assets
@@ -28,7 +28,7 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 - phx: ptplayer sound/music replay Amiga code
 - Namco: original game :)
 
-### CONTROLS (Amiga: 2-button joystick required):
+#### CONTROLS (Amiga: 2-button joystick required):
 
 - red/fire: fire/start game (from menu)
 - blue/2nd button: insert coin (from menu)
