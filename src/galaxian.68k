@@ -492,10 +492,10 @@ HANDLE_ALIEN_DEATH_SOUND:
 	cmp.b	#0x06,d0                         	| Do we want to play the ALIEN DEATH sound? [cp   0x06]
 	jne	l_183a                             	| no, goto 0x183A [jp   nz,0x183A]
 
-	tst.b	IS_COMPLEX_SOUND_PLAYING                       	| read IS_COMPLEX_SOUND_PLAYING flag [ld   a,(0x41CD)]
-	beq.b	0f
-	rts                                    	| [ret  c]
-0:
+*	tst.b	IS_COMPLEX_SOUND_PLAYING                       	| read IS_COMPLEX_SOUND_PLAYING flag [ld   a,(0x41CD)]
+*	beq.b	0f
+*	rts                                    	| [ret  c]
+*0:
 
 	move.b	#0x01,d0                        	| [ld   a,0x01]
 	move.b	d0,PLAYER_SHOOT_SOUND_COUNTER+1                       	| [ld   (0x41CF),a]
@@ -2169,15 +2169,13 @@ INFLIGHT_ALIEN_DYING_SETUP_ANIM_AND_SOUND:
 * original game writes 0x07, and some obscure call at 0x16A6 does useless stuff
 * but also decreases that value. Since the code wasn't ported (why wasting cycles?)
 * just correct the values
-	move.b	#0x06,d0                        	| [ld   a,0x07]
-	move.b	d0,ALIEN_DEATH_SOUND                       	| play sound effect of alien hit [ld   (0x41DF),a]
+	move.b	#0x06,ALIEN_DEATH_SOUND                       	| play sound effect of alien hit [ld   (0x41DF),a]
 	rts                                    	| [ret]
 
 * play flagship hit sound
 l_110c:
 * original game writes 0x17, see above
-	move.b	#0x16,d0                        	| [ld   a,0x17]
-	move.b	d0,ALIEN_DEATH_SOUND                       	| play sound effect of flagship hit [ld   (0x41DF),a]
+	move.b	#0x16,ALIEN_DEATH_SOUND                       	| play sound effect of flagship hit [ld   (0x41DF),a]
 	rts                                    	| [ret]
 
 
@@ -6317,7 +6315,7 @@ l_131c:
 
 * Make player BOOM! sound
 	move.w	#PLAYER_SHOT_SND,d0
-	rts                                    	| [ret]
+	jra		osd_sound_start
 
 
 
@@ -6994,9 +6992,8 @@ UPDATE_ATTACK_COUNTERS:
 	move.b	#0x3C,(a0)                      	| reset counter [ld   (hl),0x3C]
 
 * if we have no blue or purple aliens, we don't need to bother with the FLAGSHIP_ATTACK_MASTER_COUNTER_2 countdown.
-	move.b	HAVE_NO_BLUE_OR_PURPLE_ALIENS,d0                       	| read HAVE_NO_BLUE_OR_PURPLE_ALIENS [ld   a,(0x4221)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	jcs	l_15a3                             	| if there's no blue or purple aliens left, goto 0x15A3 [jr   c,0x15A3]
+	tst.b	HAVE_NO_BLUE_OR_PURPLE_ALIENS                       	| read HAVE_NO_BLUE_OR_PURPLE_ALIENS [ld   a,(0x4221)]
+	jne	l_15a3                             	| if there's no blue or purple aliens left, goto 0x15A3 [jr   c,0x15A3]
 
 * otherwise, wait until FLAGSHIP_ATTACK_MASTER_COUNTER_2 counts down to 0.
 	lea		FLAGSHIP_ATTACK_MASTER_COUNTER_2,a0                           	| bump HL to FLAGSHIP_ATTACK_MASTER_COUNTER_2 [inc  hl]
@@ -7267,19 +7264,16 @@ CLAMP_DIFFICULTY_LEVEL:
 
 HANDLE_SHOCKED_SWARM:
 	lea	IS_FLAGSHIP_HIT,a0                      	| load HL with address of IS_FLAGSHIP_HIT flag [ld   hl,0x422B]
-	btst.b	#0,(a0)                         	| test flag [bit  0,(hl)]
+	tst.b	(a0)                         	| test flag [bit  0,(hl)]
 	bne.b	0f
 	rts                                    	| return if flagship has not been hit [ret  z]
 0:
-	move.b	HAVE_AGGRESSIVE_ALIENS,d0                       	| read HAVE_AGGRESSIVE_ALIENS flag [ld   a,(0x4224)]
-	tst.b	d0                               	| test flag [and  a]
+	tst.b	HAVE_AGGRESSIVE_ALIENS                       	| read HAVE_AGGRESSIVE_ALIENS flag [ld   a,(0x4224)]
 	jne	l_169f                             	| if flag is set, goto 0x169F [jr   nz,0x169F]
-	move.b	HAVE_NO_BLUE_OR_PURPLE_ALIENS,d0                       	| read HAVE_NO_BLUE_OR_PURPLE_ALIENS [ld   a,(0x4221)]
-	tst.b	d0                               	| test flag [and  a]
+	tst.b	HAVE_NO_BLUE_OR_PURPLE_ALIENS                       	| read HAVE_NO_BLUE_OR_PURPLE_ALIENS [ld   a,(0x4221)]
 	jne	l_169f                             	| if flag is set, goto 0x169F [jr   nz,0x169F]
-	move.b	HAVE_NO_INFLIGHT_ALIENS,d0                       	| read HAVE_NO_INFLIGHT_ALIENS [ld   a,(0x4226)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	bcs.b	0f
+	tst.b	HAVE_NO_INFLIGHT_ALIENS                       	| read HAVE_NO_INFLIGHT_ALIENS [ld   a,(0x4226)]
+	bne.b	0f
 	rts                                    	| return if some aliens are inflight [ret  nc]
 0:
 l_169f:
