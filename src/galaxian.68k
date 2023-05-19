@@ -62,7 +62,10 @@ FAST_INTRO_TEXT = 1
 
 	
 	.include "galaxian.inc"
-
+	.ifdef	__amiga__
+	.include "galaxian_ram.68k"
+	.endif
+	
 galaxian_reset:
 	move.b	#1,vb_ticks_count
 	bra		INITIALISE_SYSTEM

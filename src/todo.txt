@@ -9,7 +9,6 @@ transcode:
 amiga:
 
 - run in 68000 mode cycle exact to check if it runs properly: too slow!!
-- include ram source to allow assembler to use PC-relative optimizations on variables
 - maybe optimize player ship rows update: only blit where the ship is
   and only delete ship position depending on previous 2 values of scroll (double buffering)
 - player ship explosion sound sometimes not working (also kills other sounds)

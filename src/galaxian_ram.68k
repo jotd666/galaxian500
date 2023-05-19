@@ -167,8 +167,13 @@
 	.global	vb_ticks_count
 	.global	next_sound_to_play
 
+	* on amiga, this file is included in galaxian.68k file
+	* so the assembler can optimize by using PC-relative addressing
+	* whenever possible (and it does)
+	.ifndef	__amiga__
     .bss
-
+	.endif
+	
 * CAREFUL! game sometimes uses pointer on variables then clears/sets memory on the following
 * addresses (using rst 0x10 call), so for instance in 0550, it resets HAS_PLAYER_SPAWNED
 * to 0 on 0x17 bytes, which also clears swarm scroll, and aliens always start by moving
