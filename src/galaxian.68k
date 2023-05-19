@@ -1861,23 +1861,24 @@ HANDLE_INFLIGHT_ALIEN_STAGE_OF_LIFE:
 	move.l	(a0,d0.w),a0
 	jmp		(a0)
 
+* stage of life table
 table_0CE6: 
-      .long		INFLIGHT_ALIEN_PACKS_BAGS
-      .long		INFLIGHT_ALIEN_FLIES_IN_ARC
-      .long		INFLIGHT_ALIEN_READY_TO_ATTACK
-      .long		INFLIGHT_ALIEN_ATTACKING_PLAYER
-      .long		INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN
-      .long		INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN
-      .long		INFLIGHT_ALIEN_RETURNING_TO_SWARM
-      .long		INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN 
-      .long		INFLIGHT_ALIEN_FULL_SPEED_CHARGE 
-      .long		INFLIGHT_ALIEN_ATTACKING_PLAYER_AGGRESSIVELY
-      .long		INFLIGHT_ALIEN_LOOP_THE_LOOP
-      .long		INFLIGHT_ALIEN_COMPLETE_LOOP
-      .long		INFLIGHT_ALIEN_UNKNOWN_1091
-      .long		INFLIGHT_ALIEN_CONVOY_CHARGER_SET_COLOUR_POS_ANIM
-      .long		INFLIGHT_ALIEN_CONVOY_CHARGER_START_SCROLL  
-      .long		INFLIGHT_ALIEN_CONVOY_CHARGER_DO_SCROLL
+      .long		INFLIGHT_ALIEN_PACKS_BAGS									| 00
+      .long		INFLIGHT_ALIEN_FLIES_IN_ARC                                 | 01
+      .long		INFLIGHT_ALIEN_READY_TO_ATTACK                              | 02
+      .long		INFLIGHT_ALIEN_ATTACKING_PLAYER                             | 03
+      .long		INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN                        | 04
+      .long		INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN                     | 05
+      .long		INFLIGHT_ALIEN_RETURNING_TO_SWARM                           | 06
+      .long		INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN     | 07
+      .long		INFLIGHT_ALIEN_FULL_SPEED_CHARGE                            | 08
+      .long		INFLIGHT_ALIEN_ATTACKING_PLAYER_AGGRESSIVELY                | 09
+      .long		INFLIGHT_ALIEN_LOOP_THE_LOOP                                | 10
+      .long		INFLIGHT_ALIEN_COMPLETE_LOOP                                | 11
+      .long		INFLIGHT_ALIEN_UNKNOWN_1091                                 | 12
+      .long		INFLIGHT_ALIEN_CONVOY_CHARGER_SET_COLOUR_POS_ANIM           | 13
+      .long		INFLIGHT_ALIEN_CONVOY_CHARGER_START_SCROLL                  | 14
+      .long		INFLIGHT_ALIEN_CONVOY_CHARGER_DO_SCROLL                     | 15
 
 
 *
@@ -2247,7 +2248,6 @@ INFLIGHT_ALIEN_READY_TO_ATTACK:
 	jeq	l_0e20                             	| yes, goto 0x0E20 [jr   z,0x0E20]
 
 INFLIGHT_ALIEN_DEFINE_FLIGHTPATH:
-l_0ddd:
 	move.b	PLAYER_Y,d0                       	| read PLAYER_Y [ld   a,(0x4202)]
 	move.b	d0,d1                           	| [ld   b,a]
 	move.b	(inf_alien_Y,a2),d0                    	| read INFLIGHT_ALIEN.Y [ld   a,(ix+0x04)]
@@ -2447,9 +2447,8 @@ INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN:
 
 *if the player has not spawned, the alien will return to the swarm.
 l_0ead:
-	move.b	HAS_PLAYER_SPAWNED,d0                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
-	ror.b	#1,d0                            	| move flag into carry [rrca]
-	jcc	l_0ed6                             	| if player has not spawned yet, goto 0x0ED6 - aliens return to swarm [jr   nc,0x0ED6]
+	tst.b	HAS_PLAYER_SPAWNED                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
+	jeq	l_0ed6                             	| if player has not spawned yet, goto 0x0ED6 - aliens return to swarm [jr   nc,0x0ED6]
 
 *  if HAVE_AGGRESSIVE_ALIENS OR HAVE_NO_BLUE_OR_PURPLE_ALIENS flags are set, the alien will keep attacking (see 0x0EBF).
 *  otherwise the alien returns to the swarm (see 0x0ED3 and 0x0F07)
@@ -2471,7 +2470,7 @@ l_0ebf:
 	move.b	d0,(inf_alien_Y,a2)                    	| set INFLIGHT_ALIEN.Y [ld   (ix+0x04),a]
 	move.b	#0x28,(TempCounter1,a2)                 	| set INFLIGHT_ALIEN.TempCounter1 for INFLIGHT_ALIEN_UNKNOWN_OF3C to use. [ld   (ix+0x10),0x28]
 
-* if both of these incs are called, the stage of life will,0xbe set to INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN.
+* if both of these incs are called, the stage of life will be set to INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN.
 * if only the inc @ 0x0ED6 is invoked (see 0x0EB1), then the stage of life will,0xbe set to INFLIGHT_ALIEN_RETURNING_TO_SWARM.
 	addq.b	#1,(StageOfLife,a2)                    	| increment INFLIGHT_ALIEN.StageOfLife [inc  (ix+0x02)]
 l_0ed6:
@@ -2593,7 +2592,6 @@ INFLIGHT_ALIEN_BACK_IN_SWARM:
 INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN:
 	addq.b	#1,(inf_alien_X,a2)                    	| increment INFLIGHT_ALIEN.X [inc  (ix+0x03)]
 
-*
 	move.b	PLAYER_Y,d0                       	| read PLAYER_Y [ld   a,(0x4202)]
 	sub.b	(inf_alien_Y,a2),d0                     	| subtract INFLIGHT_ALIEN.Y [sub  (ix+0x04)]
 
@@ -2612,7 +2610,7 @@ INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN:
 	sub.w	d3,d5                          	| ..there's no sub hl,de instruction in Z80 no carry needed [sbc  hl,de]
 	move.b	d5,(PivotYValue,a2)                     	| update INFLIGHT_ALIEN.PivotYValue [ld   (ix+0x09),l]
 	lsr.w	#8,d5
-	move.b	d5,(inf_alien_X,a2)                     	| update INFLIGHT_ALIEN.Y [ld   (ix+0x04),h]
+	move.b	d5,(inf_alien_Y,a2)                     	| update INFLIGHT_ALIEN.Y [ld   (ix+0x04),h]
 	subq.b	#1,(TempCounter1,a2)                    	| counter was set @ 0x0ECF [dec  (ix+0x10)]
 	beq.b	0f
 	rts                                    	| [ret  nz]
@@ -7376,8 +7374,12 @@ DEFAULT_SWARM_DEFINITION_AND_PLAYER_STATE:    | EQU 0x051B
 PACKED_DEFAULT_SWARM_DEFINITION:
     | The first 16 bytes defining the default alien swarm. 
     | For information on how the bytes are unpacked, please see docs @ 0x0646
+	.ifeq	OPT_SMALL_SWARM
     .byte	0x00,0x00,0x00,0x00,0xF8,0x1F,0xF8,0x1F,0xF8,0x1F,0xF0,0x0F,0xE0,0x07,0x40,0x02
-
+	.else
+    .byte	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xE0,0x00,0x40,0x02
+	.endif
+	
     | When starting a new game, these are the default values 
 DEFAULT_PLAYER_STATE:
 	.byte	0x3C                                 | Default value for DIFFICULTY_COUNTER_1 

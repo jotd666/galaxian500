@@ -1,14 +1,17 @@
 transcode:
 - swarm sound loop
-- no swarm: alien still joins non-existing swarm for a little while before attacking
-- collisions player vs aliens seem not to work very well but maybe it's the same with MAME
- (test it with mame no shoot cheat)
+- collisions player vs aliens seem not to work very well
+- aliens goes too far on left => finds itself in the middle of the screen (maybe normal)
 - send corrected transcode to Scott
 - re-convert/check GENERATE_RANDOM_NUMBER
+- OPT_SMALL_SWARM=1 => at some point awards player 4 lives by mistake!
+- grep for move to zero page (debug) remaining code
+- add high score load/save support.
 
 amiga:
 
-- run in 68000 mode cycle exact to check if it runs properly: too slow!!
+- run in 68000 mode cycle exact to check if it runs properly: too slow!! check if row update optim
+  is working or if it updates all
 - maybe optimize player ship rows update: only blit where the ship is
   and only delete ship position depending on previous 2 values of scroll (double buffering)
 - player ship explosion sound sometimes not working (also kills other sounds)
@@ -25,7 +28,8 @@ amiga:
 - stars as sprites:
   * priority?
   * blink/change from time to time
-  * scrolling: working but with big glitches
+  * scrolling: working but with big glitches: slow it down to analyse copperlist
+    when glitching
 
 
 To rip the sounds:
