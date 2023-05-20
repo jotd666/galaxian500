@@ -67,7 +67,12 @@ FAST_INTRO_TEXT = 1
 	.endif
 	
 galaxian_reset:
+	* default: 1 update/irq call
+	* we need 60 updates / second so on amiga PAL
+	* we need to set this variable to 2 once out of 5 calls
 	move.b	#1,vb_ticks_count
+
+	
 	bra		INITIALISE_SYSTEM
 
 	
@@ -2332,17 +2337,15 @@ INFLIGHT_ALIEN_ATTACKING_PLAYER:
 	move.b	(inf_alien_X,a2),d0                    	| load A with INFLIGHT_ALIEN.X [ld   a,(ix+0x03)]
 	add.b	#0x48,d0                         	| [add  a,0x48]
 	jcs	l_0e67                             	| if the alien is nearing the bottom of the screen, speed it up! [jr   c,0x0E67]
-	move.b	HAS_PLAYER_SPAWNED,d0                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
-	ror.b	#1,d0                            	| move flag into carry [rrca]
-	bcs.b	0f
+	tst.b	HAS_PLAYER_SPAWNED                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
+	bne.b	0f
 	rts                                    	| return if player has not spawned [ret  nc]
 0:
 	jbsr	CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME                            	| call CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME [call 0x11B0]
 
 * alien won't shoot at you if a flagship has been hit
-	move.b	IS_FLAGSHIP_HIT,d0                       	| read IS_FLAGSHIP_HIT [ld   a,(0x422B)]
-	ror.b	#1,d0                            	| move flag into carry [rrca]
-	bcc.b	0f
+	tst.b	IS_FLAGSHIP_HIT                       	| read IS_FLAGSHIP_HIT [ld   a,(0x422B)]
+	beq.b	0f
 	rts                                    	| return if flagship was hit [ret  c]
 0:
 
@@ -2708,9 +2711,8 @@ l_0fbe:
 	rts                                    	| return if player has not spawned [ret  nc]
 0:
 	jbsr	CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME                            	| call CALCULATE_INFLIGHT_ALIEN_LOOKAT_ANIM_FRAME [call 0x11B0]
-	move.b	IS_FLAGSHIP_HIT,d0                       	| read IS_FLAGSHIP_HIT [ld   a,(0x422B)]
-	ror.b	#1,d0                            	| move flag into carry [rrca]
-	bcc.b	l_0E54
+	tst.b	IS_FLAGSHIP_HIT                       	| read IS_FLAGSHIP_HIT [ld   a,(0x422B)]
+	beq.b	l_0E54
 	rts                                    	| return if flagship has been hit [ret  c]
 l_0E54:
 
@@ -3004,7 +3006,7 @@ DISPLAY_SCORE_COMMAND:
 	jra			DECIDE_TO_DISPLAY_PLAYER_ONE_OR_PLAYER_TWO_SCORE
 
 DISPLAY_HIGH_SCORE:
-	lea		HI_SCORE+2,a0            | pointer to last 2 BCD digits of HI_SCORE
+	lea		HI_SCORE+2,a1            | pointer to last 2 BCD digits of HI_SCORE
 	jra		l_21F8
 
 * This displays player scores and high scores
@@ -3481,6 +3483,8 @@ PLAYER_ONE_INIT:
 	lea	CURRENT_PLAYER_STATE,a1                      	| load DE with address of CURRENT_PLAYER_STATE [ld   de,0x4218
 	move.w	#8,d1			| sizeof(CURRENT_PLAYER_STATE)
 	jbsr	ldir                                    	| write P1 player state
+	
+	move.b	#OPT_START_LEVEL-1,PLAYER_ONE_LEVEL	
 * reset any game settings
 	moveq	#0,d0                            	| [xor  a]
 	move.b	d0,TIMING_VARIABLE                       	| set TIMING_VARIABLE [ld   (0x425F),a]
@@ -3842,6 +3846,7 @@ PLAYER_TWO_INIT:
 	lea	CURRENT_PLAYER_STATE,a1                      	| load DE with address of CURRENT_PLAYER_STATE [ld   de,0x4218]
 	move.w	#8,d1
 	jbsr		ldir                                    	| move player 2's state to CURRENT_PLAYER_STATE
+	move.b	#OPT_START_LEVEL-1,PLAYER_TWO_LEVEL
 
 * reset any game settings
 	moveq	#0,d0                            	| [xor  a]
@@ -5978,7 +5983,10 @@ l_0baa:
 * Player's been hit.. deactivate enemy bullet and set hit flag.
 l_0bb4:
 	clr.b	(0x00,a2)                 	| clear ENEMY_BULLET.IsActive flag. [ld   (ix+0x00),0x00]
+	tst.b	invincible_flag
+	bne.b	0f
 	move.b	#0x01,IS_PLAYER_HIT          		| set IS_PLAYER_HIT flag. Player will explode. [ld   (0x4204),a]
+0:
 	rts
 
 
@@ -6252,7 +6260,10 @@ TEST_IF_INFLIGHT_ALIEN_HIT_PLAYER:
 0:
 
 * kill player and alien
+	tst.b	invincible_flag
+	bne.b	0f
 	move.b	#0x01,IS_PLAYER_HIT 		| set IS_PLAYER_HIT flag. [ld   (0x4204),a]
+0:
 	jra	l_125e                             	| and we need to kill the alien as well [jp   0x125E]
 
 l_12da:
@@ -6265,7 +6276,10 @@ l_12da:
 0:
 
 * kill player and alien
+	tst.b	invincible_flag
+	bne.b	0f
 	move.b	#0x01,IS_PLAYER_HIT   	| set IS_PLAYER_HIT flag. [ld   (0x4204),a]
+0:
 	jra	l_125e                             	| and we need to kill the alien as well [jp   0x125E]
 
 
@@ -6302,13 +6316,16 @@ l_130e:
 
 * decrement number of player lives
 	lea	PLAYER_LIVES,a0                      	| pointer to address of PLAYER_LIVES [ld   hl,0x421D]
+	tst.b	infinite_lives_flag
+	bne.b	0f
 	subq.b	#1,(a0)                         	| reduce number of lives [dec  (hl)]
+0:
 	move.b	(a0),d0                         	| read number of lives [ld   a,(hl)]
 	cmp.b	#0x06,d0                         	| compare to 6 [cp   0x06]
 	jcs	l_131c                             	| if < 6 then goto 0x131C [jr   c,0x131C]
 	move.b	#0x05,(a0)                      	| otherwise, clamp number of lives max to 5 (is this anti-hack code?) [ld   (hl),0x05]
 l_131c:
-	move.b	IS_GAME_IN_PLAY,d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	tst.b	IS_GAME_IN_PLAY                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
 	bne.b	0f
 	rts                                    	| return if game is not in play [ret  nc]
 0:
@@ -6852,9 +6869,8 @@ HANDLE_LEVEL_DIFFICULTY:
 	bne.b	0f
 	rts                                    	| return if player has not spawned [ret  nc]
 0:
-	move.b	IS_FLAGSHIP_HIT,d0                       	| read IS_FLAGSHIP_HIT [ld   a,(0x422B)]
-	ror.b	#1,d0                           	| move flag into carry [rrca]
-	bcc.b	0f
+	tst.b	IS_FLAGSHIP_HIT                       	| read IS_FLAGSHIP_HIT [ld   a,(0x422B)]
+	beq.b	0f
 	rts                                    	| return if flagship has been hit [ret  c]
 0:
 
@@ -7173,20 +7189,17 @@ l_1615:
 *
 
 CHECK_IF_LEVEL_IS_COMPLETE:
-	move.b	HAVE_NO_ALIENS_IN_SWARM,d0                       	| read HAVE_NO_ALIENS_IN_SWARM [ld   a,(0x4220)]
-	ror.b	#1,d0                           	| move flag bit into carry [rrca]
-	bcs.b	0f
+	tst.b	HAVE_NO_ALIENS_IN_SWARM                       	| read HAVE_NO_ALIENS_IN_SWARM [ld   a,(0x4220)]
+	bne.b	0f
 	rts                                    	| return if flag is not set, meaning that there are aliens left in the swarm [ret  nc]
 0:
-	move.b	HAVE_NO_INFLIGHT_OR_DYING_ALIENS,d0                       	| read HAVE_NO_INFLIGHT_OR_DYING_ALIENS [ld   a,(0x4225)]
-	ror.b	#1,d0                           	| move flag bit into carry [rrca]
-	bcs.b	0f
+	tst.b	HAVE_NO_INFLIGHT_OR_DYING_ALIENS                       	| read HAVE_NO_INFLIGHT_OR_DYING_ALIENS [ld   a,(0x4225)]
+	bne.b	0f
 	rts                                    	| return if flag is not set, meaning that there are aliens attacking, or dying [ret  nc]
 0:
-	move.b	LEVEL_COMPLETE,d0                       	| read LEVEL_COMPLETE [ld   a,(0x4222)]
-	ror.b	#1,d0                           	| move flag bit into carry [rrca]
-	bcc.b	0f
-	rts                                    	| return if flag is not set [ret  c]
+	tst.b	LEVEL_COMPLETE                       	| read LEVEL_COMPLETE [ld   a,(0x4222)]
+	beq.b	0f
+	rts                                    	| return if flag is set [ret  c]
 0:
 	move.b	#1,LEVEL_COMPLETE
 	clr.b	NEXT_LEVEL_DELAY_COUNTER	| set LEVEL_COMPLETE to 1 and NEXT_LEVEL_DELAY_COUNTER to 0. [ld   (0x4222),hl]

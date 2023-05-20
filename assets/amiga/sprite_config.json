@@ -140,7 +140,7 @@
     "name": "score_150",
     "mirror": false,
     "clip_right": false,
-	"hw_sprite":[4,5]
+	"hw_sprite":[2,3,4,5]
   },
   "33": {
     "cluts": [
@@ -149,7 +149,7 @@
     "name": "score_200",
     "mirror": false,
     "clip_right": false,
-	"hw_sprite":[4,5]
+	"hw_sprite":[2,3,4,5]
   },
   "34": {
     "cluts": [
@@ -158,7 +158,7 @@
     "name": "score_300",
     "mirror": false,
     "clip_right": false,
-	"hw_sprite":[4,5]
+	"hw_sprite":[2,3,4,5]
   },
   "35": {
     "cluts": [
@@ -167,7 +167,7 @@
     "name": "score_800",
     "mirror": false,
     "clip_right": false,
-	"hw_sprite":[4,5]
+	"hw_sprite":[2,3,4,5]
   },
   "41": {
     "cluts": [

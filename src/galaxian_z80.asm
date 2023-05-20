@@ -5470,7 +5470,7 @@ CHECK_IF_LEVEL_IS_COMPLETE:
 162A: D0            ret  nc                  | return if flag is not set, meaning that there are aliens attacking, or dying
 162B: 3A 22 42      ld   a,(0x4222)           | read LEVEL_COMPLETE
 162E: 0F            rrca                     | move flag bit into carry
-162F: D8            ret  c                   | return if flag is not set
+162F: D8            ret  c                   | return if flag is set
 1630: 21 01 00      ld   hl,0x0001
 1633: 22 22 42      ld   (0x4222),hl          | set LEVEL_COMPLETE to 1 and NEXT_LEVEL_DELAY_COUNTER to 0.                  
 1636: C9            ret

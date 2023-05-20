@@ -1093,11 +1093,14 @@ draw_sprites:
 	move.l	-(a2),d4
 	move.l	d4,-(a4)		| save for next time
 	move.l	d4,d7
+	jeq		11f
 	and.l	#0xFF0000FF,d7
 	cmp.l	#0xF80000F8,d7	| X=Y=0xF8: means disabled
-	beq.w	11f
+	jeq		11f
 
 	bsr		decode_sprite_data
+	
+	
 	lea		sprite_table,a1
 	move.b	d6,d2		| save attributes xflip/yflip
 	and.w	#0x3F,d6	| mask attributes
@@ -1177,6 +1180,8 @@ draw_sprites:
 	bra.b	101f
 100:
 	* get previous value
+	* issue: if another sprite type follows and the
+	* slot list is not compatible, this will fail
 	move.w	(4,a5),d2
 	* if it's zero, it means that
 	* all slots were previously taken (sprite 0 is reserved)
@@ -1185,9 +1190,9 @@ draw_sprites:
 101:
 	* set palette
 	add.w	d2,d2
-	add.w	d2,d2
-	move.w	d2,-(a7)
-	add.w	d2,d2
+	add.w	d2,d2		| d2 *= 4
+	move.w	d2,d4		| save d2
+	add.w	d2,d2		| d2 *= 8
 	bclr	#3,d2		| same palette for 2 sprites
 	lea		sprite_cols,a1
 	add.w	d2,a1
@@ -1199,7 +1204,7 @@ draw_sprites:
 	move.w	(a3)+,(10,a1)
 	move.w	(a3)+,(14,a1)
 
-	move.w	(a7)+,d2
+	move.w	d4,d2	| restore d2*4
 	
 	* get sprite frame for current amiga hw sprite
 	move.l	(a0,d2.w),a0
