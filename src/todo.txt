@@ -15,7 +15,7 @@ amiga:
   is working or if it updates all
 - maybe optimize player ship rows update: only blit where the ship is
   and only delete ship position depending on previous 2 values of scroll (double buffering)
-- default dip switches should be 3 lives
+- coded but not working: dip switch 3 lives / 7000/10000/12000... free ship
 - support more dip switches (CLI but should be 1.3 compliant eeek & whdload)
 - when to play attack sound?
 - if not fire first pressed & game not playing

@@ -36,7 +36,8 @@ _expmem
 _config
 	dc.b    "C1:X:invincibility:0;"    
 	dc.b    "C1:X:infinite lives:1;"    
-	dc.b    "C5:X:DSW - 3 lives:0;"
+	dc.b    "C4:L:DSW - bonus galaxip:7000,10000,12000,20000;"
+	dc.b    "C5:X:DSW - 2 lives only:0;"
 	dc.b    "C5:X:DSW - free play:1;"    
 	dc.b	0
 

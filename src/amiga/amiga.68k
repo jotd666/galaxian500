@@ -343,12 +343,14 @@ _user:
 	move.l	dip_switches(pc),d2
 	btst	#0,d2
 	beq.b	0f
-	move.w	#0x4,start_lives_dsw
+	move.w	#0,start_lives_and_free_ship_dsw
 0:
 	btst	#1,d2
 	beq.b	0f
 	move.w	#0xC0,free_play_dsw
 0:
+	move.l	dip_switch_bonus_ship(pc),d2
+	or.w	d2,start_lives_and_free_ship_dsw
 	
 	jsr	 _detect_controller_types 
 
@@ -1656,13 +1658,16 @@ _tag:
 		.long	WHDLTAG_CUSTOM1_GET
 cheat_flags:
 		.long	0
+		.long	WHDLTAG_CUSTOM4_GET
+dip_switch_bonus_ship:
+		.long	0
 		.long	WHDLTAG_CUSTOM5_GET
 dip_switches:
 		.long	0
 	.long	0
 
-start_lives_dsw:
-	.word	0
+start_lives_and_free_ship_dsw:
+	.word	4
 free_play_dsw:
 	.word	0
 	
@@ -1780,6 +1785,7 @@ osd_debug_hook:
 osd_read_dipswitches:
 	move.b	#0x03,d0
 	move.w	free_play_dsw(pc),d1
+	move.w	start_lives_and_free_ship_dsw(pc),d2
 
 	movem.l	a0,-(a7)
 	lea keyboard_table(pc),a0
@@ -1816,7 +1822,6 @@ osd_read_dipswitches:
 
 
 	move.l	(a7)+,a0
-	moveq	#1,d2	| 3 lives
 	rts
 
 		
