@@ -12,11 +12,10 @@ amiga:
 
 - run in 68000 mode cycle exact to check if it runs properly: too slow!! check if row update optim
   is working or if it updates all
-- maybe optimize player ship rows update: only blit where the ship is
-  and only delete ship position depending on previous 2 values of scroll (double buffering)
 - support dip switches from CLI but should be 1.3 compliant eeek
 - when to play attack sound?
 - joypad controls: play for pause
+- switch plane priority
 - stars as sprites:
   * priority?
   * blink/change from time to time

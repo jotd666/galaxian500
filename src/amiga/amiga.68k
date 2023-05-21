@@ -1417,75 +1417,38 @@ update_rows:
 	jeq		5f
 	subq.b	#1,(a4,d6.w)	| dec counter, eventually ack as clean
 	* now blit the dirty row
-	* but first clear the left or right part depending on scroll value
-	* doing that first, so no need to adjust shifting, just clear on byte boundaries
-	moveq	#0,d0
-	move.b	(1,a4,d6.w),d0	| scroll offset: as signed byte
-	jeq		8f				| if zero, no need to clear anything
-	* issue only on player ship because when player is killed,
-	* game clears and resets scroll immediately, not leaving enough
-	* time for character clear to be applied on other buffer
-	cmp.b	#0x3C,d6
-	jcc		8f				| after player ship rows: not needed
-	cmp.b	#0x34,d6
-	jcs		8f				| before player ship rows: not needed
+	* we should first clear the left or right part depending on scroll value
+	* but that's only necessary at player ship level, and only when player is killed
+	* so ship position "jumps" from left/right to center. When jumping from left
+	* the ship is not properly cleared. Cornercase, so a little hack is preferred, that
+	* will also save blitter time
 	
-
-	move.w	#NB_BYTES_PER_ROW,d2
-	move.l	a6,a1		| dest (current row)
-	tst.b	d0
-	bpl.b	6f
-	* negative: we have to clear the right part of the screen
-	neg.b	d0
-	move.b	d0,d3
-	lsr.w	#3,d0	| positive so divide by 8
-	and.b	#0xF,d3
-	beq.b	61f
-	* increase width because we truncated it by dividing
-	addq.b	#1,d0
-61:
-	bclr	#0,d0	| even
-	add.w	d0,a1	| adjust A1
-	neg.b	d0
-	addq.b	#1,d0	| even
-	add.b	d0,d2	| 40-scroll gives width to clear in d2
-	
-	bra.b	7f
-6:
-	* positive: we have to clear the left part of the screen
-	lsr.w	#3,d0	| divide by 8
-	sub.w	d0,d2	| 40-scroll gives width to clear in d2
-	* A1 is okay (start of row)
-7:
-	* clear the row partially, no shifting
-    move.l  #0x01000000,d5   | minterm useD & rect clear (0xA) 
-
-	move.w #NB_BYTES_PER_ROW,d0
-    sub.w   d2,d0       | sub blit width -> modulo in D0
-
-    lsr.w   #1,d2
-    or.w   #8<<6,d2       | blit height = 8
-
-    * now just wait for blitter ready to write all registers
-	WAIT_BLIT
-    	
-	move.l d5,bltcon0(a5)	
-    move.w  d0,bltdmod(a5)	|D modulo
-	
-	move.l a1,bltdpt(a5)	|destination top left corner
-	move.w  d2,bltsize(a5)	|rectangle size, starts blit
-	lea		(FG_SCREEN_PLANE_SIZE,a1),a1
-	* second plane to clear
-	WAIT_BLIT
-	move.l a1,bltdpt(a5)	|destination top left corner
-	move.w  d2,bltsize(a5)	|rectangle size, starts blit
-	
-8:
 	* now blit the dirty row
-	move.w	#NB_BYTES_PER_ROW,d2
 	moveq	#0,d0
 	move.l	a3,a0		| source (current row)
 	move.l	a6,a1		| dest (current row)
+	
+	* issue only on player ship because when player is killed,
+	* game clears and resets scroll immediately, not leaving enough
+	* time for character clear to be applied on other buffer
+	cmp.b	#0x34,d6
+	jne		1f				| only for first player ship row
+	
+	moveq	#0,d0
+	moveq	#0,d1
+	move.b	(1,a4,d6.w),d1	| scroll offset: as signed byte
+	move.b	previous_ship_scroll(pc),d0
+	jbsr	erase_previous_ship
+	move.b	previous_previous_ship_scroll(pc),d0
+	move.b	previous_ship_scroll(pc),d1
+	jbsr	erase_previous_ship
+	
+	move.b	previous_ship_scroll,previous_previous_ship_scroll
+	moveq	#0,d0
+	move.b	(1,a4,d6.w),d0	| scroll offset: as signed byte
+	move.b	d0,previous_ship_scroll
+	bpl.b	2f
+1:
 	move.b	(1,a4,d6.w),d0	| scroll offset: as signed byte
 	bpl.b	2f
 	* negative: for instance for player ship pseudosprite
@@ -1514,7 +1477,9 @@ update_rows:
 	bclr	#0,d3
     add.w   d3,a1       | X-offset destination plane position
 3:
+	move.w	#NB_BYTES_PER_ROW,d2
 	sub.w	d3,d2		| change width depending on scroll offset
+
 	moveq	#8,d4		| height
 
     move.l  #0x09f00000,d3    | A->D copy, ascending mode
@@ -1523,7 +1488,7 @@ update_rows:
 
     sub.w   d2,d1       | blit modulo
     lsl.w   #6,d4
-    lsr.w   #1,d2
+    lsr.w   #1,d2		| blit width
     add.w   d2,d4       | blit height
 
 	* insert shifting in D3 bltcon config
@@ -1569,7 +1534,45 @@ update_rows:
 
 	movem.l	(a7)+,d0-d7/a0-a6
 	rts
+
+* < D0: previous ship row scroll
+* < D1: current ship row scroll
+* < A6: plane ptr
 	
+erase_previous_ship:
+	ext.w	d0
+	ext.w	d1
+	sub.w	d0,d1
+	bpl.b	1f
+	neg.w	d1		| abs value
+1:
+	cmp.w	#3,d1
+	bcs.b	3f
+	* discontinuity on ship X: this is going to leave unerased chars on screen
+	* handle this (D0: previous ship Y aka X on amiga), use CPU to clear
+	* (not critical, done once)
+	lea	(8*NB_BYTES_PER_ROW,a6),a1
+	move.l	a6,a1
+	move.b	#0,0x200
+	add.w	#0x80,d0
+	lsr.w	#3,d0
+	bclr	#0,d0
+	subq.w	#2,d0
+	add.w	d0,a1
+	moveq	#1,d2
+	WAIT_BLIT
+0:
+	move.l	a1,a2
+	move.w	#31,d1
+2:
+	clr.l	(a2)+
+	clr.l	(a2)
+	add.w	#NB_BYTES_PER_ROW-4,a2
+	dbf	d1,2b
+	lea		(BG_SCREEN_PLANE_SIZE,a1),a1
+	dbf		d2,0b
+3:
+	rts
 	
 * d6: screen offset
 * d0: tile code
@@ -1653,6 +1656,7 @@ old_actiview:
 	.long	0
 old_stack:
 	.long	0
+
 	
 _tag:
 		.long	WHDLTAG_CUSTOM1_GET
@@ -1670,6 +1674,10 @@ start_lives_and_free_ship_dsw:
 	.word	4
 free_play_dsw:
 	.word	0
+previous_ship_scroll:
+	.byte	0
+previous_previous_ship_scroll:
+	.byte	0
 	
 		
 store_sprite_pos_16:

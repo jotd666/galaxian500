@@ -3679,9 +3679,8 @@ HANDLE_PLAYER_ONE_KILLED:
 	addq.b	#1,(a0)                         	| bump to next stage of the script [inc  (hl)]
 	move.b	#0x82,TEMP_COUNTER_2                      	| set counter [ld   (hl),0x82]
 
-	move.b	IS_GAME_IN_PLAY,d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
-	ror.b	#1,d0                            	| move flag into carry [rrca]
-	bcs.b	0f
+	tst.b	IS_GAME_IN_PLAY                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	bne.b	0f
 	rts                                    	| return if game is not in play [ret  nc]
 0:
 
@@ -3994,17 +3993,16 @@ l_0850:
 
 TEST_JOYSTICK_PUSHED_LEFT:
 	btst.b	#2,d1                           	| has MOVE LEFT been pushed? [bit  2,b]
-	jeq	l_0865                             	| No, goto 0x0865 [jr   z,0x0865]
+	jeq	SET_PLAYER_SHIP_SCROLL_OFFSET                             	| No, goto 0x0865 [jr   z,0x0865]
 
 * player pushed stick left
 	move.b	(a0),d0                         	| get Y coordinate of player ship into A [ld   a,(hl)]
 	cmp.b	#0xE9,d0                         	| compare to #0xE9 (233 decimal) [cp   0xE9]
-	jcc	l_0865                             	| if A>= #0xE9 then player is at far left screen edge and can go no further, goto 0x0865 [jr   nc,0x0865]
+	jcc	SET_PLAYER_SHIP_SCROLL_OFFSET                             	| if A>= #0xE9 then player is at far left screen edge and can go no further, goto 0x0865 [jr   nc,0x0865]
 	addq.b	#1,(a0)                         	| increment PLAYER_Y (moving ship LEFT) [inc  (hl)]
 
 * set scroll value for columns containing the player ship characters
 SET_PLAYER_SHIP_SCROLL_OFFSET:
-l_0865:
 	move.b	(a0),d0                         	| get ship Y coordinate into A [ld   a,(hl)]
 	not.b	d0                               	| flip the bits [cpl]
 	add.b	#0x80,d0                         	| add an offset. Now we have a scroll value in A. [add  a,0x80]
@@ -4013,14 +4011,13 @@ l_086b:
 	lea	OBJRAM_BACK_BUF+0x34,a0                      	| set hl to point to first column containing player ship pseudosprite. [ld   hl,0x4054]
 
 * the players ship is 2x2 characters when alive, 4x4 when its exploding. We need to set the scroll offset for the 4 columns.
-	move.b	#0x04,d1                        	| we're doing 4 columns [ld   b,0x04]
+	moveq	#0x03,d1                        	| we're doing 4 columns [ld   b,0x04]
 l_0870:
 	move.b	d0,(a0)+                         	| write scroll offset to OBJRAM_BACK_BUF (see docs @top) [ld   (hl),a]
 	                            	| bump pointer to colour value for column [inc  l]
 	move.b	d2,(a0)+                         	| write colour to OBJRAM_BACK_BUF (see docs @ top) [ld   (hl),c]
 	                            	| bump pointer to scroll offset value for column [inc  l]
-	subq.b	#1,d1                           	| [...]
-	jne	l_0870                             	| do until b==0 [djnz 0x0870]
+	dbf	d1,l_0870                             	| do until b==0 [djnz 0x0870]
 	rts                                    	| [ret]
 
 * if we get here, then either the player hasn't spawned, or the player is hit.
@@ -4031,7 +4028,7 @@ SPAWN_PLAYER_OR_DIE:
 * spawn player
 	lea		PLAYER_Y,a0                            	| otherwise, point HL to PLAYER_Y [inc  l]
 	clr.b	(a0)                             	| set value of PLAYER_Y to 0 [ld   (hl),0x00]
-	jra	l_0865                             	| and set the scroll for the player ship [jp   0x0865]
+	jra	SET_PLAYER_SHIP_SCROLL_OFFSET                             	| and set the scroll for the player ship [jp   0x0865]
 
 * if we get here, the player is about to explode.
 PLAYER_EXPLOSION_INIT:
