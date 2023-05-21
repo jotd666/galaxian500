@@ -1,5 +1,6 @@
 transcode:
 - check how swarm sound loop and how is it turned off/on (volume?)
+- demo mode: computer player shoots but doesn't move
 - collisions player vs aliens seem not to work for left side?: debug them
   (break when alien X and ship X are close)
 - send corrected transcode to Scott
@@ -15,38 +16,13 @@ amiga:
   and only delete ship position depending on previous 2 values of scroll (double buffering)
 - support dip switches from CLI but should be 1.3 compliant eeek
 - when to play attack sound?
-- if not fire first pressed & game not playing
-  * credit 0: fire = insert coin
-  * credit != 0: fire to start game
-  * same for second player
-- joypad controls: insert coin/start/play for pause
+- joypad controls: play for pause
 - stars as sprites:
   * priority?
   * blink/change from time to time
   * scrolling: working but with big glitches: slow it down to analyse copperlist
     when glitching
 
-star-stick glitch
-
- 00002440: 017e 0000            ;  SPR7DATB := 0x0000
- 00002444: 0c01 fffe            ;  Wait for vpos >= 0x0c and hpos >= 0x00  *** OK
-                                ;  VP 0c, VE 7f; HP 00, HE fe; BFD 1
- 00002448: 017c 0000            ;  SPR7DATA := 0x0000
->o
- 0000244c: 017e 0000            ;  SPR7DATB := 0x0000
- 00002450: 0182 0ddf            ;  COLOR01 := 0x0ddf
- 00002454: 0184 0f00            ;  COLOR02 := 0x0f00
- 00002458: 0186 00df            ;  COLOR03 := 0x00df
- 0000245c: 01ba 0fc0            ;  COLOR29 := 0x0fc0
- 00002460: 017a 9001            ;  SPR7CTL := 0x9001
- 00002464: 0178 80ba            ;  SPR7POS := 0x80ba
- 00002468: 017c 8000            ;  SPR7DATA := 0x8000
- 0000246c: 017e 0000            ;  SPR7DATB := 0x0000
- 00002470: 1501 fffe            ;  Wait for vpos >= 0x15 and hpos >= 0x00   *** WTF!!!!
-                                ;  VP 15, VE 7f; HP 00, HE fe; BFD 1
- 00002474: 017c 0000            ;  SPR7DATA := 0x0000
- 00002478: 017e 0000            ;  SPR7DATB := 0x0000
- 0000247c: 01ba 0f00            ;  COLOR29 := 0x0f00
  
 To rip the sounds:
 

@@ -1818,8 +1818,23 @@ osd_read_dipswitches:
 	beq.b	0f
 	bset	#4,d0
 0:
-	
-
+	tst.b	IS_GAME_IN_PLAY
+	bne.b	2f
+	* game not in play, accept start 1P game with "up"
+	btst	#JPB_BTN_UP,d3
+	beq.b	0f
+	bset	#0,d1
+0:
+	* game not in play, accept start 2P game with "down"
+	btst	#JPB_BTN_DOWN,d3
+	beq.b	0f
+	bset	#1,d1
+0:
+	btst	#JPB_BTN_RED,d3
+	beq.b	2f
+	* game not in play, accept insert coin with fire
+	bclr	#0,d0
+2:
 	movem.l	(a7)+,d3/a0
 	rts
 
@@ -2652,7 +2667,7 @@ color_row_29:
 	STAR_COPPER_ROW
 	.endr
 	
-	.set    beampos,0x1401
+	.set    beampos,0x0c01
 	
 color_row_30_plus:
 	.rept	4
