@@ -1862,12 +1862,11 @@ HANDLE_INFLIGHT_ALIEN_STAGE_OF_LIFE:
 	move.b	(StageOfLife,a2),d0 	| read INFLIGHT_ALIEN.StageOfLife
 	add.w	d0,d0
 	add.w	d0,d0
-	lea		table_0CE6(pc),a0
+	lea		stage_of_life_table(pc),a0
 	move.l	(a0,d0.w),a0
 	jmp		(a0)
 
-* stage of life table
-table_0CE6: 
+stage_of_life_table: 
       .long		INFLIGHT_ALIEN_PACKS_BAGS									| 00
       .long		INFLIGHT_ALIEN_FLIES_IN_ARC                                 | 01
       .long		INFLIGHT_ALIEN_READY_TO_ATTACK                              | 02
@@ -2394,7 +2393,7 @@ INFLIGHT_ALIEN_NEAR_BOTTOM_OF_SCREEN:
 
 	jbsr	UPDATE_INFLIGHT_ALIEN_YADD                            	| call UPDATE_INFLIGHT_ALIEN_YADD [call 0x116B]
 	move.b	(PivotYValueAdd,a2),d0                    	| read INFLIGHT_ALIEN.PivotYValueAdd [ld   a,(ix+0x19)]
-	tst.b	d0                               	| set flags - we are interested if its a minus value [and  a]
+											| set flags - we are interested if its a minus value [and  a]
 	jmi	l_0e90                             	| if the PivotYValueAdd is a negative value, goto 0x0E90 [jp   m,0x0E90]
 
 	add.b	(PivotYValue,a2),d0                     	| add INFLIGHT_ALIEN.PivotYValue [add  a,(ix+0x09)]
@@ -2436,7 +2435,7 @@ l_0e95:
 *
 
 INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN:
-	move.b	#0x08,(inf_alien_Y,a2)                 	| set INFLIGHT_ALIEN.X to position at very top of screen [ld   (ix+0x03),0x08]
+	move.b	#0x08,(inf_alien_X,a2)                 	| set INFLIGHT_ALIEN.X to position at very top of screen [ld   (ix+0x03),0x08]
 	addq.b	#1,(SortieCount,a2)                    	| increment INFLIGHT_ALIEN.SortieCount [inc  (ix+0x17)]
 	clr.b	(AnimationFrame,a2)                        	| clear INFLIGHT_ALIEN.AnimationFrame [ld   (ix+0x05),0x00]
 

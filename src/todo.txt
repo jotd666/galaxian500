@@ -1,10 +1,8 @@
 transcode:
-- swarm sound loop and how is it turned off/on (volume?)
+- check how swarm sound loop and how is it turned off/on (volume?)
 - collisions player vs aliens seem not to work for left side?: debug them
   (break when alien X and ship X are close)
-- when attacking aliens goes too far on left/right => finds itself in the middle of the screen??
 - send corrected transcode to Scott
-- OPT_SMALL_SWARM=1 => at some point awards player 4 lives by mistake!
 - grep for move to zero page (debug) remaining code
 - add high score load/save support.
 - OPT_START_LEVEL doesn't work
@@ -15,8 +13,7 @@ amiga:
   is working or if it updates all
 - maybe optimize player ship rows update: only blit where the ship is
   and only delete ship position depending on previous 2 values of scroll (double buffering)
-- coded but not working: dip switch 3 lives / 7000/10000/12000... free ship
-- support more dip switches (CLI but should be 1.3 compliant eeek & whdload)
+- support dip switches from CLI but should be 1.3 compliant eeek
 - when to play attack sound?
 - if not fire first pressed & game not playing
   * credit 0: fire = insert coin
