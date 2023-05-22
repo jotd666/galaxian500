@@ -6233,7 +6233,7 @@ HANDLE_SIMULATE_PLAYER_IN_ATTRACT_MODE:
 * Returns:
 *
 
-1A12: DD CB 00 46   bit  0,(ix+0x00)          | test INFLIGHT_ALIEN.IsActive flag
+1A12: DD CB 00 46   bit  0,(ix+0x00)          | test INFLIGHT_ALIEN.IsActive/bullet is active flag
 1A16: C8            ret  z                   | exit if alien is not active
 1A17: 7C            ld   a,h                 | get X coordinate of alien/bullet
 1A18: D6 80         sub  0x80                 | subtract 128 decimal

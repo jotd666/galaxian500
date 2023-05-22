@@ -31,7 +31,11 @@
     .equ  ALIEN_SHOT_SND,      0x03
     .equ  FLAGSHIP_SHOT_SND,      0x04
     .equ  PLAYER_SHOT_SND,      0x05
+    .equ  ATTACK_END_SND,      0x06
+    .equ  SWARM_1_SND,      0x07
     .equ  EXTRA_LIFE_SND,      0x08
+    .equ  ATTACK_START_SND,      0x09
+    .equ  EMPTY_SND,      0x0A
 
 
     

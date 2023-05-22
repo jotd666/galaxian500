@@ -216,11 +216,10 @@ w\@:
 		.global osd_read_coin
 		.global osd_read_start
 		.global osd_sound_stop
+		.global osd_sound_loop
+		.global osd_stop_alien_attack_sound
 		.global osd_sound_start
-		.global	osd_sound_mute
-		.global	osd_sound_unmute
-		.global	osd_stars_on
-		.global	osd_stars_off
+
 
 	
 	.include	"ReadJoypad.i"
@@ -542,13 +541,38 @@ osd_calibrate_display:
 	movem.l	(a7)+,a0/d0-d1
 	rts
 	
-osd_sound_mute:
-	st.b	sound_muted
+osd_stop_alien_attack_sound:
+	movem.l	d0/d1/a0/a6,-(a7)
+	tst.b	loop_playing
+	beq.b	1f
+	move.l	#2,d0
+	lea		_custom,a6
+	jsr		_mt_stopfx
+	clr.b	loop_playing
+1:
+	movem.l	(a7)+,d0/d1/a0/a6
 	rts
 	
-osd_sound_unmute:
-	clr.b	sound_muted
+osd_sound_loop:
+	movem.l	d0/d1/a0/a6,-(a7)
+
+	lea		_custom,a6
+	lsl.w	#3,d0
+	lea		sound_table,a0
+	move.w	(a0,d0.w),d1	| sound type
+	beq.b	1f		| no sound
+
+2:
+	move.l	(4,a0,d0.w),a0
+	lea		_custom,a6
+	jsr		_mt_loopfx
+	st.b	loop_playing
+1:
+	movem.l	(a7)+,d0/d1/a0/a6
 	rts
+
+loop_playing:
+	.word	0
 	
 osd_sound_start:
 	movem.l	d0/d1/a0/a6,-(a7)

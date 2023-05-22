@@ -20,17 +20,19 @@ sndfile = os.path.join(src_dir,"sound_entries.68k")
 hq_sample_rate = 22050
 lq_sample_rate = hq_sample_rate//2
 
+EMPTY_SND = "EMPTY_SND"
 sound_dict = {
 #"EXTRA_SOLVALOU_SND"     :{"index":0x04,"channel":3,"sample_rate":hq_sample_rate,"priority":10},
 "CREDIT_SND"               :{"index":0,"channel":0,"sample_rate":hq_sample_rate},
 "SHOOT_SND"              :{"index":1,"channel":1,"sample_rate":hq_sample_rate},
 "INTRO_SND"               :{"index":2,"channel":1,"sample_rate":lq_sample_rate},
-"ALIEN_SHOT_SND"               :{"index":3,"channel":2,"sample_rate":hq_sample_rate},
-"FLAGSHIP_SHOT_SND"               :{"index":4,"channel":0,"sample_rate":hq_sample_rate,"priority":10},
-"PLAYER_SHOT_SND"              :{"index":5,"channel":3,"sample_rate":lq_sample_rate,"priority":10},
-"ATTACK_END_SND"              :{"index":6,"channel":1,"sample_rate":hq_sample_rate},
+"ALIEN_SHOT_SND"               :{"index":3,"channel":3,"sample_rate":hq_sample_rate},
+"FLAGSHIP_SHOT_SND"               :{"index":4,"channel":3,"sample_rate":hq_sample_rate,"priority":10},
+"PLAYER_SHOT_SND"              :{"index":5,"channel":1,"sample_rate":lq_sample_rate,"priority":10},
+"ATTACK_END_SND"              :{"index":6,"channel":2,"sample_rate":hq_sample_rate},
 "SWARM_1_SND"              :{"index":7,"channel":0,"sample_rate":hq_sample_rate},
 "EXTRA_LIFE_SND"              :{"index":8,"channel":1,"sample_rate":hq_sample_rate},
+"ATTACK_START_SND"              :{"index":9,"channel":2,"sample_rate":lq_sample_rate},
 }
 
 max_sound = max(x["index"] for x in sound_dict.values())+1
@@ -120,7 +122,10 @@ with open(sndfile,"w") as fst,open(outfile,"w") as fw:
         sound_table[sound_index] = "    SOUND_ENTRY {},{},{},{},{},{}\n".format(wav,len(signed_data)//2,channel,used_sampling_rate,int(64*amp_ratio),used_priority)
         sound_table_simple[sound_index] = f"\t.long\t0x00010000,{wav}_sound"
 
-        maxed_contents = [int(x/amp_ratio) for x in signed_data]
+        if amp_ratio > 0:
+            maxed_contents = [int(x/amp_ratio) for x in signed_data]
+        else:
+            maxed_contents = signed_data
 
         signed_contents = bytes([x if x >= 0 else 256+x for x in maxed_contents])
         # pre-pad with 0W, used by ptplayer for idling

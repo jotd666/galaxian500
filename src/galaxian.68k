@@ -438,6 +438,11 @@ HANDLE_ALIEN_ATTACK_SOUND:
 	subq.b	#1,d0                           	| [dec  a]
 	jne	l_17e5                             	| [jp   nz,0x17E5]
 	move.b	d0,(a0)                         	| [ld   (hl),a]
+	* stop looped end of attack sound if playing
+	jbsr	osd_stop_alien_attack_sound
+	* then start attack sound
+	move.w	#ATTACK_START_SND,d0
+	jbsr	osd_sound_start
 	*lea	l_A002(pc),a0                      	| [ld   hl,0xA002]
 	*move.b	a0,l_41C3                       	| [ld   (0x41C3),hl]
 	move.b	#0x02,UNKNOWN_SOUND_41C3
@@ -446,15 +451,14 @@ HANDLE_ALIEN_ATTACK_SOUND:
 	rts                                    	| [ret]
 
 l_17e5:
-	move.b	HAVE_NO_INFLIGHT_ALIENS,d0                       	| read HAVE_NO_INFLIGHT_ALIENS [ld   a,(0x4226)]
-	ror.b	#1,d0                            	| move flag into carry [rrca]
-	bcc.b	0f
+	tst.b	HAVE_NO_INFLIGHT_ALIENS                       	| read HAVE_NO_INFLIGHT_ALIENS [ld   a,(0x4226)]
+	beq.b	0f
+	jbsr	osd_stop_alien_attack_sound
 	rts                                    	| return if there are no aliens in flight [ret  c]
 0:
 	lea		UNKNOWN_SOUND_41C3,a0                           	| bump HL to point to UNKNOWN_SOUND_41C3 [inc  hl]
-	move.b	TIMING_VARIABLE,d0                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
-	ror.b	#1,d0                            	| move bit 0 into carry [rrca]
-	jcs	l_1801                             	| [jr   c,0x1801]
+	tst.b	TIMING_VARIABLE                       	| read TIMING_VARIABLE [ld   a,(0x425F)]
+	jne	l_1801                             	| [jr   c,0x1801]
 	move.b	UNKNOWN_SOUND_41C4,d0                       	| [ld   a,(0x41C4)]
 	cmp.b	#0x60,d0                         	| [cp   0x60]
 	jcc	l_17f9                             	| [jr   nc,0x17F9]
@@ -920,9 +924,8 @@ DISPLAY_GAME_OVER_AND_REMAINING_CREDIT_1:
 	jbsr	QUEUE_COMMAND		| call QUEUE_COMMAND
 	move.w	#0x0600,d3          | command: PRINT_TEXT_COMMAND, parameter: 0 (index of GAME OVER)
 	jbsr	QUEUE_COMMAND               | call QUEUE_COMMAND
-	moveq  #1,d0
-	move.b	d0,IS_GAME_OVER           | set IS_GAME_OVER flag
-	jbsr		osd_stars_on         | enable stars
+	move.b  #1,IS_GAME_OVER           | set IS_GAME_OVER flag
+	         | enable stars
 	addq.b	#1,SCRIPT_STAGE   | advance to next stage
 	clr.b	PUSH_START_BUTTON_COUNTER
 	clr.b	CURRENT_PLAYER           | set CURRENT_PLAYER to 0 (player one)
@@ -2435,6 +2438,9 @@ l_0e95:
 *
 
 INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN:
+	move.w	#ATTACK_END_SND,d0
+	jbsr	osd_sound_loop
+	
 	move.b	#0x08,(inf_alien_X,a2)                 	| set INFLIGHT_ALIEN.X to position at very top of screen [ld   (ix+0x03),0x08]
 	addq.b	#1,(SortieCount,a2)                    	| increment INFLIGHT_ALIEN.SortieCount [inc  (ix+0x17)]
 	clr.b	(AnimationFrame,a2)                        	| clear INFLIGHT_ALIEN.AnimationFrame [ld   (ix+0x05),0x00]
@@ -4229,36 +4235,41 @@ HANDLE_SIMULATE_PLAYER_IN_ATTRACT_MODE:
 	bne.b	0f
 	rts                                    	| return if its not GAME OVER [ret  nc]
 0:
-	move.b	HAS_PLAYER_SPAWNED,d0                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
-	ror.b	#1,d0                            	| move flag into carry [rrca]
-	bcs.b	0f
+	tst.b	HAS_PLAYER_SPAWNED                       	| read HAS_PLAYER_SPAWNED [ld   a,(0x4200)]
+	bne.b	0f
 	rts                                    	| return if player has not spawned yet [ret  nc]
 0:
-
+	* tries to compute the best direction to go to to avoid
+	* aliens & bullets, stored in D1
+	*
+	* this loops updates d1 using flying aliens positions
+	*
 	lea	INFLIGHT_ALIENS+inflight_alien_size,a2                      	| pointer to INFLIGHT_ALIENS_START + sizeof(INFLIGHT_ALIEN) [ld   ix,0x42D0]
 	clr.b	d1                               	| [ld   b,0x00]
-	move.b	#0x07,d1                        	| 7 aliens to process [ld   b,0x07]
+	move.b	#0x07,d3                        	| 7 aliens to process [ld   b,0x07] using d3
 l_19ac:
-	move.b	(inf_alien_X,a2),d5
-	move.b	(inf_alien_Y,a2),d6
-	move.b	(0x1a,a2),d2   	                	| ???? [ld   c,(ix+0x1a)]
+	move.b	(inf_alien_X,a2),d5         | H = INFLIGHT_ALIEN.X [ld   h,(ix+0x03)]
+	move.b	(inf_alien_Y,a2),d6         | L = INFLIGHT_ALIEN.Y [ld   l,(ix+0x04)]
+	move.b	(0x1a,a2),d2   	                	| INFLIGHT_ALIEN.Y_DELTA [ld   c,(ix+0x1a)]
 	jbsr	l_1a12                            	| [call 0x1A12]
-	add.w	#inflight_alien_size,a2                              	| bump IX to next INFLIGHT_ALIEN
-	subq.b	#1,d1                           	| [...]
+	add.w	#inflight_alien_size,a2        	| bump IX to next INFLIGHT_ALIEN
+	subq.b	#1,d3                           	| [...]
 	jne	l_19ac                             	| [djnz 0x19AC]
 
+	*
+	* this loops updates d1 using bullet positions
+	*
 
 	lea	ENEMY_BULLETS_START,a2                      	| load IX with address of ENEMY_BULLETS_START [ld   ix,0x4260]
-	move.b	#0x07,d1                        	| number of enemy bullets [ld   b,0x07]
+	move.b	#0x07,d3                        	| number of enemy bullets [ld   b,0x07]
 l_19c7:
 	move.b	(1,a2),d5						| H = ENEMY_BULLET.X   [ld   h,(ix+0x01)]
-	move.b	(3,a2),d6						| L = ENEMY_BULLET.YH  [ld   l,(ix+0x03)]
-                        	                      	
+	move.b	(3,a2),d6						| L = ENEMY_BULLET.YH  [ld   l,(ix+0x03)]                        	                      	
 	move.b	(0x04,a2),d2                    	| C = ENEMY_BULLET.YDelta [ld   c,(ix+0x04)]
 	jbsr	l_1a12                            	| [call 0x1A12]
 
-	add.w	#5,a2                              	| bump IX to next ENEMY_BULLET
-	subq.b	#1,d1                           	| [...]
+	addq.w	#5,a2                              	| bump IX to next ENEMY_BULLET
+	subq.b	#1,d3                           	| [...]
 	jne	l_19c7                             	| [djnz 0x19C7]
 
 	move.b	PLAYER_Y,d0                       	| read PLAYER_Y [ld   a,(0x4202)]
@@ -4267,13 +4278,13 @@ l_19c7:
 	add.b	#0x80,d0                         	| [add  a,0x80]
 	sub.b	d2,d0                            	| subtract player Y [sub  c]
 	asr.b	#5,d0                            	| divide A.... [sra  a]*5 .. by 32, preserving sign bit
-	add.b	d1,d0                            	| [add  a,b]
+	add.b	d1,d0                            	| update B [add  a,b]
 	asr.b	#1,d0                            	| [sra  a]
-	move.b	d0,d2                           	| [ld   c,a]
+	move.b	d0,d2                           	| store A in C [ld   c,a]
 	jbsr	GENERATE_RANDOM_NUMBER                            	| call GENERATE_RANDOM_NUMBER. Now A = pseudorandom number [call 0x003C]
-	move.b	d2,d1                           	| [ld   b,c]
-	add.b	d0,d0                            	| [add  a,a]
-	subx.b	d0,d0                           	| [sbc  a,a]
+	move.b	d2,d1                           	| restore A in B [ld   b,c]
+	add.b	d0,d0                            	| double random number [add  a,a]
+	subx.b	d0,d0                           	| see if carry (50% chance) [sbc  a,a]
 	jne	l_19fb                             	| [jr   nz,0x19FB]
 	addq.b	#1,d0                           	| [inc  a]
 l_19fb:
@@ -4307,10 +4318,11 @@ l_1a0e:
 * L = Y coordinate of alien or bullet
 * C = YDelta of alien/bullet
 *
-* Returns:
+* Returns/updates:
 *
+* B
 l_1a12:
-	btst.b	#0,(IsActive,a2)                    	| test INFLIGHT_ALIEN.IsActive flag [bit  0,(ix+0x00)]
+	tst.b	(IsActive,a2)                    	| test INFLIGHT_ALIEN.IsActive flag [bit  0,(ix+0x00)]
 	bne.b	0f
 	rts                                    	| exit if alien is not active [ret  z]
 0:
@@ -4325,10 +4337,8 @@ l_1a12:
 	jcs	l_1a25                             	| [jr   c,0x1A25]
 	addq.b	#1,d4                            	| [inc  e]
 	sub.b	#0x34,d0                         	| [sub  0x34]
-	bcs.b	0f
+	bcs.b	l_1a25
 	rts                                    	| [ret  nc]
-0:
-
 l_1a25:
 	move.b	PLAYER_Y,d0                       	| read PLAYER_Y [ld   a,(0x4202)]
 	sub.b	d6,d0                             	| subtract Y coordinate of alien/bullet [sub  l]
@@ -4346,12 +4356,11 @@ l_1a25:
 	or.b	d6,d0                              	| [or   l]
 	ror.b	#4,d0                            	| [rrca]*4
 	or.b	d4,d0                              	| [or   e]
-	move.b	d0,d4
+	move.b	d0,d4								| [ld   e,a]
 
 	lea	l_1A45(pc),a0                      	| [ld   hl,0x1A45]
-	move.b	(a0,d4.w),d0                         	| [ld   a,(hl)]
-	add.b	d1,d0                            	| [add  a,b]
-	move.b	d0,d1                           	| [ld   b,a]
+	add.b	(a0,d4.w),d1                      	| [ld   a,(hl)]
+												| [add  a,b]+[ld b,a]
 	rts                                    	| [ret]
 
 l_1A45: 
@@ -4419,7 +4428,7 @@ INITIALISE_SYSTEM:  | 1A55
 	move.l	a0,CIRC_CMD_QUEUE_PTR			| reset CIRC_CMD_QUEUE_PTR
 	move.l	a0,CIRC_CMD_QUEUE_PROC			| reset CIRC_CMD_QUEUE_PROC
 	
-	jbsr	osd_stars_on					| Set 9Nregen stars on. Starry background now appears 
+										| Set 9Nregen stars on. Starry background now appears 
 	jbsr	osd_enable_vblank_interrupt		| Enable 9Nregen NMIon
 	
 	* part done in diagnostic, we don't want diagnostic but we need those inits
