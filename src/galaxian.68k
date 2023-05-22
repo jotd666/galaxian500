@@ -6209,15 +6209,17 @@ HANDLE_PLAYER_TO_INFLIGHT_ALIEN_COLLISION_DETECTION:
 	bne.b	0f
 	rts                                    	| return if carry not set [ret  nc]
 0:
-	lea	INFLIGHT_ALIENS,a2                      	| pointer to INFLIGHT_ALIENS[1] [ld   ix,0x42D0]
-	move.b	#0x07,d1                        	| 7 aliens to test collision with [ld   b,0x07]
+	lea	INFLIGHT_ALIENS+inflight_alien_size,a2    	| pointer to INFLIGHT_ALIENS[1] [ld   ix,0x42D0]
+	move.w	#0x07-1,d1                        	| 7 aliens to test collision with [ld   b,0x07]
 l_12ac:	
+	tst.b	(IsActive,a2)                    	| read INFLIGHT_ALIEN.IsActive flag [bit  0,(ix+0x00)]
+	beq.b	1f
 	move.w	d1,-(a7)
 	jbsr	TEST_IF_INFLIGHT_ALIEN_HIT_PLAYER                            	| call TEST_IF_INFLIGHT_ALIEN_HIT_PLAYER [call 0x12B6]
 	move.w	(a7)+,d1
+1:
 	add.w	#inflight_alien_size,a2                              	| bump IX to point to next INFLIGHT_ALIEN in array
-	subq.b	#1,d1                           	| [...]
-	jne	l_12ac                             	| repeat until B==0 [djnz 0x12AC]
+	dbf	d1,l_12ac                             	| repeat until B==0 [djnz 0x12AC]
 	rts                                    	| [ret]
 
 
@@ -6229,47 +6231,40 @@ l_12ac:
 * IS_PLAYER_HIT will be set to 1.
 *
 * Expects:
+* alien must be active
 * IX = pointer to INFLIGHT_ALIEN structure
 *
+* JOTD: optimized that, it's called only if alien is active, also removed
+* duplicate code (player & alien kill)
+
 
 TEST_IF_INFLIGHT_ALIEN_HIT_PLAYER:
-	tst.b	(IsActive,a2)                    	| read INFLIGHT_ALIEN.IsActive flag [bit  0,(ix+0x00)]
-	bne.b	0f
-	rts                                    	| exit if alien isn't active [ret  z]
-0:
-
 	move.b	(inf_alien_X,a2),d0                      	| read INFLIGHT_ALIEN.X [ld   a,(ix+0x03)]
 	add.b	#0x21,d0                         	| [add  a,0x21]
 	subq.b	#0x05,d0                        	| [sub  0x05]
 	jcs	l_12da                             	| [jr   c,0x12DA]
 	sub.b	#0x0C,d0                         	| [sub  0x0C]
-	bcs.b	0f
+	jcs	0f
 	rts                                    	| return if >=0x0C [ret  nc]
+	* here alien is at the same level (ordinate, as screen is rotated), now test horizontal pos
+	* player ship is not rectangular. There are 2 widths depending on the part of the ship
 0:
-
+	* upper part of the ship, detection window is narrow
 	move.b	PLAYER_Y,d0                       	| read PLAYER_Y [ld   a,(0x4202)]
 	sub.b	(inf_alien_Y,a2),d0                     	| subtract INFLIGHT_ALIEN.Y [sub  (ix+0x04)]
 	add.b	#0x0A,d0                         	| [add  a,0x0A]
 	cmp.b	#0x15,d0                         	| [cp   0x15]
-	bcs.b	0f
+	bcs.b	l_player_killed
 	rts                                    	| return if >=0x15 [ret  nc]
-0:
-
-* kill player and alien
-	tst.b	invincible_flag
-	bne.b	0f
-	move.b	#0x01,IS_PLAYER_HIT 		| set IS_PLAYER_HIT flag. [ld   (0x4204),a]
-0:
-	jra	l_125e                             	| and we need to kill the alien as well [jp   0x125E]
 
 l_12da:
 	move.b	PLAYER_Y,d0                       	| read PLAYER_Y [ld   a,(0x4202)]
 	sub.b	(inf_alien_Y,a2),d0                     	| subtract INFLIGHT_ALIEN.Y [sub  (ix+0x04)]
 	addq.b	#0x07,d0                        	| [add  a,0x07]
 	cmp.b	#0x0F,d0                         	| [cp   0x0F]
-	bcs.b	0f
+	bcs.b	l_player_killed
 	rts                                    	| return if >=0x0f [ret  nc]
-0:
+l_player_killed:
 
 * kill player and alien
 	tst.b	invincible_flag

@@ -1553,7 +1553,6 @@ erase_previous_ship:
 	* (not critical, done once)
 	lea	(8*NB_BYTES_PER_ROW,a6),a1
 	move.l	a6,a1
-	move.b	#0,0x200
 	add.w	#0x80,d0
 	lsr.w	#3,d0
 	bclr	#0,d0
