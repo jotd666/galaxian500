@@ -4456,6 +4456,11 @@ jmp_2000:
 	* now would be a good time to read highscore from saved state
 	lea		PLAYER_ONE_SCORE,a0
 	*bsr		osd_read_hiscores
+	
+	* init random number, self-test was skipped and it was called there
+	* if this is not done, then the random values aren't big enough in demo mode
+	* and ship never moves...
+	move.b	#0xE0,RAND_NUMBER
 *
 * Process the circular command queue starting @ 0x40C0 (CIRC_CMD_QUEUE_START)
 *

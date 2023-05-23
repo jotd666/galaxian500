@@ -2,7 +2,6 @@ transcode:
 - check how swarm sound loop and how is it turned off/on (volume?)
 - getting the odd 'B' tile and the odd flagship 'tile' appearing
   in the middle of the screen
-- demo mode: computer player shoots but doesn't move
 - send corrected transcode to Scott
 - grep for move to zero page (debug) remaining code
 - add high score load/save support.
