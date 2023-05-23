@@ -696,14 +696,16 @@ rst_10_video:
 *
 
 GENERATE_RANDOM_NUMBER:
-	move.b	RAND_NUMBER,d0
-	move.b	d0,d1
-	add.b	d0,d0
-	add.b	d0,d0
-	add.b	d0,d1
-	addq.b	#1,d0
-	move.b	d0,RAND_NUMBER
-	rts
+	move.b	RAND_NUMBER,d0                       	| [ld   a,(0x401E)]
+	move.b	d0,d1                           	| [ld   b,a]
+	add.b	d0,d0                            	| [add  a,a]
+	add.b	d0,d0                            	| [add  a,a]
+	add.b	d1,d0                            	| [add  a,b]
+	addq.b	#1,d0                           	| [inc  a]
+	move.b	d0,RAND_NUMBER                       	| [ld   (0x401E),a]
+	rts                                    	| [ret]
+
+
 
 *
 * Used by the aliens to determine what way to face when flying down, and what delta enemy bullets take
@@ -2438,7 +2440,6 @@ l_0e95:
 *
 
 INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN:
-	jbsr	osd_stop_alien_attack_loop
 	
 	move.b	#0x08,(inf_alien_X,a2)                 	| set INFLIGHT_ALIEN.X to position at very top of screen [ld   (ix+0x03),0x08]
 	addq.b	#1,(SortieCount,a2)                    	| increment INFLIGHT_ALIEN.SortieCount [inc  (ix+0x17)]
@@ -2465,6 +2466,7 @@ l_0ead:
 * alien reappears at top of screen and will keep attacking - it will not return to swarm.
 * add some unpredictability to where it reappears, so that player can't wait for it and shoot it easily
 l_0ebf:
+	jbsr	osd_play_alien_attack_loop
 	move.b	(inf_alien_Y,a2),d0                    	| read INFLIGHT_ALIEN.Y [ld   a,(ix+0x04)]
 	lsr.b	#1,d0                           	| divide by 2 (don't worry about carry, it was cleared by AND above) [rra]
 	move.b	d0,d2                           	| preserve in C [ld   c,a]

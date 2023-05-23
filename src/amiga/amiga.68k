@@ -559,9 +559,7 @@ osd_stop_swarm_loop:
 	
 osd_stop_alien_attack_loop:
 	movem.l	d0/d1/a0/a6,-(a7)
-	tst.b	alien_attack_loop_playing
-	beq.b	1f
-	move.l	#2,d0
+	move.l	#2,d0		| present on channel 2
 	lea		_custom,a6
 	jsr		_mt_stopfx
 	clr.b	alien_attack_loop_playing
@@ -571,7 +569,8 @@ osd_stop_alien_attack_loop:
 	
 osd_play_alien_attack_loop:
 	movem.l	d0/d1/a0/a6,-(a7)
-
+	tst.b	alien_attack_loop_playing
+	bne.b	1f
 	lea		_custom,a6
 	move.w	#ATTACK_END_SND*8,d0	| present on channel 2
 	lea		sound_table,a0
@@ -1433,6 +1432,10 @@ osd_w_bg_videoram:
 	* should not happen
 	move.w	#0,d6
 1:
+*	cmp.b	#'B'-0x30,d0
+*	bne.b	2f
+*	blitz
+*2:
 	lea		bg_videoram,a1
 	add.w	d6,a1
 	cmp.b	(a1),d0
