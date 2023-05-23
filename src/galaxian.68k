@@ -439,7 +439,7 @@ HANDLE_ALIEN_ATTACK_SOUND:
 	jne	l_17e5                             	| [jp   nz,0x17E5]
 	move.b	d0,(a0)                         	| [ld   (hl),a]
 	* stop looped end of attack sound if playing
-	jbsr	osd_stop_alien_attack_sound
+	jbsr	osd_stop_alien_attack_loop
 	* then start attack sound
 	move.w	#ATTACK_START_SND,d0
 	jbsr	osd_sound_start
@@ -453,7 +453,7 @@ HANDLE_ALIEN_ATTACK_SOUND:
 l_17e5:
 	tst.b	HAVE_NO_INFLIGHT_ALIENS                       	| read HAVE_NO_INFLIGHT_ALIENS [ld   a,(0x4226)]
 	beq.b	0f
-	jbsr	osd_stop_alien_attack_sound
+	jbsr	osd_stop_alien_attack_loop
 	rts                                    	| return if there are no aliens in flight [ret  c]
 0:
 	lea		UNKNOWN_SOUND_41C3,a0                           	| bump HL to point to UNKNOWN_SOUND_41C3 [inc  hl]
@@ -2438,8 +2438,7 @@ l_0e95:
 *
 
 INFLIGHT_ALIEN_REACHED_BOTTOM_OF_SCREEN:
-	move.w	#ATTACK_END_SND,d0
-	jbsr	osd_sound_loop
+	jbsr	osd_stop_alien_attack_loop
 	
 	move.b	#0x08,(inf_alien_X,a2)                 	| set INFLIGHT_ALIEN.X to position at very top of screen [ld   (ix+0x03),0x08]
 	addq.b	#1,(SortieCount,a2)                    	| increment INFLIGHT_ALIEN.SortieCount [inc  (ix+0x17)]

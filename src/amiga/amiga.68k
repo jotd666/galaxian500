@@ -215,11 +215,12 @@ w\@:
 		.global osd_write_high_scores
 		.global osd_read_coin
 		.global osd_read_start
-		.global osd_sound_stop
-		.global osd_sound_loop
-		.global osd_stop_alien_attack_sound
 		.global osd_sound_start
-
+		.global osd_sound_stop
+		.global osd_play_alien_attack_loop
+		.global osd_stop_alien_attack_loop
+		.global	osd_stop_swarm_loop
+		.global	osd_play_swarm_loop
 
 	
 	.include	"ReadJoypad.i"
@@ -541,23 +542,38 @@ osd_calibrate_display:
 	movem.l	(a7)+,a0/d0-d1
 	rts
 	
-osd_stop_alien_attack_sound:
+osd_play_swarm_loop:
+	rts
+	
+osd_stop_swarm_loop:
 	movem.l	d0/d1/a0/a6,-(a7)
-	tst.b	loop_playing
+	tst.b	alien_attack_loop_playing
 	beq.b	1f
-	move.l	#2,d0
+	move.l	#0,d0		| channel
 	lea		_custom,a6
 	jsr		_mt_stopfx
-	clr.b	loop_playing
+	clr.b	alien_swarm_loop_playing
 1:
 	movem.l	(a7)+,d0/d1/a0/a6
 	rts
 	
-osd_sound_loop:
+osd_stop_alien_attack_loop:
+	movem.l	d0/d1/a0/a6,-(a7)
+	tst.b	alien_attack_loop_playing
+	beq.b	1f
+	move.l	#2,d0
+	lea		_custom,a6
+	jsr		_mt_stopfx
+	clr.b	alien_attack_loop_playing
+1:
+	movem.l	(a7)+,d0/d1/a0/a6
+	rts
+	
+osd_play_alien_attack_loop:
 	movem.l	d0/d1/a0/a6,-(a7)
 
 	lea		_custom,a6
-	lsl.w	#3,d0
+	move.w	#ATTACK_END_SND*8,d0	| present on channel 2
 	lea		sound_table,a0
 	move.w	(a0,d0.w),d1	| sound type
 	beq.b	1f		| no sound
@@ -566,12 +582,14 @@ osd_sound_loop:
 	move.l	(4,a0,d0.w),a0
 	lea		_custom,a6
 	jsr		_mt_loopfx
-	st.b	loop_playing
+	st.b	alien_attack_loop_playing
 1:
 	movem.l	(a7)+,d0/d1/a0/a6
 	rts
 
-loop_playing:
+alien_attack_loop_playing:
+	.word	0
+alien_swarm_loop_playing:
 	.word	0
 	
 osd_sound_start:
