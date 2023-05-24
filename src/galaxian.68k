@@ -921,7 +921,12 @@ script_one_jump_table:
 * Enables starfield, displays GAME OVER and the amount of credit remaining.
 *
 *
-DISPLAY_GAME_OVER_AND_REMAINING_CREDIT_1:      
+DISPLAY_GAME_OVER_AND_REMAINING_CREDIT_1:
+	tst.b	high_score_beaten
+	beq.b	0f
+	lea		HI_SCORE,a0
+	jbsr		osd_write_high_scores
+0:
 	move.w	#0x0701,d3            | command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND, parameter: 1 (invokes DISPLAY_AVAILABLE_CREDIT)
 	jbsr	QUEUE_COMMAND		| call QUEUE_COMMAND
 	move.w	#0x0600,d3          | command: PRINT_TEXT_COMMAND, parameter: 0 (index of GAME OVER)
@@ -1819,7 +1824,8 @@ SET_PUSH_START_BUTTON_COUNTER:
 	
 * < A1: player score which replaces high score
 UPDATE_HIGH_SCORE:
-		bsr	LEA_DE_OF_CURRENT_PLAYER_SCORE	| Now DE = pointer to current player score
+		st.b	high_score_beaten
+		jbsr	LEA_DE_OF_CURRENT_PLAYER_SCORE	| Now DE = pointer to current player score
 		lea	HI_SCORE,a0		| address of high score
 		moveq	#2,d2			| high score occupies 3 bytes
 0:
@@ -4454,8 +4460,8 @@ jmp_2000:
 	dbf		d0,0b
 	
 	* now would be a good time to read highscore from saved state
-	lea		PLAYER_ONE_SCORE,a0
-	*bsr		osd_read_hiscores
+	lea		HI_SCORE,a0
+	jbsr		osd_read_high_scores
 	
 	* init random number, self-test was skipped and it was called there
 	* if this is not done, then the random values aren't big enough in demo mode

@@ -1,5 +1,10 @@
 	.global		restore_vbr
 	.global		zero_vbr
+	.global		get_vbr
+	
+get_vbr:
+	movec	vbr,d0
+	rte
 	
 zero_vbr:
 	movec	vbr,d0

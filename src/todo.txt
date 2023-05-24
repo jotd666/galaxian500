@@ -3,21 +3,17 @@ transcode:
 - getting the odd 'B' tile and the odd flagship 'tile' appearing
   in the middle of the screen
 - send corrected transcode to Scott
-- grep for move to zero page (debug) remaining code
 - add high score load/save support.
 - attack sound end (looped) not correct, should play only when alien is not returning to swarm
 - OPT_START_LEVEL doesn't work
 
 amiga:
 
-- run in 68000 mode cycle exact to check if it runs properly: too slow!! check if row update optim
-  is working or if it updates all
+- big corruption without whdload: use uaedbg to check issues!
 - support dip switches from CLI but should be 1.3 compliant eeek
-- joypad controls: play for pause
-- switch plane priority
+- joypad controls: play for pause / P pause
 - flagship score doesn't show after a while
 - stars as sprites:
-  * priority?
   * blink/change from time to time
   * scrolling: working but with glitches: slow it down to analyse copperlist
     when glitching

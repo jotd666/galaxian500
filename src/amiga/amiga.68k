@@ -10,8 +10,9 @@
 .include "dos_lvos.i"
 .include "graphics_lvos.i"
 
-AttnFlags = 128
+AttnFlags = 0x128
 AFB_68010 = 0
+AFB_68020 = 1
 NO68020 = 1
 
 SCREEN_ADDRESS = 0x5000
@@ -22,10 +23,9 @@ STAR_SPRITE_COLOR_REG = color+(STAR_SPRITE_INDEX/2)*8+34
 SPRITE_X_OFFSET = 8
 SPRITE_Y_OFFSET = 1
 
-SCORE_FILE_SIZE = 16*5
+SCORE_FILE_SIZE = 3
 BOB_16X16_PLANE_SIZE = 4*16
 
-SPRITE_LIFETIME = 2
 
 copper_stars_offset = 12
 copper_row_size = 32
@@ -243,6 +243,8 @@ _user:
     cmp.l   #0x05748444c,D0	| WHDL
     bne.b   .standard
     move.l a0,_resload
+	* whdload usually means powerful amiga: enable star scroll
+	st.b	may_enable_star_scroll
     *move.b  d1,_keyexit
 
 	move.l	a0,a2
@@ -259,6 +261,7 @@ _user:
     jsr _LVOOpenLibrary(a6)
     move.l  d0,_dosbase
 
+	bra		3f
 	move.l	#read_args_string,d1
 	move.l	#program_args,d2
 	moveq.l	#0,d3
@@ -269,21 +272,22 @@ _user:
 	bne	0f
 	jmp		_LVOExit(a6)
 0:	
+	lea		program_args,a0
 	move.l	(A0)+,D0	| INVINCIBLE/S
 	beq.b	1f
 	or.l	#1,cheat_flags
 1:
 	move.l	(A0)+,D0	| INFLIVES/S
-	beq.b	1f
+	beq.b	2f
 	or.l	#2,cheat_flags
-1:
+2:
 
 
 
 
 	move.l	rdargs_struct,d1
 	jsr		_LVOFreeArgs(a6)
-
+3:
 	bsr		store_system
 	
 	lea		_custom,a5
@@ -337,7 +341,7 @@ _user:
 	sub.l	A1,A1
 	jsr	_LVOFindTask(a6)		| find ourselves
 	move.l	D0,A0
-	move.l	#-1,184(A0)	| pr_WindowPtr no more system requesters (insert volume, write protected...)
+	move.l	#-1,184(A0)	| pr_WindowPtr: no more system requesters (insert volume, write protected...)
 
 .no_forbid:
 	move.l	dip_switches(pc),d2
@@ -696,24 +700,31 @@ store_system:
 0:
 	* system copper
 	
-	move.l	4,a6
+	move.l	4.W,a6
 	move.w	AttnFlags(a6),d0
 	btst	#AFB_68010,d0
 	beq.b	1f
-	lea	zero_vbr,a5
+	lea	get_vbr,a5
 	jsr		_LVOSupervisor(a6)
+	move.l	d0,system_vbr
 1:
-
+	
+	move.w	AttnFlags(a6),d0
+	btst	#AFB_68020,d0
+	beq.b	1f
+	st.b	may_enable_star_scroll
+1:
 	lea	_custom,a6
 	move.w	intenar(a6),old_intena
 	move.w	dmaconr(a6),old_dmacon
 	lea		old_sysvectors,a0
-	move.l	0x64.w,(a0)+
-	move.l	0x68.w,(a0)+
-	move.l	0x6c.w,(a0)+
-	move.l	0x70.w,(a0)+
-	move.l	0x74.w,(a0)+
-	move.l	0x78.w,(a0)+
+	move.l	system_vbr(pc),a1
+	move.l	(0x64,a1),(a0)+
+	move.l	(0x68,a1),(a0)+
+	move.l	(0x6c,a1),(a0)+
+	move.l	(0x70,a1),(a0)+
+	move.l	(0x74,a1),(a0)+
+	move.l	(0x78,a1),(a0)+
 	rts
 
 restore_system:
@@ -722,23 +733,17 @@ restore_system:
 
 	move.w	#0x4000,intena(a6)	| ints off
 	lea		old_sysvectors,a0
-
-	move.l	(a0)+,0x0064
-	move.l	(a0)+,0x0068
-	move.l	(a0)+,0x006c
-	move.l	(a0)+,0x0070
-	move.l	(a0)+,0x0074
-	move.l	(a0)+,0x0078
+	move.l	system_vbr(pc),a1
+	move.l	(a0)+,(0x0064,a1)
+	move.l	(a0)+,(0x0068,a1)
+	move.l	(a0)+,(0x006c,a1)
+	move.l	(a0)+,(0x0070,a1)
+	move.l	(a0)+,(0x0074,a1)
+	move.l	(a0)+,(0x0078,a1)
 
 
 	bclr	#6,0xbfee01
-	move.l	4,a0
-	move.w	AttnFlags(a0),d0
-	btst	#AFB_68010,d0
-	beq.b	1f
-	jsr		restore_vbr
 
-1:
 
 	lea	_custom,a6
 	move.w	old_intena,d0			| get old val
@@ -797,7 +802,7 @@ platform_init:
     move.w #0x0038,ddfstrt(a5)
     move.w #0x00D0,ddfstop(a5)
     move.w #0x6600,bplcon0(a5) | 6 bitplanes, dual playfield
-    move.w #0,bplcon2(a5)          | no priority (sprite starfield behind)
+    move.w #1<<6,bplcon2(a5)     | sprite starfield behind, pf2 has priority
     move.w #0,bplcon3(a5)          | no AGA
 
     move.w #0,fmode(a5)
@@ -842,13 +847,14 @@ platform_init:
 
 	* install keyboard and vblank/copper handler
 	pea		level2_interrupt(pc)
-	move.l	(a7)+,0x68.W
+	move.l	system_vbr(pc),a1
+	move.l	(a7)+,(0x68,a1)
 	pea		_vblank(pc)
-	move.l	(a7)+,0x6C.W
+	move.l	(a7)+,(0x6C,a1)
 
 	* soundfx lib
 	lea		_custom,a6
-	sub.l	a0,a0	| we know vbr=0
+	move.l	system_vbr(pc),a0
 	moveq	#1,d0	| PAL
 	jsr		_mt_install_cia
 
@@ -949,7 +955,7 @@ osd_update_graphics:
 	
 	cmp.b	(1,a6),d1			| check previous scroll value
 	beq.b	1f
-	st.b	(a6)				| mark row as dirty
+	move.b	#2,(a6)				| mark row as dirty
 	move.b	d1,(1,a6)			| store scroll values
 1:
 	addq.w	#2,a6
@@ -1458,9 +1464,10 @@ update_rows:
 	lea		bg_screen_backbuffer,a3
 	move.l	bg_drawed_screen_ptr(pc),a6
 0:
-	tst.b	(a4,d6.w)
+	move.b	(a4,d6.w),d0
 	jeq		5f
-	subq.b	#1,(a4,d6.w)	| dec counter, eventually ack as clean
+	subq.b	#1,d0
+	move.b	d0,(a4,d6.w)	| dec counter, eventually ack as clean
 	* now blit the dirty row
 	* we should first clear the left or right part depending on scroll value
 	* but that's only necessary at player ship level, and only when player is killed
@@ -1714,6 +1721,9 @@ dip_switches:
 		.long	0
 	.long	0
 
+system_vbr:
+	.long	0
+	
 start_lives_and_free_ship_dsw:
 	.word	4
 free_play_dsw:
@@ -1893,7 +1903,7 @@ osd_read_dipswitches:
 		
 osd_read_high_scores:
 	movem.l	d0-d7/a0-a6,-(a7)
-	move.l	a1,a4
+	move.l	a0,a4
 	move.l	_resload(pc),d0
 	beq.b	0f
 	move.l	d0,a2
@@ -1906,24 +1916,19 @@ osd_read_high_scores:
 	move.l	a3,a1
 	jsr		resload_LoadFile(a2)
 	* set highest score entry
-    move.b    (0,a3),(a4)+
-    move.b    (1,a3),(a4)+
-    move.b    (2,a3),(a4)+		
+    move.b    (a3)+,(a4)+
+    move.b    (a3)+,(a4)+
+    move.b    (a3)+,(a4)+		
 	bra.b	1f
 0:
 	tst.b	highscore_loaded
-	beq.b	2f
+	beq.b	1f
 	* from DOS: just copy buffer
 	lea		high_score_buffer(pc),a1
 	* set highest score entry
-    move.b    (0,a1),(a4)+
-    move.b    (1,a1),(a4)+
-    move.b    (2,a1),(a4)+	
-	move.l	#SCORE_FILE_SIZE/4-1,d0
-2:
-	move.l	(a1)+,(a0)+
-	dbf		D0,2b
-
+    move.b    (a1)+,(a4)+
+    move.b    (a1)+,(a4)+
+    move.b    (a1)+,(a4)+	
 1:
 	movem.l	(a7)+,d0-d7/a0-a6
 	rts
@@ -1943,10 +1948,10 @@ osd_write_high_scores:
 0:
 	* from DOS: just copy buffer
 	lea		high_score_buffer(pc),a1
-	move.l	#SCORE_FILE_SIZE/4-1,d0
-2:
-	move.l	(a0)+,(a1)+
-	dbf		D0,2b
+
+	move.b	(a0)+,(a1)+
+	move.b	(a0)+,(a1)+
+	move.b	(a0)+,(a1)+
 	st.b	highscore_needs_saving
 1:
 	movem.l	(a7)+,d0-d7/a0-a6
@@ -2358,12 +2363,20 @@ show_stars:
 	lsr.w	#2,d0
 	move.w	d0,stars_copper_pointers_count
 	move.l	(a7)+,a5
+	tst.b	may_enable_star_scroll
+	beq.b	3f
+	st.b	enable_star_scroll
+3:
 	rts
 1:
 	clr.l	d0
 	bra.b	0b
 	
 scroll_stars:
+	tst.b	enable_star_scroll
+	bne.b	0f
+	rts
+0:
 	lea		stars_copper_row_pointers(pc),a5
 	move.w	stars_copper_pointers_count(pc),d7
 	move.w	d7,d6
@@ -2402,7 +2415,11 @@ scroll_stars:
 temp_copper_buffer:
 	ds.w	3
 stars_copper_pointers_count:
-	dc.w	0
+	.word	0
+may_enable_star_scroll:
+	.word	0
+enable_star_scroll:
+	.word	0
 stars_copper_row_pointers:
 	ds.l	NB_LINES+32
 	
@@ -2561,14 +2578,12 @@ bg_color_table:
 bg_screen_backbuffer:
 	ds.b	BG_SCREEN_SIZE
 	ds.b	NB_BYTES_PER_ROW*12*3
-	.align 0x8		| 8 else fmode=3 makes display wrong
 bg_screen_data_1:
 	ds.b	BG_SCREEN_SIZE
 	ds.b	NB_BYTES_PER_ROW*12*3
 bg_screen_data_2:
 	ds.b	BG_SCREEN_SIZE
 	ds.b	NB_BYTES_PER_ROW*12*3
-	.align 0x8		| 8 else fmode=3 makes display wrong
 fg_screen_data_1:
 	ds.b	FG_SCREEN_SIZE
 	
@@ -2577,7 +2592,6 @@ fg_screen_data_1:
 	ds.b	100
 	.ifne  OPT_ENABLE_DOUBLE_BUFFERING
 
-	.align 0x8		| 8 else fmode first bits set (BPAGEM&BLP32) makes display wrong
 fg_screen_data_2:
 	ds.b	FG_SCREEN_SIZE
 	
