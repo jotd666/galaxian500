@@ -82,7 +82,7 @@ For info about the Galaxian video hardware see: https://github.com/mamedev/mame/
 
 
 Copied from MAME4All documentation: https://github.com/squidrpi/mame4all-pi/blob/master/src/drivers/galaxian.cpp
-Some corrections applied from: https://github.com/mamedev/mame/blob/master/src/mame/drivers/galaxian.cpp
+Some corrections applied from: https://github.com/mamedev/mame/blob/master/src/mame/galaxian/galaxian.cpp
 
 Galaxian/Moon Cresta memory map.
 Compiled from information provided by friends and Uncles on RGVAC.
@@ -801,7 +801,7 @@ CALCULATE_TANGENT:
 ; read ports and stash values read in RAM
 0084: 3A 00 78      ld   a,($7800)           ; kick the watchdog
 0087: 3A 15 40      ld   a,($4015)           ; read previous, previous state of port 6000 (SW0)
-008A: 32 16 40      ld   ($4016),a           ; and write to PREV_PREV_PREV_STATE_6000 
+008A: 32 16 40      ld   ($4016),a           ; and write to PREV_PREV_PREV_PORT_STATE_6000 
 008D: 3A 13 40      ld   a,($4013)           ; read previous state of port 6000 (SW0)
 0090: 32 15 40      ld   ($4015),a           ; and write to PREV_PREV_PORT_STATE_6000  
 0093: 2A 10 40      ld   hl,($4010)          ; read state of 6000 (SW0) and 6800 (SW1 & SOUND)
@@ -905,7 +905,7 @@ SCRIPT_ZERO:
 0124: 07            rlca                     ; ..to bit 0.
 0125: 32 0F 40      ld   ($400F),a           ; and store to IS_COCKTAIL
 
-; read DIP switches to calculate value of BONUS GALAXIP
+; read DIP switches to calculate value of BONUS GALIXIP
 0128: 3A 00 70      ld   a,($7000)           ; read state of dip switch 3,4,5,6
 012B: E6 03         and  $03                 ; mask in state of dip switches 3 & 4
 012D: 21 52 01      ld   hl,$0152
@@ -1168,7 +1168,7 @@ BLINK_CONVOY_CHARGER_POINTS:
 028E: CD 63 03      call $0363               ; call HANDLE_ALIEN_SWARM_SCROLL_RESET
 0291: CD BE 0B      call $0BBE               ; call HANDLE_INFLIGHT_ALIEN_SPRITE_UPDATE
 0294: CD C3 0C      call $0CC3               ; call HANDLE_INFLIGHT_ALIENS
-0297: CD 67 03      call $0367               ; call DISPLAY_CONVOY_CHARGER_POINTS
+0297: CD 67 03      call $0367               ; call HANDLE_DRAW_CONVOY_CHARGER_POINTS
 029A: C3 36 03      jp   $0336               ; jump to WAIT_FOR_TEMP_COUNTERS
 
 
@@ -1384,7 +1384,7 @@ HANDLE_ALIEN_SWARM_SCROLL_RESET:
 ; Handles the drawing and blinking of the CONVOY CHARGER points values in the demo.
 ;
 
-DISPLAY_CONVOY_CHARGER_POINTS:
+HANDLE_DRAW_CONVOY_CHARGER_POINTS:
 0367: 3A 41 42      ld   a,($4241)           ; read ATTRACT_MODE_SCROLL_ID
 036A: A7            and  a                   ; test if zero
 036B: C8            ret  z                   ; if its zero, not time to scroll anything in yet, return
@@ -1550,7 +1550,7 @@ INIT_0408:
 
 ; hide all bullets and inflight aliens
 0415: 21 60 42      ld   hl,$4260            ; load HL with address of ENEMY_BULLETS_START
-0418: D7            rst  $10                 ; Fill B bytes of memory from HL with value in A.  
+0418: D7            rst  $10                 ; Fill 256 bytes of memory from HL with value in A.  
 0419: 06 50         ld   b,$50
 041B: D7            rst  $10                 ; Fill B bytes of memory from HL with value in A. 
 
@@ -1611,7 +1611,7 @@ DISPLAY_PUSH_START_BUTTON_AND_BONUS_GALIXIP_FOR:
 0464: 32 18 40      ld   ($4018),a           ; set DISPLAY_IS_COCKTAIL_P2
 
 ; display BONUS GALIXIP FOR and PUSH START BUTTON messages
-0467: 11 02 07      ld   de,$0702            ; command: BOTTOM_OF_SCREEN_INFO_COMMAND , parameter: 2 (invokes DISPLAY_BONUS_GALAXIP_FOR)
+0467: 11 02 07      ld   de,$0702            ; command: BOTTOM_OF_SCREEN_INFO_COMMAND , parameter: 2 (invokes DISPLAY_BONUS_GALIXIP_FOR)
 046A: CD F2 08      call $08F2               ; call QUEUE_COMMAND
 046D: 11 01 06      ld   de,$0601            ; command: PRINT_TEXT, parameter: 1 (index of "PUSH START BUTTON")
 0470: CD F2 08      call $08F2               ; call QUEUE_COMMAND
@@ -1625,7 +1625,7 @@ DISPLAY_PUSH_START_BUTTON_AND_BONUS_GALIXIP_FOR:
 ;
 ;
 
-BLINK_LAMPS_IF_CREDITS:
+BLINK_LAMPS_IF_CREDIT_INSERTED:
 0473: 3A 5F 42      ld   a,($425F)           ; read TIMING_VARIABLE
 0476: E6 20         and  $20                 ; mask in bit 5
 0478: 28 11         jr   z,$048B             ; if bit 5 is not set, turn off the lamps
@@ -1677,9 +1677,9 @@ HANDLE_START_BUTTONS:
 04A4: 32 02 40      ld   ($4002),a           ; and update NUM_CREDITS with remainder
 
 ; initialise player 2's state (lives etc) to defaults
-04A7: 21 1B 05      ld   hl,$051B            ; load HL with address of DEFAULT_PLAYER_STATE
-04AA: 11 A0 41      ld   de,$41A0            ; load DE with address of PLAYER_TWO_STATE
-04AD: 01 20 00      ld   bc,$0020            ; sizeof (PLAYER_TWO_STATE)
+04A7: 21 1B 05      ld   hl,$051B            ; load HL with address of PACKED_DEFAULT_SWARM_DEFINITION
+04AA: 11 A0 41      ld   de,$41A0            ; load DE with address of PLAYER_TWO_PACKED_SWARM_DEF
+04AD: 01 20 00      ld   bc,$0020            ; sizeof (PLAYER_TWO_STATE+PLAYER_TWO_PACKED_SWARM_DEF)
 04B0: ED B0         ldir
 
 ; if dip switch 5 is on, then player 2 gets 3 lives
@@ -1755,19 +1755,19 @@ AWARD_PLAYER_ONE_THREE_LIVES:
 
 
 
-DEFAULT_SWARM_DEFINITION_AND_PLAYER_STATE    ; EQU $051B:
-    PACKED_DEFAULT_SWARM_DEFINITION:
-    ; The first 16 bytes defining the default alien swarm. 
-    ; For information on how the bytes are unpacked, please see docs @ $0646
-    051B: 00 00 00 00 F8 1F F8 1F F8 1F F0 0F E0 07 40 02            
-
-    ; When starting a new game, these are the default values 
-    DEFAULT_PLAYER_STATE:
-    052B: 3C                                 ; Default value for DIFFICULTY_COUNTER_1 
-    052C: 14                                 ; Default value for DIFFICULTY_COUNTER_2
-    00 02 00 02 00 0F 00 00 00            
-
-
+;DEFAULT_SWARM_DEFINITION_AND_PLAYER_STATE    ; EQU $051B:
+;    PACKED_DEFAULT_SWARM_DEFINITION:
+;    ; The first 16 bytes defining the default alien swarm. 
+;    ; For information on how the bytes are unpacked, please see docs @ $0646
+;    051B: 00 00 00 00 F8 1F F8 1F F8 1F F0 0F E0 07 40 02            
+;
+;    ; When starting a new game, these are the default values 
+;    DEFAULT_PLAYER_STATE:
+;    052B: 3C                                 ; Default value for DIFFICULTY_COUNTER_1 
+;    052C: 14                                 ; Default value for DIFFICULTY_COUNTER_2
+;    00 02 00 02 00 0F 00 00 00            
+;
+;
 ;
 ; This script is responsible for managing PLAYER 1's game. 
 ;
@@ -2051,7 +2051,7 @@ HANDLE_MAIN_GAME_LOGIC:
 068B: CD F3 14      call $14F3               ; call HANDLE_LEVEL_DIFFICULTY
 068E: CD ED 12      call $12ED               ; call HANDLE_PLAYER_HIT
 0691: CD 27 13      call $1327               ; call HANDLE_PLAYER_DYING
-0694: CD A6 16      call $16A6               ; Doesn't actually do anything
+0694: CD A6 16      call $16A6               ; Doesn't actually do anything but decreases ALIEN_DEATH_SOUND value
 0697: CD 15 15      call $1515               ; call CHECK_IF_ALIEN_CAN_ATTACK
 069A: CD 55 15      call $1555               ; call UPDATE_ATTACK_COUNTERS
 069D: CD C3 15      call $15C3               ; call CHECK_IF_FLAGSHIP_CAN_ATTACK
@@ -2560,7 +2560,7 @@ POSITION_PLAYER_BULLET_ABOVE_SHIP:
 ; Check if the player bullet has gone all the way upscreen. If so, allow player to shoot again.
 ;
 
-CHECK_IF_PLAYER_BULLET_IS_DONE:
+HANDLE_PLAYER_BULLET_EXPIRED:
 08E5: 3A 0B 42      ld   a,($420B)           ; read IS_PLAYER_BULLET_DONE flag
 08E8: 0F            rrca                     ; move bit 0 into carry. If carry is set then the player bullet's gone as far as it can.
 08E9: D0            ret  nc                  ; if no carry, then return. 
@@ -2951,7 +2951,7 @@ HANDLE_ENEMY_BULLETS:
 
 0A84: 11 05 00      ld   de,$0005            ; sizeof(ENEMY_BULLET)
 0A87: DD 19         add  ix,de
-0A89: FD 21 81 40   ld   iy,$4081            ; pointer to OBJRAM_BACK_BUF_BULLETS
+0A89: FD 21 81 40   ld   iy,$4081            ; pointer to OBJRAM_BACK_BUF_BULLETS+1
 0A8D: 06 07         ld   b,$07               ; number of bullets
 
 ; main bullet loop
@@ -4259,7 +4259,7 @@ INFLIGHT_ALIEN_DYING_DISPLAY_EXPLOSION:
 1115: C0            ret  nz                  ; if counter hasn't reached zero, not time to update explosion animation frame yet
 1116: DD 36 10 04   ld   (ix+$10),$04        ; reset animation counter. Higher number = slower explosion animation speed
 111A: DD 34 12      inc  (ix+$12)            ; bump INFLIGHT_ALIEN.DyingAnimFrameCode to next frame
-111D: DD 35 11      dec  (ix+$11)            ; decrement INFLIGHT_ALIEN.TempCounter1 which holds count of frames left to show 
+111D: DD 35 11      dec  (ix+$11)            ; decrement INFLIGHT_ALIEN.TempCounter2 which holds count of frames left to show 
 1120: C0            ret  nz                  ; if we've not shown all the explosion frames, exit
 
 1121: DD 7E 07      ld   a,(ix+$07)          ; read INFLIGHT_ALIEN.IndexInSwarm
@@ -4488,7 +4488,7 @@ SPAWN_ENEMY_BULLET:
 11F6: 77            ld   (hl),a              ; set X coordinate of bullet to be same as alien
 11F7: 3E F0         ld   a,$F0               ; load A with -16 (decimal)
 11F9: 96            sub  (hl)                ; A = X coordinate of bullet + 16 
-11FA: 57            ld   d,a
+11FA: 57            ld   d,a				 ; parameter for CALCULATE_TANGENT
 11FB: 23            inc  hl
 11FC: 23            inc  hl                  ; bump HL to point to ENEMY_BULLET.YH
 11FD: DD 7E 04      ld   a,(ix+$04)          ; read INFLIGHT_ALIEN.Y  coordinate
@@ -4530,7 +4530,7 @@ HANDLE_INFLIGHT_ALIEN_TO_PLAYER_BULLET_COLLISION_DETECTION:
 1227: 3A 08 42      ld   a,($4208)           ; read HAS_PLAYER_BULLET_BEEN_FIRED flag
 122A: 0F            rrca                     ; move flag into carry
 122B: D0            ret  nc                  ; return if player is not shooting
-122C: DD 21 D0 42   ld   ix,$42D0            ; pointer to INFLIGHT_ALIENS_START
+122C: DD 21 D0 42   ld   ix,$42D0            ; pointer to INFLIGHT_ALIENS_START+sizeof(INFLIGHT_ALIEN) (JOTD: comment was wrong)
 1230: 11 20 00      ld   de,$0020            ; sizeof(INFLIGHT_ALIEN)
 1233: 06 07         ld   b,$07               ; length of INFLIGHT_ALIENS array
 1235: D9            exx
@@ -4834,7 +4834,7 @@ INIT_SCAN_FROM_PURPLE_ALIEN_ROW:
 1392: 26 41         ld   h,$41                ; MSB of ALIEN_SWARM_FLAGS address 
 1394: 7D            ld   a,l                  
 1395: E6 0F         and  $0F                  ; A = index of column containing alien 
-1397: C6 50         add  a,$50                ; effectively: HL = $4150 + (L & 0x0f)       
+1397: C6 50         add  a,$50                ; effectively: HL = $4150 + (L & $0f)       
 1399: 6F            ld   l,a                  ; HL now points to slot for purple alien in ALIEN_SWARM_FLAGS
 
 ; HL now points to a slot in ALIEN_SWARM_FLAGS. D is a row counter.
@@ -4870,13 +4870,13 @@ FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_RIGHT:
 13AB: 21 F3 41      ld   hl,$41F3            ; address of flag for rightmost column of aliens 
 13AE: 01 0A 00      ld   bc,$000A            ; 10 aliens maximum on a row  
 13B1: 3E 01         ld   a,$01               ; we are scanning for a value of 1, meaning "column occupied"
-13B3: ED B1         cpir                     ; scan $41F3 up to $41F3 for value #$01. 
+13B3: ED B1         cpir                     ; scan $41F3 up to $41FC for value #$01. 
 13B5: C0            ret  nz                  ; if we have no aliens in the swarm - return
 13B6: E0            ret  po                  ; if BC has overflowed, return
 
 ; we've found an occupied column
 13B7: 1E 41         ld   e,$41
-13B9: 2D            dec  l
+13B9: 2D            dec  l		     ; adjust L because CPIR will have incremented it one time too many 
 13BA: C3 8A 13      jp   $138A               ; jump to TRY_FIND_ALIEN_TO_ATTACK:
 
 
@@ -4886,11 +4886,11 @@ INIT_SCAN_FROM_RED_ALIEN_ROW:
 13BF: 26 41         ld   h,$41                ; MSB of ALIEN_SWARM_FLAGS address 
 13C1: 7D            ld   a,l
 13C2: E6 0F         and  $0F                  ; A = index of column   
-13C4: C6 60         add  a,$60                ; effectively: HL = $4150 + (L & 0x0f)
+13C4: C6 60         add  a,$60                ; effectively: HL = $4150 + (L & $0f)
 13C6: 6F            ld   l,a                  ; HL now points to slot for red alien in ALIEN_SWARM_FLAGS
 13C7: 7B            ld   a,e
 13C8: C6 10         add  a,$10
-13CA: 5F            ld   e,a
+13CA: 5F            ld   e,a                   ; update e, only used in legacy/debug?
 13CB: C3 9A 13      jp   $139A                ; jump to SCAN_SPECIFIC_COLUMN_FOR_D_ROWS
 
 
@@ -4899,7 +4899,7 @@ INIT_SCAN_FROM_RED_ALIEN_ROW:
 ; HL = pointer to occupied entry in ALIEN_SWARM_FLAGS
 ; IX = pointer to vacant INFLIGHT_ALIEN structure
 ;
-
+WAKEUP_INFLIGHT_ALIEN:
 13CE: 36 00         ld   (hl),$00
 13D0: DD 75 07      ld   (ix+$07),l          ; set INFLIGHT_ALIEN.IndexInSwarm
 13D3: DD 36 00 01   ld   (ix+$00),$01        ; set INFLIGHT_ALIEN.IsActive 
@@ -5470,7 +5470,7 @@ CHECK_IF_LEVEL_IS_COMPLETE:
 162A: D0            ret  nc                  ; return if flag is not set, meaning that there are aliens attacking, or dying
 162B: 3A 22 42      ld   a,($4222)           ; read LEVEL_COMPLETE
 162E: 0F            rrca                     ; move flag bit into carry
-162F: D8            ret  c                   ; return if flag is not set
+162F: D8            ret  c                   ; return if flag is set
 1630: 21 01 00      ld   hl,$0001
 1633: 22 22 42      ld   ($4222),hl          ; set LEVEL_COMPLETE to 1 and NEXT_LEVEL_DELAY_COUNTER to 0.                  
 1636: C9            ret
@@ -5559,20 +5559,28 @@ HANDLE_SHOCKED_SWARM:
 16A5: C9            ret
 
 ;
-; Looks like this might be legacy code imported from an older game; it writes to a port that does nothing
+; Scott: Looks like this might be legacy code imported from an older game
+; it writes to a port that does nothing
 ;
-
+; JOTD: no, it actually does something: it decreases ALIEN_DEATH_SOUND
+; if not zero (when not service mode)
+; which explains why game sets $7 / $17 to play alien/flagship death sound
+; but HANDLE_ALIEN_DEATH_SOUND checks for $6 / $16
+;
+; of course it could be much simpler, because the aim was probably
+; to enable some hardware stuff that ended up not connected as Scott mentionned
+;
 16A6: 3A 07 40      ld   a,($4007)            ; read IS_GAME_OVER flag
 16A9: 0F            rrca                      ; move bit 0 into carry
 16AA: D8            ret  c                    ; if carry set, return
-16AB: 21 DF 41      ld   hl,$41DF
+16AB: 21 DF 41      ld   hl,$41DF			  ; load ALIEN_DEATH_SOUND address
 16AE: 7E            ld   a,(hl)
 16AF: A7            and  a
 16B0: C8            ret  z
 16B1: 0F            rrca
 16B2: 0F            rrca
 16B3: 32 04 68      ld   ($6804),a            ; Does nothing - this port is not connected
-16B6: 35            dec  (hl)
+16B6: 35            dec  (hl)                  ; decrease ALIEN_DEATH_SOUND value
 16B7: C9            ret
 
 
@@ -5705,12 +5713,6 @@ HANDLE_GAME_START_MELODY:
 175C: C9            ret
 
 
-
-
-182D: 32 CF 41      ld   ($41CF),a
-1830: 32 D6 41      ld   ($41D6),a
-1833: 21 BD 1E      ld   hl,$1EBD
-1836: 22 D3 41      ld   ($41D3),hl
 
 
 ;
@@ -6094,7 +6096,7 @@ HANDLE_UNPROCESSED_COINS:
 1953: 30 0C         jr   nc,$1961            ; if we have more than 99 credits (decimal) then goto $1961 - clamp credits to 99.
 1955: 34            inc  (hl)                ; increment credit count
 1956: 3E 01         ld   a,$01
-1958: 32 C9 41      ld   ($41C9),a           ; Set PLAY_PLAYER_CREDIT_SOUND flag to 1. I think you can guess what this does ;)
+1958: 32 C9 41      ld   ($41C9),a           ; Set PLAY_PLAYER_CREDIT_SOUND flag to 1. I think you can guess what this does |)
 195B: 11 01 07      ld   de,$0701            ; command: BOTTOM_OF_SCREEN_INFO_COMMAND, parameter: 1 (invokes DISPLAY_AVAILABLE_CREDIT)
 195E: C3 F2 08      jp   $08F2               ; jump to QUEUE_COMMAND
 
@@ -6231,7 +6233,7 @@ HANDLE_SIMULATE_PLAYER_IN_ATTRACT_MODE:
 ; Returns:
 ;
 
-1A12: DD CB 00 46   bit  0,(ix+$00)          ; test INFLIGHT_ALIEN.IsActive flag
+1A12: DD CB 00 46   bit  0,(ix+$00)          ; test INFLIGHT_ALIEN.IsActive/bullet is active flag
 1A16: C8            ret  z                   ; exit if alien is not active
 1A17: 7C            ld   a,h                 ; get X coordinate of alien/bullet
 1A18: D6 80         sub  $80                 ; subtract 128 decimal
@@ -6628,9 +6630,9 @@ OBJRAM_TEST:
 1C0F: 32 00 60      ld   ($6000),a           ; write to !DRIVER lamp 1
 1C12: 32 01 60      ld   ($6001),a           ; write to !DRIVER lamp 2
 1C15: 32 02 60      ld   ($6002),a           ; write to !DRIVER lamp 3
-1C18: 32 26 42      ld   ($4226),a
+1C18: 32 26 42      ld   ($4226),a           ; set HAVE_NO_INFLIGHT_ALIENS
 1C1B: 32 5F 42      ld   ($425F),a           ; set TIMING_VARIABLE
-1C1E: 32 38 42      ld   ($4238),a
+1C1E: 32 38 42      ld   ($4238),a	     ; set DISABLE_SWARM_ANIMATION
 1C21: 3E 1F         ld   a,$1F
 1C23: 32 13 52      ld   ($5213),a           ; write "O" to screen
 1C26: 3E 1B         ld   a,$1B
@@ -8044,7 +8046,7 @@ TEXTPTRS:
 ; ===============================================================================================================================================
 ; 0                         The player advances to the next level and the red level flags are redrawn.   See: $2520 (DISPLAY_LEVEL_FLAGS)
 ; 1                         Display FREE PLAY or CREDIT n at bottom left of screen.                      See: $24EB (DISPLAY_AVAILABLE_CREDIT)
-; 2                         Display BONUS GALAXIP FOR (nnnnn) PTS on screen.                             See: $24C8 (DISPLAY_BONUS_GALAXIP_FOR)
+; 2                         Display BONUS GALIXIP FOR (nnnnn) PTS on screen.                             See: $24C8 (DISPLAY_BONUS_GALIXIP_FOR)
 ; Any other value           Display player ships remaining at bottom left of screen.                     See: $22B3 (DISPLAY_PLAYER_SHIPS_REMAINING)
 ;
 
@@ -8054,7 +8056,7 @@ DISPLAY_BOTTOM_OF_SCREEN:
 24BA: 3D            dec  a
 24BB: 28 2E         jr   z,$24EB             ; if parameter was 1 then goto $24EB (DISPLAY_AVAILABLE_CREDIT)
 24BD: 3D            dec  a
-24BE: 28 08         jr   z,$24C8             ; if parameter was 2 then goto $24C8 (DISPLAY_BONUS_GALAXIP_FOR) 
+24BE: 28 08         jr   z,$24C8             ; if parameter was 2 then goto $24C8 (DISPLAY_BONUS_GALIXIP_FOR) 
 24C0: 3A 1D 42      ld   a,($421D)           ; read number of lives for current player
 24C3: 47            ld   b,a
 24C4: CF            rst  $08                 ; assert that it's not GAME OVER (TODO: verify this)
