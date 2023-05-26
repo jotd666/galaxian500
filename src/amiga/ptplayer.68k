@@ -444,11 +444,6 @@ mt_TimerBInt:
 	nop
 	rte
 
-mt_dmaon:
-	.short	0x8000
-TB_toggle:
-	.byte	0
-	.align	2
 
 
 *---------------------------------------------------------------------------
@@ -2712,6 +2707,12 @@ mt_VibratoRectTable:
 	.endif	| ENABLE_SAWRECT
 
 
+mt_dmaon:
+	.short	0x8000
+TB_toggle:
+	.byte	0
+	.align	2
+	
 mt_PerFineTune:
 	.short	mt_Tuning0-mt_PerFineTune,mt_Tuning1-mt_PerFineTune
 	.short	mt_Tuning2-mt_PerFineTune,mt_Tuning3-mt_PerFineTune

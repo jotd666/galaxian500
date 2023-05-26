@@ -206,8 +206,6 @@ w\@:
 		.global osd_w_bg_videoram
 		.global osd_reset_attributes
 		.global osd_update_graphics
-		.global osd_update_sprite_shadow
-		.global osd_update_32_sprite_hw
 		.global osd_read_dipswitches
 		.global osd_read_p1_inputs
 		.global osd_read_p2_inputs
@@ -590,10 +588,6 @@ osd_play_alien_attack_loop:
 	movem.l	(a7)+,d0/d1/a0/a6
 	rts
 
-alien_attack_loop_playing:
-	.word	0
-alien_swarm_loop_playing:
-	.word	0
 	
 osd_sound_start:
 	movem.l	d0/d1/a0/a6,-(a7)
@@ -807,8 +801,7 @@ platform_init:
 
     move.w #0,fmode(a5)
 	
-	* there's a 2-pixel shift between foreground layer
-    * and background layer, can be seen in the title
+	
 	* screen with galaxian bg/fg tiles
     **move.w #2<<4,bplcon1(a5)    | foreground tiles shifted by 2 pixels
     move.w #0,bplcon1(a5)    | foreground tiles
@@ -817,11 +810,18 @@ platform_init:
     move.w d0,bpl2mod(a5)
 
 	* allocate sprite zero for player shot
+	* and set all sprites to something valid
 	move.l		#player_shot_sprite,d0
+	moveq	#7,d1
 	lea		sprites,a1
+0:
     move.w	d0,(6,a1)
 	swap	d0
     move.w	d0,(2,a1)
+	swap	d0
+	addq.w	#8,a1
+	dbf		d1,0b
+	
 	* yellow
 	lea		sprite_cols,a1		| color 17
 	move.w	#0xFF0,d0
@@ -840,6 +840,14 @@ platform_init:
 	bsr		load_palette_in_copperlist
 	* set copperlist
 	move.l	#copperlist,cop1lc(a5)
+
+	* wait 300 lines
+	move.w	#100,d0
+	bsr	beamdelay
+	move.w	#100,d0
+	bsr	beamdelay
+	move.w	#100,d0
+	bsr	beamdelay
 	
     * init sprite, bitplane, whatever dma
 
@@ -854,6 +862,11 @@ platform_init:
 
 	* soundfx lib
 	lea		_custom,a6
+	lea		blank_sound,a0
+	move.l	a0,(0xA0,a6)
+	move.l	a0,(0xB0,a6)
+	move.l	a0,(0xC0,a6)
+	move.l	a0,(0xD0,a6)
 	move.l	system_vbr(pc),a0
 	moveq	#1,d0	| PAL
 	jsr		_mt_install_cia
@@ -1288,21 +1301,7 @@ draw_sprites:
 	movem.l	(a7)+,a2-a3
 	rts
 
-* 8 slots (indexed with the target sprite index, not
-* the amiga sprite index) with
-* - 4 bytes for the sprite actual address
-* - 2 bytes amiga sprite index
-* - 2 bytes??
-hw_sprite_slots:
-	ds.b	8*8
-* 8 slots (indexed with the amiga sprite index)
-amiga_sprite_slots:
-	ds.b	8
-	
-current_sprite_palette:
-	.long	0
-current_sprite_frame_table:
-	.long	0
+
 	
 * < A4: previous bullets
 * most registers are trashed
@@ -1382,8 +1381,6 @@ delete_sprites:
 	movem.l	(a7)+,a0-a3
 	rts
 	
-nb_deleted:
-	.word	0
 * < D4: sprite properties
 *     Y code+attrs clut X
 * > D0,D1: X,Y.B
@@ -1687,53 +1684,7 @@ update_bg_tile:
 		
 
 
-
-osd_stars_on:
-	rts
-osd_stars_off:
-	rts
-	
-old_intena:
-	.long	0
-old_dmacon:
-	.long	0
-old_sysvectors:
-	ds.l	8
-old_vbr:
-	.long	0
-old_syscoplist:
-	.long	0
-old_actiview:
-	.long	0
-old_stack:
-	.long	0
-
-	
-_tag:
-		.long	WHDLTAG_CUSTOM1_GET
-cheat_flags:
-		.long	0
-		.long	WHDLTAG_CUSTOM4_GET
-dip_switch_bonus_ship:
-		.long	0
-		.long	WHDLTAG_CUSTOM5_GET
-dip_switches:
-		.long	0
-	.long	0
-
-system_vbr:
-	.long	0
-	
-start_lives_and_free_ship_dsw:
-	.word	4
-free_play_dsw:
-	.word	0
-previous_ship_scroll:
-	.byte	0
-previous_previous_ship_scroll:
-	.byte	0
-	
-		
+			
 store_sprite_pos_16:
 	move.l	a1,-(a7)
 	lea		HW_SpriteYTable_16,a1
@@ -2001,28 +1952,12 @@ level2_interrupt:
 	
 toggle_pause:
 	* pause only within game
-	tst.b	ingame_palette_loaded
-	beq.b	0f
+	*tst.b	ingame_palette_loaded
+	*beq.b	0f
 	eor.b   #1,pause_flag
 0:
 	rts
 	
-high_score_buffer:
-	ds.b	SCORE_FILE_SIZE
-
-highscore_needs_saving:
-	.byte	0
-highscore_loaded:
-	.byte	0
-	.align	2
-	
-keyboard_table:
-	ds.b	0x100
-scroll_and_dirty_rows_values:
-	ds.w	0x20
-	
-pause_flag:
-	dc.w	0
     
 * < D0: numbers of vertical positions to wait
 beamdelay:
@@ -2411,18 +2346,7 @@ scroll_stars:
 	
 	rts
 
-	
-temp_copper_buffer:
-	ds.w	3
-stars_copper_pointers_count:
-	.word	0
-may_enable_star_scroll:
-	.word	0
-enable_star_scroll:
-	.word	0
-stars_copper_row_pointers:
-	ds.l	NB_LINES+32
-	
+
 	
 random:
     move.l  previous_random(pc),d0
@@ -2460,14 +2384,98 @@ read_args_string:
 	.ascii	"STARTLIVES/K/N,SKILL/K/N,STARTAREA/K/N,"
 	.ascii	"INVINCIBLE/S,INFLIVES/S"
 	.byte	0
-	
-unknown_tile_found:
-	dc.b	0
-unknown_sprite_found:
-	dc.b	0
-ingame_palette_loaded:
-	dc.b	0
 	.align	2
+* 8 slots (indexed with the target sprite index, not
+* the amiga sprite index) with
+* - 4 bytes for the sprite actual address
+* - 2 bytes amiga sprite index
+* - 2 bytes??
+hw_sprite_slots:
+	ds.b	8*8
+* 8 slots (indexed with the amiga sprite index)
+amiga_sprite_slots:
+	ds.b	8
+
+alien_attack_loop_playing:
+	.word	0
+alien_swarm_loop_playing:
+	.word	0
+	
+old_intena:
+	.long	0
+old_dmacon:
+	.long	0
+old_sysvectors:
+	ds.l	8
+old_vbr:
+	.long	0
+old_syscoplist:
+	.long	0
+old_actiview:
+	.long	0
+old_stack:
+	.long	0
+
+	
+_tag:
+		.long	WHDLTAG_CUSTOM1_GET
+cheat_flags:
+		.long	0
+		.long	WHDLTAG_CUSTOM4_GET
+dip_switch_bonus_ship:
+		.long	0
+		.long	WHDLTAG_CUSTOM5_GET
+dip_switches:
+		.long	0
+	.long	0
+
+system_vbr:
+	.long	0
+	
+start_lives_and_free_ship_dsw:
+	.word	4
+free_play_dsw:
+	.word	0
+previous_ship_scroll:
+	.byte	0
+previous_previous_ship_scroll:
+	.byte	0
+	
+
+nb_deleted:
+	.word	0	
+current_sprite_palette:
+	.long	0
+current_sprite_frame_table:
+	.long	0	
+temp_copper_buffer:
+	ds.w	3
+stars_copper_pointers_count:
+	.word	0
+may_enable_star_scroll:
+	.word	0
+enable_star_scroll:
+	.word	0
+stars_copper_row_pointers:
+	ds.l	NB_LINES+32
+	
+high_score_buffer:
+	ds.b	SCORE_FILE_SIZE
+
+highscore_needs_saving:
+	.byte	0
+highscore_loaded:
+	.byte	0
+	.align	2
+	
+keyboard_table:
+	ds.b	0x100
+scroll_and_dirty_rows_values:
+	ds.w	0x20
+	
+pause_flag:
+	dc.w	0
+
 	* sound variables
 sound_lock:
 	.word	0
@@ -2620,6 +2628,9 @@ fg_tile_layer:
 	.set	colidx,colidx+1
 	.endr
 	.endm
+
+blank_sound:
+	ds.l	4
 	
 debug_copperlist:
 	dc.w	color
@@ -2653,6 +2664,19 @@ player_shot_sprite:
 	.word	beampos,0xFFFE              | 24
     .word    spr+sd_SIZEOF*7+sd_dataa,0	| 28
     .word    spr+sd_SIZEOF*7+sd_dataB,0	| 32	
+	
+	.endm
+	.macro FAKE_STAR_COPPER_ROW
+    * we use sprite #7 (last) for the stars, multiplexing it
+	.word	STAR_SPRITE_COLOR_REG,0xF00	   | 4
+	.word	STAR_SPRITE_COLOR_REG,0xF00	   | 4
+	.word	STAR_SPRITE_COLOR_REG,0xF00	   | 4
+	* sprite pattern
+	.word	STAR_SPRITE_COLOR_REG,0xF00	   | 4
+	.word	STAR_SPRITE_COLOR_REG,0xF00	   | 4
+	.word	beampos,0xFFFE              | 24
+	.word	STAR_SPRITE_COLOR_REG,0xF00	   | 4
+	.word	STAR_SPRITE_COLOR_REG,0xF00	   | 4
 	
 	.endm
 	

@@ -547,7 +547,7 @@ HANDLE_EXTRA_LIFE_SOUND:
 	             	| store 0 in PLAY_EXTRA_LIFE_SOUND and 0x80 in EXTRA_LIFE_SOUND_COUNTER [ld   hl,0x8000]
 	clr.b	PLAY_EXTRA_LIFE_SOUND                       	| [ld   (0x41C7),hl]
 	move.b	#0x80,EXTRA_LIFE_SOUND_COUNTER                       	| [ld   (0x41C7),hl]
-	move.w	#EXTRA_LIFE_SND,d0
+	move.l	#EXTRA_LIFE_SND,d0
 	jra		osd_sound_start
 	rts                                    	| [ret]
 
