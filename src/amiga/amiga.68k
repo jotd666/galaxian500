@@ -2390,24 +2390,24 @@ scroll_stars:
 	lea		temp_copper_buffer(pc),a3
 	move.l	-(a5),a4
 	move.w	(2,a4),(a3)+
-	move.w	(6,a4),(a3)+
-	move.w	(10,a4),(a3)
+	move.w	(10,a4),(a3)+
+	move.w	(6,a4),(a3)
 	subq	#1,d7
 	* then overwrite each next line with previous one
 0:
 	move.l	(a5),a4	| destination
 	move.l	-(a5),a3	| source
 	move.w	(2,a3),(2,a4)
-	move.w	(6,a3),(6,a4)
 	move.w	(10,a3),(10,a4)
+	move.w	(6,a3),(6,a4)
 
 	dbf	d7,0b
 	* restore last line into the first one
 	move.l		stars_copper_row_pointers(pc),a4	| first item
 	lea		temp_copper_buffer(pc),a3
 	move.w	(a3)+,(2,a4)
-	move.w	(a3)+,(6,a4)
-	move.w	(a3),(10,a4)
+	move.w	(a3)+,(10,a4)
+	move.w	(a3),(6,a4)
 	
 	rts
 
@@ -2571,7 +2571,7 @@ bg_color_table:
 	.set	row_offset,row_offset+copper_8x8_row_size
 	.endr
 
-		.bsschip
+		.section .bsschip
 	* some space to write tiles slightly outside screen
 	* (scrolling requires it so it's seamless)
 	ds.b	NB_BYTES_PER_ROW*12
@@ -2602,7 +2602,7 @@ fg_tile_layer:
 	* plus fg plane shifting can write one byte too far
 	ds.b	100
 	.endif
-	.datachip
+	.section	.datachip
 	
 .macro	DECL_3_BITPLANES	bpoff_start
 	.set	bpoff,\bpoff_start

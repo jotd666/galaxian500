@@ -249,7 +249,7 @@ with open(os.path.join(src_dir,"graphics.68k"),"w") as f:
                                 f.write(f"\t.long\t{name}_sprdata_{index}\n")
                             else:
                                 f.write("\t.long\t0\n")
-    f.write("\t.datachip\n")
+    f.write("\t.section\t.datachip\n")
 
     for i in range(256):
         sprite = sprites.get(i)
