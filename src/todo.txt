@@ -6,11 +6,12 @@ transcode:
 
 amiga:
 
-- line in fg plane ???? WTF???
+- still playfield priority issues (ask EAB?)
 - bobs corruption (double buffering issue, ok without it)
   can't drop double buffering on slow configs. Only ok on whdload/chip
   fails on all other configs, whdload chip/fast big system...
-- no whdload: game crashes when aliens attack
+- no whdload: game crashes when aliens attack / convoy if blit or erase blits
+  are enabled!!!!
 - whdload+fastmem: crashing whdload, no splash screen (winuae issue??)
 - support dip switches from CLI but should be 1.3 compliant eeek
 - joypad controls: play for pause

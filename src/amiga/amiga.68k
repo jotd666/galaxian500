@@ -112,11 +112,11 @@ ACTIVE_SPRITE_STRUCT_BITS = 6    | 1<<6 = 64: can hold a slb struct
 .endm
 
 .macro	WAIT_BLIT
-	move.w	#0x8400,dmacon+_custom
+	move.w	#0x8400,(dmacon,a5)
 wait\@:
-	BTST	#6,dmaconr+_custom
+	BTST	#6,(dmaconr,a5)
 	BNE.S	wait\@
-	move.w	#0x0400,dmacon+_custom
+	move.w	#0x0400,(dmacon,a5)
 .endm
 
 .macro MUL_TABLE value,len
@@ -799,9 +799,8 @@ platform_init:
     move.w #0x6600,bplcon0(a5) | 6 bitplanes, dual playfield
     move.w #1<<6,bplcon2(a5)     | sprite starfield behind, pf2 has priority
     move.w #0,bplcon3(a5)          | no AGA
-
+    move.w #0,bplcon4(a5)          | no AGA
     move.w #0,fmode(a5)
-	
 	
 	* screen with galaxian bg/fg tiles
     **move.w #2<<4,bplcon1(a5)    | foreground tiles shifted by 2 pixels
@@ -994,8 +993,8 @@ osd_update_graphics:
 	
 	move.l		previous_sprite_state_ptr(pc),a4
 
-	bsr		delete_sprites
-	bsr		delete_enemy_bullets
+	jbsr		delete_sprites
+	jbsr		delete_enemy_bullets
 	
 	* now A0 contains sprite/bullet data
 
@@ -1146,7 +1145,6 @@ delete_old_hw_sprites:
 * < a0: sprite structures (4 bytes)
 * < a4: backup previous data (A4 is updated to previous bullets on exit)
 draw_sprites:
-	move.b	#0,0x200
 	movem.l	a2-a3,-(a7)
 	moveq	#0,d6
 	moveq	#0,d5
@@ -1166,10 +1164,13 @@ draw_sprites:
 	jeq		11f
 	and.l	#0xFF0000FF,d7
 	cmp.l	#0xF80000F8,d7	| X=Y=0xF8: means disabled
-	jeq		11f
-
-	bsr		decode_sprite_data
+	beq.w	11f
 	
+	bsr		decode_sprite_data
+*	cmp.w	#0xF8,d0
+*	jcc	11f
+*	cmp.w	#0xF8,d1
+*	jcc	11f
 	
 	lea		sprite_table,a1
 	move.b	d6,d2		| save attributes xflip/yflip
@@ -1349,7 +1350,6 @@ delete_enemy_bullets:
 delete_sprites:
 	movem.l	a0-a3,-(a7)
 
-	clr	nb_deleted
 	lea		hw_sprite_flag_table,a3
 	
 	move.w	#NB_SPRITES_TOTAL-1,d5
@@ -1360,11 +1360,11 @@ delete_sprites:
 	and.l	#0xFF0000FF,d7
 	cmp.l	#0xF80000F8,d7	| X=Y=0xF8: means disabled
 	beq.w	11f
-	addq	#1,nb_deleted
 	* get data
 	bsr		decode_sprite_data_2
 	tst.b	(a3,d6.w)
-	bne.w	11f		| real sprite: skip erase
+	jne		11f		| real sprite: skip erase
+
 	
 	* erase previous sprite position (but not if sprite type
 	* is hardware sprite)
@@ -1374,15 +1374,16 @@ delete_sprites:
 
     lea _custom,a5
 	move.l	fg_drawed_screen_ptr(pc),a1
-	moveq	#3,d3
 	.ifne	SPRITE_X_OFFSET
 	addq.w	#SPRITE_X_OFFSET,d0
 	.endif
 	.ifne	SPRITE_Y_OFFSET
 	addq.w	#SPRITE_Y_OFFSET,d0
 	.endif
+	moveq	#NB_PLAYFIELD_PLANES,d3
 	move.w	d5,-(a7)
-	bsr		clear_planes_any_blitter_internal
+	* this crashes when d0=0xBF if D1 is not fixed!!!!
+	jbsr		clear_planes_any_blitter_internal
 	move.w	(a7)+,d5
 11:
 	dbf		d5,2b
@@ -2247,7 +2248,7 @@ blit_planes_any_internal_cookie_cut:
 	move.l	a1,bltcpt(a5)	|pristine background top (bottom) left corner
 	move.l	a1,bltdpt(a5)	|destination top (bottom) left corner
 	move.w  d4,bltsize(a5)	|rectangle size, starts blit
-    
+	
     movem.l (a7)+,d0-d7/a0-a6
     rts
 
@@ -2368,7 +2369,7 @@ random:
 previous_random:
 	.long	0
 	
-	MUL_TABLE	NB_BYTES_PER_ROW,256
+	MUL_TABLE	NB_BYTES_PER_ROW,288
 
 current_sprite_state:
 	ds.b	SPRITE_SAVE_BUFFER_SIZE
@@ -2450,8 +2451,6 @@ previous_previous_ship_scroll:
 	.byte	0
 	
 
-nb_deleted:
-	.word	0	
 current_sprite_palette:
 	.long	0
 current_sprite_frame_table:
