@@ -8,7 +8,6 @@
     * hardware options
     OPT_DISABLE_BG_LAYER=0
     OPT_DISABLE_SPRITES=0
-    OPT_DISABLE_DISPLAY_MASKS=0
    
 	* cheats to test game
     * score is BCD format, only 6 digits

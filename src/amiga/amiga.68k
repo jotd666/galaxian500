@@ -811,7 +811,7 @@ platform_init:
     move.w d0,bpl2mod(a5)
 
 	* allocate sprite zero for player shot
-	* and set all sprites to something valid
+	* and set other sprites to blank
 	move.l		#player_shot_sprite,d0
 	moveq	#7,d1
 	lea		sprites,a1
@@ -820,6 +820,7 @@ platform_init:
 	swap	d0
     move.w	d0,(2,a1)
 	swap	d0
+	move.l		#blank_sprite,d0
 	addq.w	#8,a1
 	dbf		d1,0b
 	
@@ -983,8 +984,11 @@ osd_update_graphics:
 	dbf		d0,0b
 	* update dirty lines
 	bsr		update_rows
+	.else
+	lea		(0x40,a0),a0
    .endif | OPT_DISABLE_BG_LAYER
 	
+	.ifeq OPT_DISABLE_SPRITES
 	* load previous sprite state base
 	* (depending on screen buffer, double buffering)
 	
@@ -1019,6 +1023,8 @@ osd_update_graphics:
 0:
 	move.l	(a0)+,(a5)+		| for sprites (immediate previous, no double buffering)
 	dbf		d0,0b
+	.endif
+	
 	
 	movem.l	(a7)+,d0-d7/a0-a6
 	rts
@@ -1140,6 +1146,7 @@ delete_old_hw_sprites:
 * < a0: sprite structures (4 bytes)
 * < a4: backup previous data (A4 is updated to previous bullets on exit)
 draw_sprites:
+	move.b	#0,0x200
 	movem.l	a2-a3,-(a7)
 	moveq	#0,d6
 	moveq	#0,d5
@@ -2639,6 +2646,9 @@ debug_color:
 	dc.w	0
 	dc.l	-2
 	
+blank_sprite:
+	.long	0,0
+	
 player_shot_sprite:
 	.long	0
 	.long	0x00800000
@@ -2716,8 +2726,8 @@ sprites:
     .word    sprpt+24,0
     .word    sprpt+26,0
     * #7
-    .word    sprpt+28,0
-    .word    sprpt+30,0
+    *.word    sprpt+28,0
+    *.word    sprpt+30,0
 end_color_copper:
    * dynamic colors for fg tile color each 8 lines
 	.set    beampos,0x1C01
