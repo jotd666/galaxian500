@@ -494,11 +494,11 @@ _vblank:
 	
 	tst.b	pause_flag
 	bne.b	23f
-	jbsr		scroll_stars
 	jbsr		galaxian_irq
 	.ifne  OPT_ENABLE_DOUBLE_BUFFERING
 	bsr		switch_screen_buffers
 	.endif
+	jbsr		scroll_stars
 23:
 	* now we check copper interrupt again
 	move.w	_custom+intreqr,d0
@@ -684,7 +684,7 @@ switch_screen_buffers:
 	move.l	a3,(a2)
 	move.l	a1,(a0)
 	move.l	a5,(a4)
-	bra		set_fg_bitplanes
+	jra		set_fg_bitplanes
 	.endif
 	
 store_system:
@@ -785,6 +785,7 @@ platform_init:
 	
 	lea		_custom,a5
 	move.w	#0x7FFF,dmacon(a5)
+	move.w	#0x7FFF,intena(a5)
 	* set blitter parameters once and for all
 	.ifndef	VARIABLE_BLITTER_MASKS_AND_MODS
     move.l  #-1,bltafwm(a5)
@@ -852,6 +853,7 @@ platform_init:
     * init sprite, bitplane, whatever dma
 
     move.w #0x83E0,dmacon(a5)
+    *move.w #0x20,dmacon(a5)
 
 	* install keyboard and vblank/copper handler
 	pea		level2_interrupt(pc)
@@ -989,7 +991,6 @@ osd_update_graphics:
 	move.l		previous_sprite_state_ptr(pc),a4
 
 	bsr		delete_sprites
-	
 	bsr		delete_enemy_bullets
 	
 	* now A0 contains sprite/bullet data
@@ -1728,7 +1729,7 @@ HW_SpriteXTable:
 	.macro DEF_HW_SPRITE_Y_TABLE	height
 HW_SpriteYTable_\height:
   .set	reptn,0
-  .rept NB_LINES
+  .rept 288
 	.set	ys,reptn+0x1c
 	.set	ye,ys+\height
     .byte  ys&255, 0, ye&255, ((ys>>6)&4)+((ye>>7)&2)
@@ -2273,7 +2274,7 @@ show_stars:
 	cmp.w	#240,d0		| empiric
 	bcc.b	4b
 	add.w	#6*8,d0	| add 48 offset because of screen centering
-	move.w	#100,d1	| doesn't matter
+	move.w	#256,d1	| max Y, else glitchy stars
 	bsr		store_sprite_pos_16
 	* store color
 	move.w	(a2,d2.w),(2,a1)		| change offset if copper sprite struct changes
@@ -2284,9 +2285,9 @@ show_stars:
 0:
 
 	* D0 is the sprite pos/control word
-	move.w	d0,(6,a1)		| change offset if struct changes
-	swap	d0
 	move.w	d0,(10,a1)		| change offset if struct changes
+	swap	d0
+	move.w	d0,(6,a1)		| change offset if struct changes
 
 	add.w	#32,a1
 	dbf		d6,3b
@@ -2656,14 +2657,14 @@ player_shot_sprite:
 	.macro STAR_COPPER_ROW
     * we use sprite #7 (last) for the stars, multiplexing it
 	.word	STAR_SPRITE_COLOR_REG,0xF00	   | 4
-    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_ctl,0   | 8
-    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_pos,0   | 12
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_pos,0   | 8
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_ctl,0   | 12
 	* sprite pattern
-    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_dataa,0x8000	| 16
-    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_dataB,0x0000	| 20
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_dataB,0x0000	| 16
+    .word    spr+sd_SIZEOF*STAR_SPRITE_INDEX+sd_dataa,0x8000	| 20
 	.word	beampos,0xFFFE              | 24
-    .word    spr+sd_SIZEOF*7+sd_dataa,0	| 28
-    .word    spr+sd_SIZEOF*7+sd_dataB,0	| 32	
+    .word    spr+sd_SIZEOF*7+sd_dataB,0	| 28
+    .word    spr+sd_SIZEOF*7+sd_dataa,0	| 32	
 	
 	.endm
 	.macro FAKE_STAR_COPPER_ROW
@@ -2682,6 +2683,8 @@ player_shot_sprite:
 	
 	* main copperlist
 copperlist:
+    .word   0x1801,0xFFFE	
+
 fg_bitplanes:
 	DECL_3_BITPLANES	4
 bg_bitplanes:
@@ -2773,7 +2776,7 @@ color_row_30_plus:
  	.word	beampos+0x400,0xFFFE   | wait before interrupt, avoid losing last bobs lines
     .word	 intreq,0x8010
     .long    -2					
-	
+	.ascii	"ENDCPLST"
 
 	* aligning on 8 bytes so .align will work
 	* in the next datachip sections

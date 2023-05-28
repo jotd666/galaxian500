@@ -7,13 +7,16 @@ transcode:
 
 amiga:
 
-- bobs corruption without whdload (double buffering issue?)
+- bobs corruption (double buffering issue, ok without it)
+  can't drop double buffering on slow configs. Only ok on whdload/chip
+  fails on all other configs, whdload chip/fast big system...
+- whdload+fastmem: crashing whdload, no splash screen (winuae issue??)
 - support dip switches from CLI but should be 1.3 compliant eeek
 - joypad controls: play for pause / P pause
 - flagship score doesn't show after a while
 - stars as sprites:
   * blink/change from time to time
-  * scrolling: working but with glitches
+  * scrolling: working but with glitches only when game playing!!!
  
 To rip the sounds:
 

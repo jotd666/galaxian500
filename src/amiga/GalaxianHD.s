@@ -8,7 +8,7 @@ CHIPMEMSIZE = $200000
 EXPMEMSIZE = 0
 	ELSE
 CHIPMEMSIZE = $80000
-EXPMEMSIZE = $40000
+EXPMEMSIZE = $80000
 	ENDC
 	
 _base	SLAVE_HEADER					; ws_security + ws_id
@@ -111,7 +111,6 @@ start:
     move.w  #$1200,bplcon0(a1)
     move.w  #$0024,bplcon2(a1)
     
-
     rts
 	
 _Relocate	movem.l	d0-d1/a0-a2,-(sp)
