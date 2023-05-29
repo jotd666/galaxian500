@@ -38,8 +38,20 @@ OPT_ENABLE_LOGGING = 0
 ONE_TICK = 1
 	* check most used options in release mode
 	* to avoid creating a version with cheats on!
-	.ifne	OPT_INVINCIBLE
-	.error	"cheat option in release mode"
+	.ifne	OPT_DISABLE_BG_LAYER
+	.error	"debug option OPT_DISABLE_BG_LAYER in release mode"
+	.endif
+	.ifne	OPT_DISABLE_SPRITES
+	.error	"debug option OPT_DISABLE_SPRITES in release mode"
+	.endif
+	.ifne	OPT_ALIENS_DONT_SHOOT
+	.error	"cheat option OPT_ALIENS_DONT_SHOOT in release mode"
+	.endif
+	.ifne	OPT_SMALL_SWARM
+	.error	"cheat option OPT_SMALL_SWARM in release mode"
+	.endif
+	.ifne	OPT_START_LEVEL-1
+	.error	"cheat option OPT_START_LEVEL in release mode"
 	.endif
 	.ifne	OPT_START_SCORE
 	.error	"nonzero score option in release mode"
@@ -59,7 +71,10 @@ ONE_TICK = 1
 	
 * double-buffering is really needed here, else blits fail
 * to race the beam and flicker is very frequent
-OPT_ENABLE_DOUBLE_BUFFERING = 1
+* but we can save memory: setting both FG and BG layers mean
+* that the chipmem requirements are upped to 1MB...
+OPT_ENABLE_DOUBLE_BUFFERING_BG = 0
+OPT_ENABLE_DOUBLE_BUFFERING_FG = 1
 
 _custom = 0xDFF000
 
@@ -488,7 +503,7 @@ _vblank:
 	bne.b	23f
 	jbsr		scroll_stars
 	jbsr		galaxian_irq
-	.ifne  OPT_ENABLE_DOUBLE_BUFFERING
+	.ifne  OPT_ENABLE_DOUBLE_BUFFERING_FG+OPT_ENABLE_DOUBLE_BUFFERING_BG
 	bsr		switch_screen_buffers
 	.endif
 23:
@@ -638,8 +653,9 @@ play_music:
 	
 	
 
-	.ifne	OPT_ENABLE_DOUBLE_BUFFERING
+	.ifne	OPT_ENABLE_DOUBLE_BUFFERING_FG+OPT_ENABLE_DOUBLE_BUFFERING_BG
 switch_screen_buffers:	
+	.ifne	OPT_ENABLE_DOUBLE_BUFFERING_BG
 	* let's switch screen buffers, background (chars)
 	* toggle fg planes (double buffering)
 	lea		bg_drawed_screen_ptr(pc),a0
@@ -656,7 +672,9 @@ switch_screen_buffers:
 	move.l	a1,(a0)
 	move.l	a5,(a4)
 	jbsr		set_bg_bitplanes
+	.endif
 	
+	.ifne	OPT_ENABLE_DOUBLE_BUFFERING_FG
 	* let's switch screen buffers, foreground (sprites)
 	* toggle fg planes (double buffering)
 	lea		fg_drawed_screen_ptr(pc),a0
@@ -677,6 +695,8 @@ switch_screen_buffers:
 	move.l	a1,(a0)
 	move.l	a5,(a4)
 	jra		set_fg_bitplanes
+	.endif
+	rts
 	.endif
 	
 store_system:
@@ -2363,7 +2383,7 @@ previous_sprite_state_ptr:
 	dc.l	previous_sprite_state_1
 previous_sprite_state_1:
 	ds.b	SPRITE_SAVE_BUFFER_SIZE
-	.ifne	OPT_ENABLE_DOUBLE_BUFFERING
+	.ifne	OPT_ENABLE_DOUBLE_BUFFERING_FG
 previous_sprite_state_2:
 	ds.b	SPRITE_SAVE_BUFFER_SIZE
 	.endif
@@ -2519,13 +2539,13 @@ bg_drawed_screen_ptr:
 fg_drawed_screen_ptr:
 	.long	fg_screen_data_1
 bg_displayed_screen_ptr:
-	.ifne	OPT_ENABLE_DOUBLE_BUFFERING
+	.ifne	OPT_ENABLE_DOUBLE_BUFFERING_BG
 	.long	bg_screen_data_2
 	.else
 	.long	bg_screen_data_1
 	.endif
 fg_displayed_screen_ptr:
-	.ifne	OPT_ENABLE_DOUBLE_BUFFERING
+	.ifne	OPT_ENABLE_DOUBLE_BUFFERING_FG
 	.long	fg_screen_data_2
 	.else
 	.long	fg_screen_data_1
@@ -2590,16 +2610,18 @@ bg_screen_backbuffer:
 bg_screen_data_1:
 	ds.b	BG_SCREEN_SIZE
 	ds.b	NB_BYTES_PER_ROW*12*3
+	.ifne  OPT_ENABLE_DOUBLE_BUFFERING_BG
 bg_screen_data_2:
 	ds.b	BG_SCREEN_SIZE
 	ds.b	NB_BYTES_PER_ROW*12*3
+	.endif
 fg_screen_data_1:
 	ds.b	FG_SCREEN_SIZE
 	
 	* small margin (I suspect that gas is buggy with ds directive)
 	* plus fg plane shifting can write one byte too far
 	ds.b	100
-	.ifne  OPT_ENABLE_DOUBLE_BUFFERING
+	.ifne  OPT_ENABLE_DOUBLE_BUFFERING_FG
 
 fg_screen_data_2:
 	ds.b	FG_SCREEN_SIZE

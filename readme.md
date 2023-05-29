@@ -7,11 +7,14 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 
 #### TRANSCODE
 
--
+- missing swarm sound
+- random issues "B" character displayed on screen (rare)
+- getting 4 lives (rare)
 
 #### AMIGA
 
--
+- fully playable with sound
+- possible graphical glitches (stars)
 
 #### NEO GEO
 
@@ -23,7 +26,7 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 
 #### CREDITS:
 
-- Jean-Francois Fabre (aka jotd): Amiga code and assets
+- Jean-Francois Fabre (aka jotd): Z80 to 68k transcode, Amiga code and assets
 - Mark McDougall (aka tcdev): Neo Geo code and assets (conversion)
 - Scott Tunstall: Galaxian Z80 reverse engineering
 - phx: ptplayer sound/music replay Amiga code
@@ -32,10 +35,9 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 
 #### CONTROLS (Amiga: 2-button joystick required):
 
-- red/fire: fire/start game (from menu)
-- blue/2nd button: insert coin (from menu)
-- green/5 key: insert coin
-- yellow/1 key: start game
+- fire/5 key: insert coin (from menu)
+- up/1 key: start game
+- down/1 key: start 2P game
 - play/P key: pause
 
 ## REBUILDING FROM SOURCES:

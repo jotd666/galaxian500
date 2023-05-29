@@ -1,8 +1,7 @@
 .key nope
 set game galaxian
-; doesn't work on that exe, using cranker... 
 ;propack p a $game
-copy $game DF0:$game
+copy $game.RNC DF0:$game
 protect DF0:$game RWED
 copy readme.md instructions.txt df0:
 
