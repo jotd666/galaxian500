@@ -5346,7 +5346,6 @@ DISPLAY_LEVEL_FLAGS:
 0:
       move.b	PLAYER_LEVEL,d0           | read PLAYER_LEVEL
       addq.b	#1,d0                   | increment it.
-	  add.b	#32,d0
       cmp.b	#0x30,d0                 | Compare to #0x30 (48 decimal)
       bcs.b	     1f        | if A < 48, goto 0x2536
       move.b	#0x30,d0               | Level 48 is the limit.

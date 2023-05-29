@@ -30,6 +30,7 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 - Mark McDougall (aka tcdev): Neo Geo code and assets (conversion)
 - Scott Tunstall: Galaxian Z80 reverse engineering
 - phx: ptplayer sound/music replay Amiga code
+- mrv2k: Amiga icons
 - blastar: NGFX SoundBuilder (Neo Geo sound tool)
 - Namco: original game :)
 
