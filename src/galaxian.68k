@@ -265,7 +265,10 @@ Colour                = 0x16           |
 SortieCount           = 0x17           | Number of times the alien has reached the bottom of the screen then resumed attack on the player. Reset to 0 when rejoins swarm. See $0E9D.
 Speed                 = 0x18           | Value from 0..3. The higher the number the faster the alien moves. See $116B. 
 PivotYValueAdd        = 0x19           | Signed number which is added to INFLIGHT_ALIEN.PivotYValue to produce INFLIGHT_ALIEN.Y. See $0DF6
-
+AlienYDelta               = 0x1A
+* offsets 1B,1C are also initialized but not used
+* offsets 1D,1E,1F aren't used, we'll use one for a sound timer
+AttackSoundTimer      = 0x1F
 inflight_alien_size   = 0x20
 
 * struct ENEMY_BULLET
@@ -1953,6 +1956,9 @@ INFLIGHT_ALIEN_PACKS_BAGS:
 	move.b	(a0),d0                         	| [ld   a,(hl)]
 	move.b	d0,(Speed,a2)                    	| set INFLIGHT_ALIEN.Speed [ld   (ix+0x18),a]
 
+	* empiric value that connects from attack sample to looped sample
+	* seems to work pretty well
+	move.b	#230,(AttackSoundTimer,a2)				| attack sound timer (added to be able to use samples)
 	                         	| [ld   a,e]
 	cmp.b	#0x0E,d3                         	| flagship? [cp   0x0E]
 	jeq	l_0d58                             	| yes, goto 0x0D58 [jr   z,0x0D58]
@@ -2292,7 +2298,8 @@ l_0df6:
 	neg.b	d0                               	| [neg]
 	move.b	d0,(PivotYValue,a2)                    	| set INFLIGHT_ALIEN.PivotYValue. Now PivotYValue + PivotYValueAdd = INFLIGHT_ALIEN.Y [ld   (ix+0x09),a]
 	clr.b	d0                               	| [xor  a]
-	move.b	d0,(0x1a,a2)                    	| [ld   (ix+0x1a),a]
+	move.b	d0,(AlienYDelta,a2)                    	| [ld   (ix+0x1a),a]
+	* those are probably not used
 	move.b	d0,(0x1b,a2)                    	| [ld   (ix+0x1b),a] ???? unknown stuff, but probably useful!!
 	move.b	d0,(0x1c,a2)                    	| [ld   (ix+0x1c),a]
 
@@ -2472,7 +2479,6 @@ l_0ead:
 * alien reappears at top of screen and will keep attacking - it will not return to swarm.
 * add some unpredictability to where it reappears, so that player can't wait for it and shoot it easily
 l_0ebf:
-	jbsr	osd_play_alien_attack_loop
 	move.b	(inf_alien_Y,a2),d0                    	| read INFLIGHT_ALIEN.Y [ld   a,(ix+0x04)]
 	lsr.b	#1,d0                           	| divide by 2 (don't worry about carry, it was cleared by AND above) [rra]
 	move.b	d0,d2                           	| preserve in C [ld   c,a]
@@ -2923,6 +2929,17 @@ SET_INFLIGHT_ALIEN_START_POSITION:
 *
 
 UPDATE_INFLIGHT_ALIEN_YADD:
+	* this routine is called when alien is moving, we'll use it
+	* to update a timer for sound
+	move.b	(AttackSoundTimer,a2),d0
+	beq.b	0f
+	subq.b	#1,d0
+	move.b	d0,(AttackSoundTimer,a2)
+	bne.b	0f
+	* just reached zero: change attack sound to looped sound
+	jbsr	osd_play_alien_attack_loop
+0:
+	
 	move.b	(Speed,a2),d0                    	| read INFLIGHT_ALIEN.Speed [ld   a,(ix+0x18)]
 	and.b	#0x03,d0                         	| [and  0x03]
 	addq.b	#1,d0                           	| now A is between 1 and 4. [inc  a]
@@ -4257,7 +4274,7 @@ HANDLE_SIMULATE_PLAYER_IN_ATTRACT_MODE:
 l_19ac:
 	move.b	(inf_alien_X,a2),d5         | H = INFLIGHT_ALIEN.X [ld   h,(ix+0x03)]
 	move.b	(inf_alien_Y,a2),d6         | L = INFLIGHT_ALIEN.Y [ld   l,(ix+0x04)]
-	move.b	(0x1a,a2),d2   	                	| INFLIGHT_ALIEN.Y_DELTA [ld   c,(ix+0x1a)]
+	move.b	(AlienYDelta,a2),d2   	                	| INFLIGHT_ALIEN.Y_DELTA [ld   c,(ix+0x1a)]
 	jbsr	l_1a12                            	| [call 0x1A12]
 	add.w	#inflight_alien_size,a2        	| bump IX to next INFLIGHT_ALIEN
 	subq.b	#1,d3                           	| [...]

@@ -113,11 +113,11 @@ ACTIVE_SPRITE_STRUCT_BITS = 6    | 1<<6 = 64: can hold a slb struct
 .endm
 
 .macro	WAIT_BLIT
-	move.w	#0x8400,(dmacon,a5)
+	move.w	#0x8400,(dmacon,a5)		| blitter high priority
 wait\@:
 	BTST	#6,(dmaconr,a5)
 	BNE.S	wait\@
-	move.w	#0x0400,(dmacon,a5)
+	move.w	#0x0400,(dmacon,a5)		| blitter normal priority
 .endm
 
 .macro MUL_TABLE value,len
@@ -2367,8 +2367,6 @@ random:
     rol.l #6,d0
     move.l  d0,previous_random
     rts
-previous_random:
-	.long	0
 	
 	MUL_TABLE	NB_BYTES_PER_ROW,288
 
@@ -2395,6 +2393,10 @@ read_args_string:
 	.ascii	"INVINCIBLE/S,INFLIVES/S"
 	.byte	0
 	.align	2
+
+previous_random:
+	.long	0
+
 * 8 slots (indexed with the target sprite index, not
 * the amiga sprite index) with
 * - 4 bytes for the sprite actual address

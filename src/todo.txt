@@ -1,10 +1,7 @@
 transcode:
 - check how swarm sound loop and how is it turned off/on (volume?)
 - getting the odd 'B' tile and the odd flagship 'tile' appearing
-- attack sound end (looped) not correct, should play only when alien is not returning to swarm
 - OPT_START_LEVEL doesn't work
-- compute len of sound and use an unused field of inflight alien to
- play the looped sound if still alive when timer expires
 
 amiga:
 
@@ -13,8 +10,6 @@ amiga:
   * bobs corruption (double buffering issue, ok without it)
    can't drop double buffering on slow configs. Only ok on whdload/chip
    fails on all other configs, whdload chip/fast big system...
-  * game crashes when aliens attack / convoy if blit or erase blits
-  are enabled!!!!
   * horiz line (bplcon0 issue??)
 - whdload+fastmem: crashing whdload, no splash screen (winuae issue??)
 - support dip switches from CLI but should be 1.3 compliant eeek
