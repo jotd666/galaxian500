@@ -501,6 +501,12 @@ _vblank:
 	
 	tst.b	pause_flag
 	bne.b	23f
+	* decrease intro sound lock until zero
+	move.w	intro_sound_lock,d0
+	beq.b	222f
+	subq.w	#1,d0
+	move.w	d0,intro_sound_lock
+222:
 	jbsr		scroll_stars
 	jbsr		galaxian_irq
 	.ifne  OPT_ENABLE_DOUBLE_BUFFERING_FG+OPT_ENABLE_DOUBLE_BUFFERING_BG
@@ -551,17 +557,39 @@ osd_calibrate_display:
 	movem.l	(a7)+,a0/d0-d1
 	rts
 	
+* < D0.B 0->0xF frequency. 0xF makes the loop play to the max len
 osd_play_swarm_loop:
+	tst.w	intro_sound_lock
+	bne.b	0f
+	movem.l	d0/d1/a0/a6,-(a7)
+	cmp.b	alien_swarm_loop_frequency,d0
+	beq.b	1f			| same freq, don't play
+
+	move.b	d0,alien_swarm_loop_frequency
+	and.w	#0xFF,d0
+	add.w	d0,d0
+	lea		swarm_sound_offsets(pc),a0
+	move.w	(a0,d0.w),d0		| sound offset for current freq
+	lea		swarm_sound_table(pc),a0
+	add.w	d0,a0
+
+	lea		_custom,a6
+	jsr		_mt_loopfx
+	st.b	alien_swarm_loop_playing
+1:
+	movem.l	(a7)+,d0/d1/a0/a6
+0:
 	rts
 	
 osd_stop_swarm_loop:
 	movem.l	d0/d1/a0/a6,-(a7)
-	tst.b	alien_attack_loop_playing
+	tst.b	alien_swarm_loop_playing
 	beq.b	1f
 	move.l	#0,d0		| channel
 	lea		_custom,a6
 	jsr		_mt_stopfx
 	clr.b	alien_swarm_loop_playing
+	move.b	#-1,alien_swarm_loop_frequency
 1:
 	movem.l	(a7)+,d0/d1/a0/a6
 	rts
@@ -599,6 +627,12 @@ osd_play_alien_attack_loop:
 osd_sound_start:
 	movem.l	d0/d1/a0/a6,-(a7)
 
+	cmp.w	#INTRO_SND,d0
+	bne.b	0f
+	* intro sound played: arm decrease counter: we can't start
+	* swarm sound immediately
+	move.w	#30,intro_sound_lock
+0:
 	lea		_custom,a6
 	lsl.w	#3,d0
 	lea		sound_table,a0
@@ -642,6 +676,8 @@ osd_sound_stop:
 	lea		_custom,a6
     clr.w   music_tick   | not playing anymore
 	clr.b	music_playing
+	move.b	#-1,alien_swarm_loop_frequency
+	clr.b	alien_swarm_loop_playing
     jsr		_mt_end
 0:
 	movem.l	(a7)+,d0/a6
@@ -2401,6 +2437,8 @@ read_args_string:
 	.byte	0
 	.align	2
 
+intro_sound_lock:
+	.word	0
 previous_random:
 	.long	0
 
@@ -2419,7 +2457,8 @@ alien_attack_loop_playing:
 	.word	0
 alien_swarm_loop_playing:
 	.word	0
-	
+alien_swarm_loop_frequency:
+	.word	0
 old_intena:
 	.long	0
 old_dmacon:
@@ -2553,6 +2592,32 @@ fg_displayed_screen_ptr:
 
 
 	.include	"sound_entries.68k"
+* extra sound entries for swarm at different loop periods
+swarm_1_len = 10273
+swarm_1_freq = 22050
+swarm_1_volume = 16
+
+    .macro    SWARM_ENTRY    size
+    .long    swarm_1_raw
+    .word   \size
+    .word   FXFREQBASE/swarm_1_freq,swarm_1_volume
+    .byte    0
+    .byte    1
+    .endm
+
+swarm_sound_table:
+	.set	idx,1
+	.rept	16
+    SWARM_ENTRY (swarm_1_len*idx)/16
+	.set	idx,idx+1
+	.endr
+
+swarm_sound_offsets:
+	.set	idx,0
+	.rept	16
+	.word	idx*12	| 12 is size of sound entry
+	.set	idx,idx+1
+	.endr
 	
 dosname:
 	.ascii	"dos.library"

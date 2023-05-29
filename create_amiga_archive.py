@@ -1,7 +1,7 @@
 import subprocess,zipfile,os
 
-# JOTD path for cranker :)
-# os.environ["PATH"] += os.pathsep+r"K:\progs\cli"
+# JOTD path for cranker, adapt to wh :)
+os.environ["PATH"] += os.pathsep+r"K:\progs\cli"
 
 cmd_prefix = ["make","-f","../makefile.am"]
 

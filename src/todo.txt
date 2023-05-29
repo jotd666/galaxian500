@@ -1,5 +1,4 @@
 transcode:
-- check how swarm sound loop and how is it turned off/on (volume?)
 - getting the odd 'B' tile and the odd flagship 'tile' appearing
 - OPT_START_LEVEL doesn't work (to test the 10 flag)
 - improve attack looped sound quality
@@ -12,7 +11,8 @@ amiga:
 - stars as sprites:
   * blink/change from time to time
 - readargs to set options
- 
+- add left/right/shift keys to play keyboard
+
 To rip the sounds:
 
 - enter service mode (F2)

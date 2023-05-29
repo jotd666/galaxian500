@@ -33,7 +33,7 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 - blastar: NGFX SoundBuilder (Neo Geo sound tool)
 - Namco: original game :)
 
-#### CONTROLS (Amiga: 2-button joystick required):
+#### CONTROLS (Amiga: joystick required):
 
 - fire/5 key: insert coin (from menu)
 - up/1 key: start game

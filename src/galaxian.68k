@@ -616,13 +616,23 @@ l_1886:
 * The longer the level takes to complete, the faster and angrier the swarm is.
 *
 *
+* JOTD: I have NO IDEA of why the swarm sound plays or not. I've spent a lot of time in MAME debugger
+* and in the source to no avail... This is always called, but swarm sound ends up playing only if
+* 1) IS_GAME_OVER is not set and 2) HAVE_NO_ALIENS_IN_SWARM is not set
 
 HANDLE_SWARM_SOUND:
-	move.b	RESET_SWARM_SOUND_TEMPO,d0                       	| read RESET_SWARM_SOUND_TEMPO flag [ld   a,(0x41D0)]
-	tst.b	d0                               	| test if zero [and  a]
+	* first test if not game over or aliens in swarm and stop sound immediately if so
+	* (too bad I can't figure out what's the original code behind this)
+	tst.b	IS_GAME_OVER
+	bne.b	1f
+	tst.b	HAVE_NO_ALIENS_IN_SWARM
+	beq.b	2f
+1:
+	jbsr	osd_stop_swarm_loop
+2:
+	tst.b	RESET_SWARM_SOUND_TEMPO  	| test RESET_SWARM_SOUND_TEMPO flag [ld   a,(0x41D0)]
 	jeq	l_18a6                             	| if zero, goto 0x18A6 [jr   z,0x18A6]
-	clr.b	d0                               	| clear A [xor  a]
-	move.b	d0,RESET_SWARM_SOUND_TEMPO                       	| reset RESET_SWARM_SOUND_TEMPO flag [ld   (0x41D0),a]
+	clr.b	RESET_SWARM_SOUND_TEMPO                       	| reset RESET_SWARM_SOUND_TEMPO flag [ld   (0x41D0),a]
 	move.b	#0x0F,d0                        	| Maximum (slowest) Tempo setting [ld   a,0x0F]
 	jra	l_18b2                             	| [jr   0x18B2]
 
@@ -640,6 +650,11 @@ l_18a6:
 	subq.b	#1,d0                           	| otherwise reduce by 1 [dec  a]
 l_18b2:
 	move.b	d0,LFO_FREQ_BITS                       	| and update LFO_FREQ_BITS [ld   (0x421F),a]
+	* now call our sound API
+	* real game & aliens in swarm: play sound with freq indicated in D0.B (0->0xF)
+	jra	osd_play_swarm_loop
+
+* original code hitting the sound hardware, not used anymore
 *	move.b	#0x04,d1                        	| We're writing to 4 ports [ld   b,0x04]
 *	lea	l_6004(pc),a0                      	| !DRIVER Background lfo freq bit0 [ld   hl,0x6004]
 *l_18ba:
@@ -5329,8 +5344,9 @@ DISPLAY_LEVEL_FLAGS:
       beq.b	0f             | if flag is not set, goto 0x252C
       move.b  #1,RESET_SWARM_SOUND_TEMPO     | set  flag to 1. The swarm tempo will be slow again. 
 0:
-      move.b	PLAYER_LEVEL,d0           | read .
+      move.b	PLAYER_LEVEL,d0           | read PLAYER_LEVEL
       addq.b	#1,d0                   | increment it.
+	  add.b	#32,d0
       cmp.b	#0x30,d0                 | Compare to #0x30 (48 decimal)
       bcs.b	     1f        | if A < 48, goto 0x2536
       move.b	#0x30,d0               | Level 48 is the limit.
