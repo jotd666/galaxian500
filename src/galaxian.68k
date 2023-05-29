@@ -1958,7 +1958,7 @@ INFLIGHT_ALIEN_PACKS_BAGS:
 
 	* empiric value that connects from attack sample to looped sample
 	* seems to work pretty well
-	move.b	#230,(AttackSoundTimer,a2)				| attack sound timer (added to be able to use samples)
+	move.b	#225,(AttackSoundTimer,a2)				| attack sound timer (added to be able to use samples)
 	                         	| [ld   a,e]
 	cmp.b	#0x0E,d3                         	| flagship? [cp   0x0E]
 	jeq	l_0d58                             	| yes, goto 0x0D58 [jr   z,0x0D58]

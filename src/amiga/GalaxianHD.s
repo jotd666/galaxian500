@@ -36,6 +36,7 @@ _expmem
 _config
 	dc.b    "C1:X:invincibility:0;"    
 	dc.b    "C1:X:infinite lives:1;"    
+	dc.b    "C3:B:slow machine;"    
 	dc.b    "C4:L:DSW - bonus galaxip:7000,10000,12000,20000;"
 	dc.b    "C5:X:DSW - 2 lives only:0;"
 	dc.b    "C5:X:DSW - free play:1;"    
@@ -95,7 +96,6 @@ start:
 	add.l	#EXPMEMSIZE,D0
 	move.l	d0,a7
 
-
 	
 	lea	exe(pc),a0
 	move.l  progstart(pc),a1
@@ -108,8 +108,8 @@ start:
 	move.l  progstart(pc),-(a7)
     
     lea  _custom,a1
-    move.w  #$1200,bplcon0(a1)
-    move.w  #$0024,bplcon2(a1)
+    *move.w  #$1200,bplcon0(a1)
+    *move.w  #$0024,bplcon2(a1)
     
     rts
 	
