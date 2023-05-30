@@ -1,12 +1,13 @@
 *
-* Neo Geo-specific portions of Xevious
+* Neo Geo-specific portions of Galaxian
 *
 
 * Neo Geo hardware definitions
 .include "regdefs.68k"
 .include "galaxian.inc"
 
-    OPT_DISABLE_FG_LAYER=1
+    OPT_DISABLE_STARS=0
+    OPT_DISABLE_DISPLAY_MASKS=1
     OPT_SKIP_SPLASH=0
 
 * exports
@@ -33,6 +34,10 @@
     .global osd_read_coin
     .global osd_sound_start
     .global osd_sound_stop
+    .global osd_play_swarm_loop
+    .global osd_stop_swarm_loop
+    .global osd_play_alien_attack_loop
+    .global osd_stop_alien_attack_loop
     .global osd_sound_mute
     .global osd_sound_unmute
     .global osd_read_high_scores
@@ -46,6 +51,7 @@
 * debugging only
     .global osd_debug1
     .global osd_debug2
+    .global platform_init
     .global _tile_colour
     .global _tile_scroll
     .global _end_of_ng_code
@@ -155,7 +161,7 @@ demo_game:
     move    #0x2700,sr            | disable interrupts
     lea     0x10F300,sp
     move.b  #2,BIOS_USER_MODE     | tell BIOS we're running the game
-    bsr.b   platform_init         | neo geo-specific init
+    jsr     platform_init         | neo geo-specific init
     jmp     galaxian_reset        | pass control to the galaxian core
 
 title_display:
@@ -182,6 +188,7 @@ _vblank:
 .gamemode:
     movem.l d0-d7/a0-a6,-(a7)
     KICK_WDOG
+    bsr     scroll_stars
     jsr     galaxian_irq
     jsr     BIOSF_SYSTEM_IO
 .nothing:
@@ -206,24 +213,31 @@ osd_kick_wdog:
     
 * NEO GEO sprite allocations
 * -   0- 31 (unused)
-* -  32- 63 (32) foreground tilemap
-* -  64- 71 (8) Galaxian sprites
-* -  72- 79 (8) Bullets/missiles
+* -  32- 63 *32) star field
+* -  64- 95 (32) foreground tilemap
+* -  96-103 (8) Galaxian sprites
+* - 104-111 (8) Bullets/missiles
+* - 128-131 (4) visible display masking sprites
 
-    .equ    FGSS,                   32
-    .equ    GSSS,                   64
-    .equ    GBSS,                   72
+    .equ    SFSS,                   32
+    .equ    FGSS,                   64
+    .equ    GSSS,                   96
+    .equ    GBSS,                   104
+    .equ    DMSS,                   128
                                      
+    .equ    SFNS,                   32
     .equ    FGNS,                   32
     .equ    GSNS,                   8
     .equ    GBNS,                   8
+    .equ    DMNS,                   4
 
     .equ    BG_TILE_BASE,           0x0200
     .equ    GS_TILE_BASE,           0x0400
     .equ    GB_TILE_BASE,           0x0600
+    .equ    SF_TILE_BASE,           0x0800
     
     .equ    GB_TILE_CODE,           GB_TILE_BASE+0xf0
-    
+
 platform_init:
 
     KICK_WDOG
@@ -240,10 +254,19 @@ platform_init:
     lea       PALETTES,a1                       | start at palette #0
     move.w    #10-1,d7                          | 10 palettes
 1:  moveq     #16-1,d6                          | 16 colours/palette
-    KICK_WDOG
 2:  move.w    (a0)+,(a1)+
     dbf       d6,2b
     dbf       d7,1b
+    KICK_WDOG
+osd_debug1:
+    lea       _stars_palette.l,a0
+    lea       PALETTES+2*16*32,a1               | start at palette #32
+    move.w    #32-1,d7                          | 32 palettes
+3:  moveq     #16-1,d6                          | 16 colours/palette
+4:  move.w    (a0)+,(a1)+
+    dbf       d6,4b
+    dbf       d7,3b
+    KICK_WDOG
     move.w    #0x0000,(BACKDROPCOLOR)
     
 * setup tilemaps and sprites
@@ -268,6 +291,8 @@ platform_init:
     move.w    #448-1,d7                         | 448 sprites
 2:  move.w    #0x0000,(a0)                      | clear size
     dbf       d7,2b   
+
+    KICK_WDOG
 
 .ifeq OPT_DISABLE_BG_LAYER
 
@@ -312,6 +337,77 @@ platform_init:
     add.w     #64,d1                            | next VRAM addr
     dbf       d7,6b
 
+.ifeq OPT_DISABLE_STARS
+  * star field
+    move.w    #SCB1+SFSS*64,d2
+    move.w    #(32<<8),d1                        | base palette entry=32
+    move.w    #SF_TILE_BASE,d0                  | 1st starfield tile
+    moveq     #SFNS-1,d7
+1:  move.w    d2,(-2,a0)                        | VRAM_ADDR
+    moveq     #2-1,d6                           | 2 palettes/sprite
+2:  moveq     #8-1,d5                           | 8 tiles/palette
+3:  move.w    d0,(a0)                           | tile code
+    move.w    d1,(a0)                           | palette
+    addq.w    #1,d0                             | next tile
+    *andi.w    #0x08ff,d0                        | 0-255
+    dbf       d5,3b                             | do 8 tiles
+    addi.w    #0x0100,d1                        | next palette
+    andi.w    #0x3f00,d1                        | 0-63
+    ori.w     #0x2000,d1                        | 32-63
+    dbf       d6,2b
+    add.w     #64,d2                            | next sprite
+    dbf       d7,1b
+
+    move.w    #SCB3+SFSS,(-2,a0)                | VRAM_ADDR=SCB3  
+    move.w    #((SPRITEY_0+6)<<7)+0x0021,d0     | size=33 (wrap)
+    moveq     #SFNS-1,d7
+4:  move.w    d0,(a0)                           | Y,sticky,size
+    ori.w     #SCB3_STICKY,d0
+    dbf       d7,4b
+
+    move.w    #SCB4+SFSS,(-2,a0)                | VRAM_ADDR=SCB4
+    move.w    #(SPRITEX_0<<7),d0
+    move.w    d0,(a0)                           | X
+    
+.endif
+
+.ifeq OPT_DISABLE_DISPLAY_MASKS
+
+* display masking sprites
+
+* - tiles and palettes
+    move.w    #(SCB1+DMSS)*64,-2(a0)            | VRAM_ADDR=SCB1
+    moveq     #DMNS-1,d6                        | 2 sprites
+1:  moveq     #32-1,d7
+    move.w    #BG_TILE_BASE,d0                  | tile code from BG
+2:  move.w    d0,(a0)                           | TILE
+    addq.w    #1,d0                             | this is for debugging
+* change the palette for debugging these sprites
+    move.w    #(1<<8),(a0)                      | PALETTE (black on black)
+    dbf       d7,2b
+    dbf       d6,1b
+
+*   - vertical position, sticky, size           
+    move.w    #(SCB3+DMSS),-2(a0)               | VRAM_ADDR=SCB3
+    moveq     #2-1,d7                           | top,bottom
+3:  moveq     #DMNS/2-1,d6                      | #sprites
+    move.w    #SPRITEY_0<<7,d0                  | YPOS=0
+    ori.w     #33,d0                            | SIZE
+4:  move.w    d0,(a0)                           | SCB3 data
+    ori.w     #SCB3_STICKY,d0
+    dbf       d6,4b
+    dbf       d7,3b
+
+*   - horizontal position
+    move.w    #(SCB4+DMSS),-2(a0)               | VRAM_ADDR=SCB4
+    move.w    #SPRITEX_0<<7,d0                  | X POSITION (bottom)
+    move.w    d0,(a0)
+    move.w    #(SCB4+DMSS+DMNS/2),-2(a0)        | VRAM_ADDR=SCB4
+    move.w    #(SPRITEX_0+17*16)<<7,d0          | X POSITION (top)
+    move.w    d0,(a0)
+
+.endif | OPT_DISABLE_DISPLAY_MASKS
+
     * read cabinet H/V setting
     lea       BIOS_GAME_DIP,a0
     move.b    (10,a0),d0                         | cabinet (H/V)
@@ -319,6 +415,8 @@ platform_init:
 
     * fix for galaxian coin input debounce
     move.b    #0,(_coin_pulse_cnt)
+    
+    move.w    #0,(_star_scroll)
     
     * generate lookup table for fg offset
     lea       fg_offset_lookup_tbl,a0
@@ -403,7 +501,7 @@ platform_init:
 splash:
     *         "  [--------------------------]  "
     .ascii    "                                "
-    .ascii    "           GALAXIAN    Alpha1   "
+    .ascii    "           GALAXIAN     Beta1   "
     .ascii    "                                "
     .ascii    "            NGH 422             "
     .ascii    "                                "
@@ -466,7 +564,7 @@ osd_disable_vblank_interrupt:
     rts
     
 * d6=screen address (preserved), d0=tile (preserved)
-* d6 starts at 0x5000 ends at 0x57FF
+* d6 starts at 0x5000 ends at 0x53FF, mirrored at 0x5400
 * should preserve all registers
 
 osd_w_bg_videoram:
@@ -478,17 +576,15 @@ osd_w_bg_videoram:
     lea       fg_offset_lookup_tbl,a0
     add.w     d6,d6
     move.w    (a0,d6.w),a1                      | map video offset
+    * calculate Neo Geo tile
+    andi.w    #0x00ff,d0
+    ori.w     #BG_TILE_BASE,d0
     move      sr,d4                             | save interrupt mask
     move      #0x2400,sr                        | disable vblank
     lea       VRAM_RW.l,a0
     move.w    #1,(2,a0)                         | VRAM_MOD=1
     move.w    a1,(-2,a0)                        | VRAM_ADDR=SCB1
-    * calculate tile
-    andi.w    #0x00ff,d0
-1:  ori.w     #BG_TILE_BASE,d0
     move.w    d0,(a0)
-2:  *move.w    #0x0100,d1
-    *move.w    d1,(a0)                           | get/set entry
     move      d4,sr                             | restore interrupt mask
 9:  movem.l   (a7)+,d0-d6/a0/a1
     .endif | OPT_DISABLE_BG_LAYER
@@ -597,16 +693,6 @@ coin_inserted:
 .equ  ADPCMA_LOOP_STOP,     0x19
 .equ  ADPCMB_LOOP_STOP,     0x1a
 
-* MAIN_THEME, HIGHEST_SCORE, HIGH_SCORE, SOLVALOU 
-* are ADPCM-B BG channel sounds
-* ANDOR_GENESIS is ADPCM-A BG channel sound
-* all other sounds are ADPCM-A foreground (round-robin)
-* - MAIN_THEME uses a timer=380 (clocked by SOLVALOU_SND)
-*   - all other sounds muted while MAIN_THEME plays
-* - HIGHEST_SCORE & HIGH_SCORE should just play until stop
-* - ANDOR_GENESIS uses a timer=4 (clocked by SOLALOU_SND)
-*   that is reset EVERY call
-
 * d0 = sound ordinal
 osd_sound_start:
     add.w     #0x20,d0                          | calc sound command
@@ -618,6 +704,22 @@ osd_sound_stop:
     move.b    #ADPCM_STOP,(REG_SOUND)
 9:  rts
 
+osd_play_swarm_loop:
+    *move.b    #(0x20+SWARM_1_SND),(REG_SOUND)
+    rts
+    
+osd_stop_swarm_loop:
+    move.b    #ADPCMB_LOOP_STOP,(REG_SOUND)
+    rts
+    
+osd_play_alien_attack_loop:
+    move.b    #(0x20+ATTACK_END_SND),(REG_SOUND)
+    rts
+    
+osd_stop_alien_attack_loop:
+    *move.b    #ADPCMA_LOOP_STOP,(REG_SOUND)
+    rts
+    
 osd_sound_mute:
     move.b    #ADPCM_MUTE,(REG_SOUND)
     rts
@@ -626,6 +728,20 @@ osd_sound_unmute:
     move.b    #ADPCM_SET_MAX_VOL,(REG_SOUND)
     rts
 
+scroll_stars:
+.ifeq OPT_DISABLE_STARS
+    move.w    (_star_scroll),d0
+    subq.w    #1,d0
+    andi.w    #511,d0
+    move.w    d0,(_star_scroll)
+    lea       VRAM_RW.l,a1
+    move.w    #1,(2,a1)
+    move.w    #SCB4+SFSS,(-2,a1)
+    lsl.w     #7,d0
+    move.w    d0,(a1)
+.endif | OPT_DISABLE_STARS    
+    rts
+    
 * < A0: pointer on attributes/sprites/bullets
 * 32 couple of values.
 * 2 bytes: offset 0: scroll value, 1: palette clut
@@ -715,51 +831,52 @@ osd_update_graphics:
     move.w    #SPRITEY_0+16,d0
     sub.w     d1,d0                             | Neo Geo adjust
     lsl.w     #7,d0                             | shift up
+    cmp.b     #0,d1                             | Y=0 (not visible)?
+    beq       3f                                | yes, skip
     ori.w     #1,d0                             | size=1
-    move.w    d0,(a1)                           | store
+3:  move.w    d0,(a1)                           | store
     lea       (4,a0),a0                         | next sprite
     dbf       d7,2b
     ** SCB4
     suba.l    #0x20,a0
     move.w    #SCB4+GSSS,(-2,a1)                | VRAM_ADDR=SCB4
     moveq     #GSNS-1,d7
-3:  moveq     #0,d1
+4:  moveq     #0,d1
     move.b    (3,a0),d1                         | galaxian sprite X
     move.w    #0x0109,d0
     sub.w     d1,d0                             | Neo Geo adjust
     lsl.w     #7,d0                             | shift up
     move.w    d0,(a1)                           | store
     lea       (4,a0),a0                         | next sprite
-    dbf       d7,3b
+    dbf       d7,4b
 
     ** BULLETS
     
     ** - no need to update SCB1 (colour,code)
 
     ** SCB3
-*    suba.l    #0x20,a0
     move.w    #SCB3+GBSS,(-2,a1)                | VRAM_ADDR=SCB3
     moveq     #GBNS-1,d7
-3:  moveq     #0,d1
-    move.b    (1,a0),d1
+5:  moveq     #0,d1
+    move.b    (1,a0),d1                         | Y
     move.w    #SPRITEY_0+20,d0
     sub.w     d1,d0                             | Neo Geo adjust
     lsl.w     #7,d0                             | shift up
     ori.w     #1,d0                             | size=1
     move.w    d0,(a1)                           | store
     lea       (4,a0),a0                         | next sprite
-    dbf       d7,3b
+    dbf       d7,5b
     ** SCB4
     suba.l    #0x20,a0
     move.w    #SCB4+GBSS,(-2,a1)                | VRAM_ADDR=SCB4
     moveq     #GBNS-1,d7
-4:  moveq     #0,d1
+6:  moveq     #0,d1
     move.b    (3,a0),d0                         | X
     add.w     #0x119,d0
     lsl.w     #7,d0                             | shift up
     move.w    d0,(a1)                           | store
     lea       (4,a0),a0                         | next sprite
-    dbf       d7,4b
+    dbf       d7,6b
 
 9:  movem.l   (a7)+,d0-d7/a0-a2
     rts
@@ -943,9 +1060,9 @@ osd_debug_hook:
 _end_of_ng_code:
     
     .text
-
     .align 2  
-.include "palette.68k"
+.include "neogeo/palette.68k"
+.include "neogeo/stars_palette.68k"
 
     .bss
 
@@ -975,6 +1092,8 @@ _coin_value:                  ds.b  1
 _coin_pulse_cnt:              ds.b  1
 _tile_colour:                 ds.b  32
 _tile_scroll:                 ds.b  32
+  .align 2
+_star_scroll:                 ds.w  1
 
 _end_of_ng_data:
     
