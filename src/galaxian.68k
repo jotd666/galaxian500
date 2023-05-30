@@ -2505,7 +2505,7 @@ l_0ebf:
 	move.b	#0x28,(TempCounter1,a2)                 	| set INFLIGHT_ALIEN.TempCounter1 for INFLIGHT_ALIEN_UNKNOWN_OF3C to use. [ld   (ix+0x10),0x28]
 
 * if both of these incs are called, the stage of life will be set to INFLIGHT_ALIEN_CONTINUING_ATTACK_RUN_FROM_TOP_OF_SCREEN.
-* if only the inc @ 0x0ED6 is invoked (see 0x0EB1), then the stage of life will,0xbe set to INFLIGHT_ALIEN_RETURNING_TO_SWARM.
+* if only the inc @ 0x0ED6 is invoked (see 0x0EB1), then the stage of life will be set to INFLIGHT_ALIEN_RETURNING_TO_SWARM.
 	addq.b	#1,(StageOfLife,a2)                    	| increment INFLIGHT_ALIEN.StageOfLife [inc  (ix+0x02)]
 l_0ed6:
 	addq.b	#1,(StageOfLife,a2)                    	| increment INFLIGHT_ALIEN.StageOfLife [inc  (ix+0x02)]
@@ -2608,8 +2608,8 @@ INFLIGHT_ALIEN_BACK_IN_SWARM:
 	clr.w	d3						| command: DRAW_ALIEN_COMMAND
 	move.b	#0x01,(a0,d6.w)                      	| mark flag in ALIEN_SWARM_FLAGS as "occupied". Our alien's back in the swarm! [ld   (hl),0x01]
 	move.b	d6,d3							| E = index of alien in swarm
-	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND. Alien will be drawn in its place in the swarm. [jp   0x08F2]
-
+	jbsr	QUEUE_COMMAND                             	| jump to QUEUE COMMAND. Alien will be drawn in its place in the swarm. [jp   0x08F2]
+	rts
 
 *
 * Called when aliens are aggressive and refuse to return to the swarm.
@@ -3528,7 +3528,6 @@ PLAYER_ONE_INIT:
 	move.w	#8,d1			| sizeof(CURRENT_PLAYER_STATE)
 	jbsr	ldir                                    	| write P1 player state
 	
-	move.b	#OPT_START_LEVEL-1,PLAYER_ONE_LEVEL	
 * reset any game settings
 	moveq	#0,d0                            	| [xor  a]
 	move.b	d0,TIMING_VARIABLE                       	| set TIMING_VARIABLE [ld   (0x425F),a]
@@ -3889,7 +3888,6 @@ PLAYER_TWO_INIT:
 	lea	CURRENT_PLAYER_STATE,a1                      	| load DE with address of CURRENT_PLAYER_STATE [ld   de,0x4218]
 	move.w	#8,d1
 	jbsr		ldir                                    	| move player 2's state to CURRENT_PLAYER_STATE
-	move.b	#OPT_START_LEVEL-1,PLAYER_TWO_LEVEL
 
 * reset any game settings
 	moveq	#0,d0                            	| [xor  a]
@@ -4244,6 +4242,11 @@ l_065c:
 * 5. Exit function
 
 QUEUE_COMMAND:
+	* temporary check for bogus command
+	cmp.w	#0x89,d3
+	bne.b	0f
+	bsr		osd_break
+0:
 	move.l	a0,-(a7)
 	move.l	CIRC_CMD_QUEUE_PTR,a0
 	tst		(a0)	| if bit 7 not set, this entry cannot be used, goto 0x090B and exit
@@ -4743,7 +4746,7 @@ GET_ALIEN_CHAR_RAM_ADDR:
 	* here carry is 0, so roxr is safe (but could also be ror/lsr on 68000)
 	roxr.b	#1,d0                           	| divide row index by 2. if row index is odd, then set carry flag [rra]
 
-* very important that we preserve the carry flag here (inD7), because DRAW_ALIEN @ 2131 needs it
+* very important that we preserve the carry flag here (in D7), because DRAW_ALIEN @ 2131 needs it
 	scs		d7
 	move.w	d0,-(a7)			| [push af]
 	addx.b	d2,d0	|	[adc  a,c]
@@ -4830,7 +4833,8 @@ CALCULATE_ALIEN_ANIMATION_FRAME_INDEX:
 * Carry flag (D7) = if set, draw characters on odd row
 
 DRAW_ALIEN:
-	| [ex   de,hl]
+	* preserve HL seems that this is needed at times!
+	exg		d6,a1		| [ex   de,hl]
 	tst.b	d7
 	jne	l_213d                             	| if carry is set, we're drawing an odd row [jr   c,0x213D]
 
@@ -4838,7 +4842,7 @@ DRAW_ALIEN:
 	moveq	#0,d0
 	move.b	d1,d0                           	| load A with animation frame index [ld   a,b]
     move.b	(a0,d0.w),d0                           	| call routine to fetch value @ HL + A [rst  0x20]
-	| [ex   de,hl]
+	exg	d6,a1						| [ex   de,hl]
 	jra	PLOT_TWO_CHARACTERS_IN_SAME_COLUMN                             	| jump to PLOT_TWO_CHARACTERS_IN_SAME_COLUMN [jp   0x25A9]
 
 * if we get here, we're drawing an "odd" row
@@ -4854,7 +4858,7 @@ l_2146:
 	lea	ALIEN_SWARM_CHARACTERS_SET_2x2(pc),a0                      	| load HL with address of ALIEN_SWARM_CHARACTERS_SET_2x2 list [ld   hl,0x215B]
     move.b	(a0,d0.w),d0                           	| call routine to fetch value @ HL + A [rst  0x20]
 l_214a:
-	| [ex   de,hl]
+	exg		d6,a1	| [ex   de,hl]
 	jra	PLOT_CHARACTERS_2_BY_2_ASCENDING                             	| jump to  [jp   0x2585]
 
 
@@ -4863,7 +4867,7 @@ l_214a:
 * A = player index
 *
 * Returns:
-* HL = pointer to where first character of 1UP or 2UP will,0xbe plotted
+* HL = pointer to where first character of 1UP or 2UP will be plotted
 *
 l_214e:
 	move.w	#0x5340,d6                      	| 1UP [ld   hl,0x5340]
@@ -4878,7 +4882,7 @@ l_214e:
 ALIEN_SWARM_CHARACTERS_SET_1x2:
 	.byte	0x41,0x35,0x41,0x31
 
-* star ordinals of characters for 2x2 aliens (see docs @ 0x2131 and 0x2585)
+* start ordinals of characters for 2x2 aliens (see docs @ 0x2131 and 0x2585)
 ALIEN_SWARM_CHARACTERS_SET_2x2:
 	.byte	0x44,0x38,0x44,0x3C
 
@@ -5475,12 +5479,12 @@ l_2583:
 *
 
 PLOT_CHARACTERS_2_BY_2_ASCENDING:
-      move.w	D3,-(a7)
-      move.w	#0x001F,d3            | load de with 31 decimal. This is the width of a row, in characters, minus 1.
+      move.w	D3,-(a7)			| [push de]
+      move.w	#0x001F,d3            | load de with 31 decimal. This is the width of a row, in characters, minus 1. [ld   de,$001F]
       jbsr PLOT_TWO_CHARS_ON_SAME_ROW               | plot 2 characters on same row... 
 l_258C:
       jbsr PLOT_TWO_CHARS_ON_SAME_ROW               | and 2 characters on the next row 
-      move.w	(a7)+,d3
+      move.w	(a7)+,d3			| [pop  de]
       rts
 
 
@@ -5502,16 +5506,16 @@ l_258C:
 PLOT_CHARACTERS_2_BY_2_DESCENDING:
 	move.b	#0x2E,d0
 l_2593:
-    move.w	D3,-(a7)
+    move.w	D3,-(a7)			| [push de]
 PLOT_2X2_CHARACTERS:
 	move.w	#-33,d3		| load de with -33 decimal as signed word
 	jbsr	PLOT_TWO_CHARS_ON_SAME_ROW               | plot 2 characters on one row..	
-	subq.b	#4,d0		| subtract 4 from A
+	subq.b	#4,d0		| subtract 4 from A	[add  a,$FC]
 	bra.b	l_258C		| plot 2 characters on row above
 
 
 l_259E:
-	move.b	#0x2C,d0               | space character
+	move.b	#0x2C,d0               | space character [ld   a,$2C]
 *
 * Plots 2 contiguous characters on same row
 * register A is the ordinal of the first character to draw. A+1 is drawn in the next column.
@@ -5526,16 +5530,16 @@ l_259E:
 *
 
 PLOT_TWO_CHARS_ON_SAME_ROW:
-   jbsr		osd_w_bg_videoram              | plot first character
-   addq.b  #1,d0                   | increment A
-   addq.w	#1,d6                  | bump HL to next address in RAM
-   jbsr		osd_w_bg_videoram     | plot second character
-   addq.b  #1,d0
-   add.w	d3,d6               | add offset in DE to HL
+   jbsr		osd_w_bg_videoram              | plot first character  [ld   (hl),a]
+   addq.b  #1,d0                   | increment A [inc  a]
+   addq.w	#1,d6                  | bump HL to next address in RAM [inc  hl]
+   jbsr		osd_w_bg_videoram     | plot second character   [ld   (hl),a]
+   addq.b  #1,d0				| increment A [inc  a]
+   add.w	d3,d6               | add offset in DE to HL  [add  hl,de]
    rts
 
 l_25a7:
-	move.b	#0x2C,d0
+	move.b	#0x2C,d0	| space character [ld   a,$2C]
 
 *
 * Plots 2 characters in the same column, one beneath the other.
@@ -5548,13 +5552,13 @@ l_25a7:
 *
 
 PLOT_TWO_CHARACTERS_IN_SAME_COLUMN:
-	move.w	d3,-(a7)
-	move.w	#0x20,d3      | each row is comprised of 0x20 (32 decimal) characters...
-	jbsr	osd_w_bg_videoram           | plot first character
-	addq.b	#2,d0
-	add.w	d3,d6                      | bump HL to point to the character at the row beneath
-	jbsr	osd_w_bg_videoram              | plot second character
-	move.w	(a7)+,d3
+	move.w	d3,-(a7)				| [push de]
+	move.w	#0x20,d3      | each row is comprised of 0x20 (32 decimal) characters... [ld   de,$0020]
+	jbsr	osd_w_bg_videoram           | plot first character [ld   (hl),a]
+	addq.b	#2,d0				| [add  a,$02]
+	add.w	d3,d6                      | bump HL to point to the character at the row beneath [add  hl,de]
+	jbsr	osd_w_bg_videoram              | plot second character [ld   (hl),a]
+	move.w	(a7)+,d3				| [pop  de]
 	rts
 
 *
@@ -6598,8 +6602,8 @@ WAKEUP_INFLIGHT_ALIEN:
 	clr.b	(StageOfLife,a2)                 	| set INFLIGHT_ALIEN.StageOfLife [ld   (ix+0x02),0x00]
 	move.w	#0x100,d3						| command: DELETE_ALIEN_COMMAND
 	move.b	d6,d3						  | parameter: index of alien in swarm
-	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND [jp   0x08F2]
-
+	jbsr	QUEUE_COMMAND                             	| jump to QUEUE COMMAND [jp   0x08F2]
+	rts
 
 
 *
@@ -6837,7 +6841,7 @@ TRY_INIT_ESCORT_INFLIGHT_ALIEN:
 	move.b	d0,(ArcClockwise,a3)                    	| set escort INFLIGHT_ALIEN.ArcClockwise so it breaks away in formation. [ld   (iy+0x06),a]
 	move.b	d6,(IndexInSwarm,a3)                     	| set escort INFLIGHT_ALIEN.IndexInSwarm [ld   (iy+0x07),l]
 	move.w	#0x100,d3						| command: DELETE_ALIEN_COMMAND
-	move.w	D6,d3							| parameter: index of alien to delete from the swarm
+	move.b	D6,d3							| parameter: index of alien to delete from the swarm
 	jra	QUEUE_COMMAND                             	| jump to QUEUE_COMMAND [jp   0x08F2]
 
 
@@ -7286,7 +7290,7 @@ l_1662:
 	move.b	d5,PLAYER_LEVEL
 	move.b	d6,DIFFICULTY_BASE_VALUE 	| update PLAYER_LEVEL and DIFFICULTY_BASE_VALUE [ld   (0x421B),hl]
 
-	move.l	#0x700,d3                      	| command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND, parameter: 0 (DISPLAY_LEVEL_FLAGS) [ld   de,0x0700]
+	move.w	#0x700,d3                      	| command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND, parameter: 0 (DISPLAY_LEVEL_FLAGS) [ld   de,0x0700]
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND. [call 0x08F2]
 
 * How many flagships survived from the last round? If so, they need to be added into the swarm before the level starts.

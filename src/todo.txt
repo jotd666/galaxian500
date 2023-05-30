@@ -1,6 +1,6 @@
 transcode:
 - getting the odd 'B' tile and the odd flagship 'tile' appearing
-- OPT_START_LEVEL doesn't work (to test the 10 flag)
+  because DRAW_ALIEN_COMMAND gets a buggy 0x89 parameter
 - improve attack looped sound quality
 
 amiga:
@@ -10,8 +10,8 @@ amiga:
 - flagship score doesn't show after a while (seems ok now??)
 - stars as sprites:
   * blink/change from time to time
+  * glitches why???
 - readargs to set options
-- add left/right/shift keys to play keyboard
 
 To rip the sounds:
 
