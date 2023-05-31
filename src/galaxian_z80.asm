@@ -4853,8 +4853,10 @@ SCAN_SPECIFIC_COLUMN_FOR_D_ROWS:
 ; OK, We've scanned the entire column and not found an alien. This means that ALIEN_IN_COLUMN_FLAGS isn't truthful,
 ; and we need to resort to desperate measures. 
 ; 
-; ** I've not seen this block of code called, and I think it might be legacy or debug **  
-;
+; JOTD: this code was called when I was playing level 1
+; A=0x1A
+; C=0x07
+; E=0x3F
 ; Bump HL to point to the purple alien in the column to the right of the one we just scanned. We'll scan that column.  
 13A5: 83            add  a,e                  ; add $3F to A.  
 13A6: 6F            ld   l,a                  ; Now HL points to purple alien slot

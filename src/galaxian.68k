@@ -2608,8 +2608,8 @@ INFLIGHT_ALIEN_BACK_IN_SWARM:
 	clr.w	d3						| command: DRAW_ALIEN_COMMAND
 	move.b	#0x01,(a0,d6.w)                      	| mark flag in ALIEN_SWARM_FLAGS as "occupied". Our alien's back in the swarm! [ld   (hl),0x01]
 	move.b	d6,d3							| E = index of alien in swarm
-	jbsr	QUEUE_COMMAND                             	| jump to QUEUE COMMAND. Alien will be drawn in its place in the swarm. [jp   0x08F2]
-	rts
+	jra	QUEUE_COMMAND                             	| jump to QUEUE COMMAND. Alien will be drawn in its place in the swarm. [jp   0x08F2]
+
 
 *
 * Called when aliens are aggressive and refuse to return to the swarm.
@@ -4242,11 +4242,6 @@ l_065c:
 * 5. Exit function
 
 QUEUE_COMMAND:
-	* temporary check for bogus command
-	cmp.w	#0x89,d3
-	bne.b	0f
-	bsr		osd_break
-0:
 	move.l	a0,-(a7)
 	move.l	CIRC_CMD_QUEUE_PTR,a0
 	tst		(a0)	| if bit 7 not set, this entry cannot be used, goto 0x090B and exit
@@ -6486,19 +6481,18 @@ l_136f:
 * Find first occupied column of aliens starting from the leftmost column.
 FIND_FIRST_OCCUPIED_SWARM_COLUMN_START_FROM_LEFT:
 	lea	ALIEN_IN_COLUMN_FLAGS+0xC,a0                      	| address of flag for leftmost alien in ALIEN_IN_COLUMN_FLAGS [ld   hl,0x41FC]
-	move.w	#10-1,d1							| 10 aliens maximum on a row
+	move.w	#10-1,d2							| 10 aliens maximum on a row
 	move.b	#0x01,d0                        | we are scanning for a value of 1, meaning "column occupied" [ld   a,0x01]
 1:
 	cmp.b	(a0),d0
 	beq.b	0f
 	subq.w	#1,a0							| scan 0x41FC down to 0x41F3 for value #0x01 [cpdr]
-	dbf		d1,1b
+	dbf		d2,1b
 	rts                                    	| if we have no aliens in the swarm (all flags are 0) - return [ret  nz]
 0:
 	move.b	#0x3F,d4		| offset to add in SCAN_SPECIFIC_COLUMN_FOR_D_ROWS loop
 	* compute d6 (l) as the word offset from A0
-	lea	ALIEN_IN_COLUMN_FLAGS,a1
-	sub.l	a1,a0
+	sub.l	#ALIEN_IN_COLUMN_FLAGS,a0
 	move.l	a0,d6		| word is okay
 	
 * HL now points to an entry in ALIEN_IN_COLUMN_FLAGS where we have an alien present (not true on 68000)
@@ -6539,12 +6533,21 @@ l_139b:
 * OK, We've scanned the entire column and not found an alien. This means that ALIEN_IN_COLUMN_FLAGS isn't truthful,
 * and we need to resort to desperate measures.
 *
-* ** I've not seen this block of code called, and I think it might be legacy or debug **
+* ** Scott: I've not seen this block of code called, and I think it might be legacy or debug **
+* JOTD: this code was called when I was playing level 1
+* A=0x1A
+* C=0x07
+* E=0x3F
+*
+* it is rarely called but there was a bug in the transcode which caused D6 to be too high
+* and printing strange "B" chars on screen. This seems to be fixed now!! 
+*
+* Bump HL to point to the purple alien in the column to the right of the one we just scanned. We'll scan that column.  
 *
 * Bump HL to point to the purple alien in the column to the right of the one we just scanned. We'll scan that column.
-	and.w	#0xFF,d0
-	add.b	d4,d0                             	| add 0X3F (or more) to A. [add  a,e]
-	add.w	d0,d6                               	| Now HL points to purple alien slot
+	and.w	#0xFF,d6
+	add.b	d4,d6                             	| add 0X3F (or more) to A. [add  a,e]
+											| Now HL points to purple alien slot
 	subq.b	#1,d2                           	| decrement count of columns remaining that we *can* scan [dec  c]
 	jne	SCAN_SPECIFIC_COLUMN_FOR_D_ROWS                             	| if non-zero, repeat the column scan [jr   nz,0x139A]
 	rts                                    	| [ret]
@@ -6596,7 +6599,6 @@ INIT_SCAN_FROM_RED_ALIEN_ROW:
 
 WAKEUP_INFLIGHT_ALIEN:
 	clr.b	(a0,d6.w)                      	| [ld   (hl),0x00]
-0:
 	move.b	d6,(IndexInSwarm,a2)                     	| set INFLIGHT_ALIEN.IndexInSwarm [ld   (ix+0x07),l]
 	move.b	#0x01,(IsActive,a2)                 	| set INFLIGHT_ALIEN.IsActive [ld   (ix+0x00),0x01]
 	clr.b	(StageOfLife,a2)                 	| set INFLIGHT_ALIEN.StageOfLife [ld   (ix+0x02),0x00]
@@ -6763,6 +6765,7 @@ INIT_INFLIGHT_ALIEN:
 	move.b	#0x01,(IsActive,a2)                 	| set INFLIGHT_ALIEN.IsActive [ld   (ix+0x00),0x01]
 	clr.b	(StageOfLife,a2)                 	| reset INFLIGHT_ALIEN.StageOfLife [ld   (ix+0x02),0x00]
 	move.b	d2,(ArcClockwise,a2)                    	| set INFLIGHT_ALIEN.ArcClockwise [ld   (ix+0x06),c]
+
 	move.b	d6,(IndexInSwarm,a2)                     	| set INFLIGHT_ALIEN.IndexInSwarm [ld   (ix+0x07),l]
 	move.w	#0x0100,d3                             	| command: DELETE_ALIEN_COMMAND
 	move.b	d6,d3								| parameter: index of alien to delete from the swarm

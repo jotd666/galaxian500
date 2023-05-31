@@ -1,16 +1,14 @@
 transcode:
-- getting the odd 'B' tile and the odd flagship 'tile' appearing
-  because DRAW_ALIEN_COMMAND gets a buggy 0x89 parameter
 - improve attack looped sound quality
 
 amiga:
 
 - support dip switches from CLI but should be 1.3 compliant eeek
 - joypad controls: play for pause
-- flagship score doesn't show after a while (seems ok now??)
 - stars as sprites:
   * blink/change from time to time
   * glitches why???
+- check alien bullets colors: should be whiter? not yellow
 - readargs to set options
 
 To rip the sounds:
