@@ -19,9 +19,9 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 #### NEO GEO
 
 - tested & playable w/sound on MVS,NGCDZ (MAME only)
-- WIP: background stars (inaccurate, no blinking)
+- TBD: display masking top/bottom
 - WIP: sound (partial, glitches)
-- TBD: high score load/save
+- TDB: non-tate mode?
 
 ### FEATURES:
 
