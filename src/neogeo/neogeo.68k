@@ -235,7 +235,7 @@ osd_kick_wdog:
     .equ    BG_TILE_BASE,           0x0200
     .equ    GS_TILE_BASE,           0x0400
     .equ    GB_TILE_BASE,           0x0600
-    .equ    SF_TILE_BASE,           0x0800
+    .equ    SF_TILE_BASE,           0x0900
     
     .equ    GB_TILE_CODE,           GB_TILE_BASE+0xf0
 
@@ -259,7 +259,6 @@ platform_init:
     dbf       d6,2b
     dbf       d7,1b
     KICK_WDOG
-osd_debug1:
     lea       _stars_palette.l,a0
     lea       PALETTES+2*16*32,a1               | start at palette #32
     move.w    #32-1,d7                          | 32 palettes
@@ -350,7 +349,7 @@ osd_debug1:
 3:  move.w    d0,(a0)                           | tile code
     move.w    d1,(a0)                           | palette
     addq.w    #1,d0                             | next tile
-    *andi.w    #0x08ff,d0                        | 0-255
+    andi.w    #SF_TILE_BASE+0xff,d0             | 0-255
     dbf       d5,3b                             | do 8 tiles
     addi.w    #0x0100,d1                        | next palette
     andi.w    #0x3f00,d1                        | 0-63
@@ -418,7 +417,9 @@ osd_debug1:
     move.b    #0,(_coin_pulse_cnt)
     
     move.w    #0,(_star_scroll)
-    
+    move.w    #0x0001,(_lfsr1)
+    move.w    #0x00A3,(_lfsr2)                  | 1/4 cycle behind
+        
     * generate lookup table for fg offset
     lea       fg_offset_lookup_tbl,a0
     moveq     #0,d7
@@ -731,6 +732,29 @@ osd_sound_unmute:
 
 scroll_stars:
 .ifeq OPT_DISABLE_STARS
+    * blink stars
+    moveq     #4,d7
+1:  move.w    (_lfsr1),d0
+    lsr.w     #1,d0
+    bcc       2f
+    eori.w    #0x01B0,d0
+2:  move.w    d0,(_lfsr1)
+    lea       PALETTES+2*16*32,a1               | start at palette #32
+    add.w     d0,d0
+    clr.w     (a1,d0.w)                         | clear palette entry
+    dbf       d7,1b
+    moveq     #4,d7
+3:  move.w    (_lfsr2),d0
+    lsr.w     #1,d0
+    bcc       4f
+    eori.w    #0x01B0,d0
+4:  move.w    d0,(_lfsr2)
+    lea       _stars_palette,a0
+    lea       PALETTES+2*16*32,a1               | start at palette #32
+    add.w     d0,d0
+    move.w    (a0,d0.w),(a1,d0.w)               | restore palette entry
+    dbf       d7,3b
+    * scroll stars
     move.w    (_star_scroll),d0
     subq.w    #1,d0
     andi.w    #511,d0
@@ -1079,6 +1103,8 @@ _tile_colour:                 ds.b  32
 _tile_scroll:                 ds.b  32
   .align 2
 _star_scroll:                 ds.w  1
+_lfsr1:                       ds.w  1
+_lfsr2:                       ds.w  1
 
 _end_of_ng_data:
     
