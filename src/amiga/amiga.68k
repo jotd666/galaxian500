@@ -1491,17 +1491,6 @@ osd_w_bg_videoram:
 	* should not happen
 	move.w	#0,d6
 1:
-	* buggy "B" displayed @526F randomly...
-	cmp.b	#'B'-0x30,d0
-	bne.b	2f
-	cmp.w	#0x10F,d6
-	beq.b	2f
-	cmp.w	#0x191,d6
-	beq.b	2f
-	cmp.w	#0x398,d6
-	beq.b	2f
-	blitz
-2:
 	lea		bg_videoram,a1
 	add.w	d6,a1
 	cmp.b	(a1),d0
@@ -2622,12 +2611,13 @@ swarm_1_volume = 16
     .endm
 
 swarm_sound_table:
-	.set	idx,1
-	.rept	16
+	* fastest swarm sound loop freq not so high as len/16
+	SWARM_ENTRY (swarm_1_len*3)/32
+	.set	idx,2
+	.rept	15
     SWARM_ENTRY (swarm_1_len*idx)/16
 	.set	idx,idx+1
 	.endr
-
 swarm_sound_offsets:
 	.set	idx,0
 	.rept	16

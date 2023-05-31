@@ -10,6 +10,8 @@ amiga:
   * glitches why???
 - check alien bullets colors: should be whiter? not yellow
 - readargs to set options
+- remove stars palette source generate it in amiga src
+- last fastest looped freq not nice
 
 To rip the sounds:
 
