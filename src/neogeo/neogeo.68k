@@ -43,6 +43,7 @@
     .global osd_read_high_scores
     .global osd_write_high_scores
     .global osd_debug_hook
+    .global osd_break
     
     .global osd_update_graphics
     .global osd_stars_on
@@ -501,7 +502,7 @@ osd_debug1:
 splash:
     *         "  [--------------------------]  "
     .ascii    "                                "
-    .ascii    "           GALAXIAN     Beta1   "
+    .ascii    "           GALAXIAN     Beta2   "
     .ascii    "                                "
     .ascii    "            NGH 422             "
     .ascii    "                                "
@@ -923,26 +924,18 @@ osd_reset_attributes:
 *** BRAM (MVS only)
 *** Memory card (MVS,AES,NGCD)
 
-* a2=mc buffer (add 20+28)
+* a2=memcard_buf
 patch_high_score_table:
+    lea       (20+28,a2),a2                     | skip header
     * extract high score from entry 1
-    lea       (20+28,a2),a2                     | skip title, padding
-1:  move.b    (0,a2),(a1)+
-    move.b    (1,a2),(a1)+
-    move.b    (2,a2),(a1)+
-    * extract high score table
-    move.w    #16*5-1,d7
-2:  move.b    (a2)+,(a0)+
-    dbf       d7,2b
+    move.b    (a2)+,(a0)+
+    move.b    (a2)+,(a0)+
+    move.b    (a2)+,(a0)+
     rts
 
+* a0 = high score buffer (3 bytes)
 osd_read_high_scores:
-    * calc buffer for variant
-    lea       memcard_buf_0,a2
-    cmp.b     #0,(_variant)
-    beq       1f
-    lea       memcard_buf_1,a2
-1:  move.l    a2,(memcard_buf_addr)
+    lea       memcard_buf,a2
     * try to read from BRAM first
     * - any memory card saves will overwrite
 .ifndef __cd__
@@ -965,19 +958,19 @@ check_memcard_data:
     jsr       BIOSF_CARD
     move.b    (BIOS_CRDRESULT),d0
     bne.b     2f
-    * found some data for Xevious
+    * found some data for Galaxian
     move.b    #0x02,(BIOS_CRDF)
     move.w    #__NGH__,(BIOS_CRDNGH)
-    move.b    (_variant),d0                     | xevious/super
+    move.b    #0,d0
     move.b    d0,(BIOS_CRDFILE)
-    move.l    (memcard_buf_addr),a2
+    lea       memcard_buf,a2
     move.l    a2,(BIOS_CRDPTR)
-    move.w    #128,(BIOS_CRDSIZE)
+    move.w    #64,(BIOS_CRDSIZE)                | 1 block only
     jsr       BIOSF_CARD
     move.b    (BIOS_CRDRESULT),d0
     bne       9f                                | error reading, exit
     movem.l   (a7)+,d0-d7/a0-a6
-    move.l    (memcard_buf_addr),a2
+    lea       memcard_buf,a2
     bra       patch_high_score_table
 
     * handle card search data errors
@@ -996,23 +989,18 @@ check_memcard_data:
     nop
 9:  movem.l   (a7)+,d0-d7/a0-a6
     rts
-    
+
+* a0 = high scotr buffer (3 bytes)    
 osd_write_high_scores:
     movem.l   d0-d7/a0-a6,-(a7)
-    * calc buffer for variant
-    lea       memcard_buf_0,a2
-    cmp.b     #0,(_variant)
-    beq       1f
-    lea       memcard_buf_1,a2
-1:  move.l    a2,(memcard_buf_addr)
     * init memcard buffer
     lea       memcard_hdr,a1
-    move.l    (memcard_buf_addr),a2
+    lea       memcard_buf,a2
     move.w    #20+28-1,d7
 2:  move.b    (a1)+,(a2)+
     dbf       d7,2b
     * copy high scores to memcard buffer
-    move.w    #16*5-1,d7
+    move.w    #3-1,d7
 3:  move.b    (a0)+,(a2)+
     dbf       d7,3b
     
@@ -1033,11 +1021,10 @@ write_BRAM_data:
 write_memcard_data:
     move.b    #0x03,(BIOS_CRDF)
     move.w    #__NGH__,(BIOS_CRDNGH)
-    move.b    (_variant),d0                     | xevious/super
-    move.b    d0,(BIOS_CRDFILE)
-    move.l    (memcard_buf_addr),a2
+    move.b    #0,(BIOS_CRDFILE)
+    lea       memcard_buf,a2
     move.l    a2,(BIOS_CRDPTR)
-    move.w    #128,(BIOS_CRDSIZE)
+    move.w    #64,(BIOS_CRDSIZE)                | 1 block
     jsr       BIOSF_CARD
     move.b    (BIOS_CRDRESULT),d0
     bne       9f                                | error writing, exit
@@ -1046,7 +1033,7 @@ write_memcard_data:
 
     .align 4
 memcard_hdr:
-    .byte     'X','E','V','I','O','U','S',' '
+    .byte     'G','A','L','A','X','I','A','N'
     .byte     ' ',' ',' ',' ',' ',' ',' ',' '
     .byte     ' ',' ',' ',' '
     .byte     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -1056,7 +1043,10 @@ memcard_hdr:
 osd_debug_hook:
     move.w    d0,(BACKDROPCOLOR)
     rts
-        
+
+osd_break:
+    rts
+            
 _end_of_ng_code:
     
     .text
@@ -1073,16 +1063,11 @@ snd_playing:                  ds.b    0x20
 
     .align 4
 memcard_buf:
-memcard_buf_0:                | xevious
+memcard_buf_0:                | galaxian
     mc_title_0:               ds.b  20
                               ds.b  28
-    mc_scores_0:              ds.b  16*5
-memcard_buf_1:                | super xevious
-    mc_title_1:               ds.b  20
-                              ds.b  28
-    mc_scores_1:              ds.b  16*5
-
-memcard_buf_addr:             ds.l  1
+    mc_scores_0:              ds.b  3
+    mc_filler_0:              ds.b  (64-(20+28+3))
 
 * Xevious (0x01) / Super Xevious (0x02)
 _variant:                     ds.b  1
