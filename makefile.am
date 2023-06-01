@@ -36,8 +36,6 @@ clean:
 $(AMIGASRC)/graphics.68k: $(ASSETS)/convert_graphics.py
 	cmd /c $(ASSETS)\convert_graphics.py
 
-$(AMIGASRC)/hw_sprite_types.68k: $(ASSETS)/convert_graphics.py
-	cmd /c $(ASSETS)\convert_graphics.py
 
 $(AMIGASRC)/sounds.68k: $(ASSETS)/convert_sounds.py
 	cmd /c $(ASSETS)\convert_sounds.py
@@ -49,7 +47,7 @@ galaxian.o: galaxian.68k galaxian.inc galaxian_ram.68k
 	$(ASM) galaxian.68k -o galaxian.o
 stars_palette.o: $(AMIGASRC)/stars_palette.68k
 	$(ASM) $(AMIGASRC)/stars_palette.68k -o stars_palette.o
-amiga.o: $(AMIGASRC)/amiga.68k $(AMIGASRC)/hw_sprite_types.68k $(AMIGASRC)/sound_entries.68k galaxian.inc $(AMIGASRC)/ReadJoyPad.i $(AMIGASRC)/palette.68k
+amiga.o: $(AMIGASRC)/amiga.68k $(AMIGASRC)/sound_entries.68k galaxian.inc $(AMIGASRC)/ReadJoyPad.i $(AMIGASRC)/palette.68k
 	$(ASM) -Iamiga $(OPT_RELEASE) $(AMIGASRC)/amiga.68k -o amiga.o
 vbr.o: $(AMIGASRC)/vbr.68k
 	$(ASM_020) -Iamiga $(OPT_RELEASE) $(AMIGASRC)/vbr.68k -o vbr.o

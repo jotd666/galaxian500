@@ -4,14 +4,11 @@ transcode:
 amiga:
 
 - support dip switches from CLI but should be 1.3 compliant eeek
-- joypad controls: play for pause
 - stars as sprites:
   * blink/change from time to time
-  * glitches why???
+- bitplanes glitches with JIT
 - check alien bullets colors: should be whiter? not yellow
 - readargs to set options
-- remove stars palette source generate it in amiga src
-- last fastest looped freq not nice
 
 To rip the sounds:
 

@@ -21,7 +21,7 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 - tested & playable w/sound on MVS,NGCDZ (MAME only)
 - TBD: display masking top/bottom
 - WIP: sound (partial, glitches)
-- TDB: non-tate mode?
+- TBD: non-tate mode?
 
 ### FEATURES:
 
@@ -35,12 +35,17 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 - blastar: NGFX SoundBuilder (Neo Geo sound tool)
 - Namco: original game :)
 
+#### SPECIAL THANKS:
+
+- paraj for invaluable help on the amiga version (scrolling stars issue)
+- Toni Wilen for WinUAE
+
 #### CONTROLS (Amiga: joystick required):
 
 - fire/5 key: insert coin (from menu)
 - up/1 key: start game
 - down/1 key: start 2P game
-- play/P key: pause
+- P key: pause
 
 ## REBUILDING FROM SOURCES:
 

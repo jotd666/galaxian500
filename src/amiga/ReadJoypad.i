@@ -23,3 +23,5 @@
 	
 	.global	_detect_controller_types
 	.global	_read_joystick
+	.global	controller_joypad_0
+	.global	controller_joypad_1
