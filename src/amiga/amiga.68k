@@ -1042,6 +1042,9 @@ osd_update_graphics:
 	* update dirty lines
 	tst.w	slow_machine
 	beq.b	10f
+	* on a slow machine, side scrolling (swarm, characters)
+	* is updated only 50% of the time. This (and blocked stars scroll)
+	* allows lowly A500 to run the game perfectly
 	eor.b	#1,flip_flop
 	beq.b	11f
 10:

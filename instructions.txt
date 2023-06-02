@@ -1,0 +1,45 @@
+Amiga controls:
+
+joystick or joypad in port 1 or keyboard
+
+- 5 key or fire button to insert a coin
+- 1 key or up to start a 1P game
+- 2 key or down to start a 2P game
+- P key or CD32 play button to pause a game
+- ctrl or fire/red to fire
+- P key or 3rd button to pause the game
+- ESC key to quit & save high-scores (when run from amigaDOS)
+- joystick or left/right arrows: move left/right
+
+Command line arguments (no whdload)
+
+Usage:
+
+galaxian
+
+
+Cheats:
+
+see whdload splash screen
+
+Hiscore save:
+
+* If any cheat is selected, highscores won't be saved.
+* whdload: quit whdload with quitkey to allow highscore save
+* floppy: quit game with "ESC" and unprotect the floppy to allow highscore save
+
+Attention to A500/68000 users from floppy:
+
+As surprising as it can be, the game had really to be shoehorned for the standard
+A500 512 chip/512 slow 68000/7MHz configuration. Because of memory & CPU constraints
+compromises had to be made:
+
+- boot with ugly add36k to save some chipmem
+- stars aren't scrolling
+- part of screen is only 25Hz (attacking aliens still are 50Hz)
+
+With those compromises, the game runs at full speed. With whdload on 68000 it is possible
+to choose between "slow machine" or normal. Accelerated 68000 machines with fastmem can run
+the game properly with all options on (full 50Hz, scrolling stars)
+
+  
