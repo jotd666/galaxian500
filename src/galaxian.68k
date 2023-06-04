@@ -220,7 +220,7 @@ METHOD OF PLAY:
 FREE PLAY                     ON            ON 
 
 
-BONUS GALIXIP (PLAYER SHIP) - the manual above is not correct with the Namco Galaxian ROM. After doing some research,
+BONUS GALAXIP (PLAYER SHIP) - the manual above is not correct with the Namco Galaxian ROM. After doing some research,
 here are the correct DIP switch settings: 
 
 
@@ -231,10 +231,10 @@ here are the correct DIP switch settings:
 20000                         ON            ON
 
 
-NUMBER OF GALIXIP PER GAME
+NUMBER OF GALAXIP PER GAME
                                SW.5
-2 GALIXIP PER GAME             OFF
-3 GALIXIP PER GAME             ON
+2 GALAXIP PER GAME             OFF
+3 GALAXIP PER GAME             ON
 
 */
 
@@ -856,11 +856,11 @@ SCRIPT_ZERO:
 	lea	PACKED_DEFAULT_SWARM_DEFINITION(pc),a1	| load,0xDE with address of PACKED_DEFAULT_SWARM_DEFINITION
 	jbsr UNPACK_ALIEN_SWARM               	| call UNPACK_ALIEN_SWARM
 
-* read DIP switches to calculate value of BONUS GALIXIP
+* read DIP switches to calculate value of BONUS GALAXIP
 	jbsr		osd_read_dipswitches  	| read state of dip switch 3,4,5,6 [ld   a,(0x7000)]
 	and.w	#0x03,d2                         	| mask in state of dip switches 3 & 4 [and  0x03]
 	lea	table_0152(pc),a0                      	| [ld   hl,0x0152   see below table]
-	move.b	(a0,d2.w),BONUS_GALIXIP_FOR                	| write BONUS GALIXIP @ value
+	move.b	(a0,d2.w),BONUS_GALAXIP_FOR                	| write BONUS GALAXIP @ value
  
 
 * Set screen attribute colours then display "1UP" and "HIGH SCORE" 
@@ -879,7 +879,7 @@ SCRIPT_ZERO:
 		move.w	#0x0503,d3              | command: DISPLAY_SCORE_COMMAND , parameter: 3 (Displays player scores and high score)
 		jra		QUEUE_COMMAND
   
-* Values for BONUS GALIXIP. 7 = 7000, 10 = 10000, 12 =12000, 20 = 20000
+* Values for BONUS GALAXIP. 7 = 7000, 10 = 10000, 12 =12000, 20 = 20000
 table_0152: 
 	.byte	0x07,0x10,0x12,0x20 
 
@@ -3176,7 +3176,7 @@ SCRIPT_TWO:
 l_0400:
 	.long	INIT_0408
 	.long	WAIT_BEFORE_DISPLAYING_PUSH_START_BUTTON
-	.long	DISPLAY_PUSH_START_BUTTON_AND_BONUS_GALIXIP_FOR
+	.long	DISPLAY_PUSH_START_BUTTON_AND_BONUS_GALAXIP_FOR
 	.long	BLINK_LAMPS_IF_CREDIT_INSERTED
 
 
@@ -3224,7 +3224,7 @@ WAIT_BEFORE_DISPLAYING_PUSH_START_BUTTON:
 
 
 
-DISPLAY_PUSH_START_BUTTON_AND_BONUS_GALIXIP_FOR:
+DISPLAY_PUSH_START_BUTTON_AND_BONUS_GALAXIP_FOR:
 	move.w	TEMP_CHAR_RAM_PTR,d6                   	| Get pointer to row to clear from TEMP_CHAR_RAM_PTR [ld   hl,(0x400B)]
 	move.b	#0x1C,d1                        	| #0x1C (28 decimal) characters to clear [ld   b,0x1C]
 	move.b	#0x10,d0                        	| Ordinal for empty space character [ld   a,0x10]
@@ -3251,10 +3251,10 @@ DISPLAY_PUSH_START_BUTTON_AND_BONUS_GALIXIP_FOR:
 	*move.b	d0,l_7007                       	| set regen vflip [ld   (0x7007),a]
 	move.b	d0,DISPLAY_IS_COCKTAIL_P2                       	| set DISPLAY_IS_COCKTAIL_P2 [ld   (0x4018),a]
 
-* display BONUS GALIXIP FOR and PUSH START BUTTON messages
+* display BONUS GALAXIP FOR and PUSH START BUTTON messages
 	move.w	#0x601,d3                      	| command: PRINT_TEXT, parameter: 1 (index of "PUSH START BUTTON") [ld   de,0x0601]
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
-	move.w	#0x702,d3                      	| command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND , parameter: 2 (invokes DISPLAY_BONUS_GALIXIP_FOR) [ld   de,0x0702]
+	move.w	#0x702,d3                      	| command: DISPLAY_BOTTOM_OF_SCREEN_COMMAND , parameter: 2 (invokes DISPLAY_BONUS_GALAXIP_FOR) [ld   de,0x0702]
 	jbsr	QUEUE_COMMAND                            	| call QUEUE_COMMAND [call 0x08F2]
 	
 	* continue below...
@@ -4992,7 +4992,7 @@ l_21b8:
 	lsl.w	#4,d5								| [add  hl,hl]*4 multiply HL * 16, which shifts all bits left 4 places.
 	move.w	d5,d0                           	| [ld   a,h]
 	lsr.w	#8,d0								| to get h
-	cmp.b	BONUS_GALIXIP_FOR,d0                      	| read BONUS_GALIXIP_FOR value [ld   hl,0x40AC]
+	cmp.b	BONUS_GALAXIP_FOR,d0                      	| read BONUS_GALAXIP_FOR value [ld   hl,0x40AC]
 	bcs.b	0f
 	jbsr	AWARD_EXTRA_LIFE                            	| call AWARD_EXTRA_LIFE if our score is higher [call nc,0x229C]
 0:
@@ -5102,7 +5102,7 @@ l_2228:
 * 3                                 PLAYER TWO 
 * 4                                 HIGH SCORE
 * 5                                 CREDIT
-* 6                                 BONUS GALIXIP FOR   000 PTS
+* 6                                 BONUS GALAXIP FOR   000 PTS
 * 7                                 CONVOY CHARGER 
 * 8                                 - SCORE ADVANCE TABLE -
 * 9                                 MISSION: DESTROY ALIENS
@@ -5221,7 +5221,7 @@ TEXTPTRS:
 	dc.l	TXT_PLAYER_TWO						| 3 
 	dc.l	TXT_HIGH_SCORE						| 4
 	dc.l	TXT_CREDIT							| 5
-	dc.l	TXT_BONUS_GALIXIP_FOR___000_PTS     | 6
+	dc.l	TXT_BONUS_GALAXIP_FOR___000_PTS     | 6
 	dc.l	TXT_CONVOY_CHARGER                  | 7
 	dc.l	TXT___SCORE_ADVANCE_TABLE__         | 8
 	dc.l	TXT_MISSION__DESTROY_ALIENS         | 9
@@ -5244,7 +5244,7 @@ TEXTPTRS:
 * ===============================================================================================================================================
 * 0                         The player advances to the next level and the red level flags are redrawn.   See: 0x2520 (DISPLAY_LEVEL_FLAGS)
 * 1                         Display FREE PLAY or CREDIT n at bottom left of screen.                      See: 0x24EB (DISPLAY_AVAILABLE_CREDIT)
-* 2                         Display BONUS GALIXIP FOR (nnnnn) PTS on screen.                             See: 0x24C8 (DISPLAY_BONUS_GALIXIP_FOR)
+* 2                         Display BONUS GALAXIP FOR (nnnnn) PTS on screen.                             See: 0x24C8 (DISPLAY_BONUS_GALAXIP_FOR)
 * Any other value           Display player ships remaining at bottom left of screen.                     See: 0x22B3 (DISPLAY_PLAYER_SHIPS_REMAINING)
 *
 DISPLAY_BOTTOM_OF_SCREEN_COMMAND:
@@ -5253,7 +5253,7 @@ DISPLAY_BOTTOM_OF_SCREEN_COMMAND:
 	subq.b	#1,d0
 	jeq		DISPLAY_AVAILABLE_CREDIT	| if parameter was 1
 	subq.b	#1,d0
-	jeq		DISPLAY_BONUS_GALIXIP_FOR	| if parameter was 2
+	jeq		DISPLAY_BONUS_GALAXIP_FOR	| if parameter was 2
 	
 	move.b	PLAYER_LIVES,d1
 	jbsr	rst_08			| assert that it's not GAME OVER
@@ -5261,31 +5261,32 @@ DISPLAY_BOTTOM_OF_SCREEN_COMMAND:
 	
 
 *
-* Displays the text string BONUS GALIXIP FOR (nnnnn) on screen.
+* Displays the text string BONUS GALAXIP FOR (nnnnn) on screen.
 *
 
-DISPLAY_BONUS_GALIXIP_FOR:
-	move.b	BONUS_GALIXIP_FOR,d0
+DISPLAY_BONUS_GALAXIP_FOR:
+	move.b	BONUS_GALAXIP_FOR,d0
 	cmp.b	#0xFF,d0     | check if there is any bonus. I think this code is redundant.
 	bne.b	0f
 	rts                   | if no bonus, then return
 0:
-	moveq	#6,d0               | index of BONUS GALIXIP FOR 0000 PTS text string
+	moveq	#6,d0               | index of BONUS GALAXIP FOR 0000 PTS text string
     jbsr PRINT_TEXT_COMMAND               | display text on screen
-    move.b	BONUS_GALIXIP_FOR,d0           | read BONUS GALIXIP value
+    move.b	BONUS_GALAXIP_FOR,d0           | read BONUS GALAXIP value
     and.b  #0x0F,d0                 | mask in low nibble
 	move.w	#0x5138,d6           | write value to character RAM
 	jbsr		osd_w_bg_videoram   | and POKE number to screen RAM, displaying single digit in correct place
-    move.b	BONUS_GALIXIP_FOR,d0           | read BONUS GALIXIP value
+    move.b	BONUS_GALAXIP_FOR,d0           | read BONUS GALAXIP value
 	and.b  #0xF0,d0			| mask in high nibble
     bne.b	1f            | if it's !=0, goto 0x24E3
     addq.b	#1,d0
 1:
-    lsr.w	#4,d0          | move high nibble...
+    ror.b	#4,d0          | move high nibble...
 							| ... into lower nibble, so that A is now a number from 0..9
+							| or blank (0x10) character so it displays 7000 not 07000
 	move.w	#0x5158,d6
-	jbra		osd_w_bg_videoram   | and POKE number to screen RAM, displaying single digit in correct place
-    *rts                      | we're out
+	jbsr		osd_w_bg_videoram   | and POKE number to screen RAM, displaying single digit in correct place
+    rts                      | we're out
 
 
 *
@@ -7490,9 +7491,9 @@ TXT_CREDIT:
 	.word	0x537F
 	.ascii	"CREDIT?"
 	.align	2
-TXT_BONUS_GALIXIP_FOR___000_PTS:
+TXT_BONUS_GALAXIP_FOR___000_PTS:
 	.word	0x5398
-	.ascii	"BONUS@GALIXIP@FOR@@@000@"
+	.ascii	"BONUS@GALAXIP@FOR@@@000@"
 	.byte	0xD0,0xD1,0xD2,0x3F
 	.align	2
 TXT_CONVOY_CHARGER:

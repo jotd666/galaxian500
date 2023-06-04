@@ -39,7 +39,7 @@
 	.global	PLAYER_TWO_SCORE
 	.global	HI_SCORE
 	.global	CAN_BLINK_1UP_2UP
-	.global	BONUS_GALIXIP_FOR
+	.global	BONUS_GALAXIP_FOR
 	.global	PLAYER_ONE_AWARDED_EXTRA_LIFE
 	.global	PLAYER_TWO_AWARDED_EXTRA_LIFE
 	.global	IS_COLUMN_SCROLLING
@@ -320,7 +320,7 @@ HI_SCORE:                              |  $40A8       | ; stored as 3 BCD bytes,
 	ds.b	0x03
 CAN_BLINK_1UP_2UP:                     |  $40AB       | ; When IS_GAME_IN_PLAY is set to 1, this flag is set to 1 to allow 1UP or 2UP to "blink". See @$20A7
 	ds.b	0x01
-BONUS_GALIXIP_FOR:                     |  $40AC       | ; stored as BCD in 1 byte. e.g. 07 = bonus galixip for 7000, 20 = bonus galixip for 20000. 
+BONUS_GALAXIP_FOR:                     |  $40AC       | ; stored as BCD in 1 byte. e.g. 07 = bonus galixip for 7000, 20 = bonus galixip for 20000. 
 	ds.b	0x01
 PLAYER_ONE_AWARDED_EXTRA_LIFE:         |  $40AD       | Set to 1 if player one has been awarded an extra life. No more extra lives will be given. 
 	ds.b	0x01
