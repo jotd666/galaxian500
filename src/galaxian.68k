@@ -431,9 +431,9 @@ l_17C8:
 *
 
 HANDLE_ALIEN_ATTACK_SOUND:
-	move.b	IS_GAME_IN_PLAY,d0                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
-	ror.b	#1,d0                            	| move bit 0 into carry. If game is in play, carry is set [rrca]
-	bcs.b	0f
+	tst.b	IS_GAME_IN_PLAY                       	| read IS_GAME_IN_PLAY [ld   a,(0x4006)]
+	                            	| move bit 0 into carry. If game is in play, carry is set [rrca]
+	bne.b	0f
 	rts                                    	| if carry is not set, game's not in play, return [ret  nc]
 0:
 	lea	ENABLE_ALIEN_ATTACK_SOUND,a0                      	| [ld   hl,0x41C2]
@@ -7081,8 +7081,8 @@ UPDATE_ATTACK_COUNTERS:
 * use difficulty settings and count of extra flagships to compute countdown before flagship attack
 	move.b	DIFFICULTY_BASE_VALUE,d5
 	move.b	DIFFICULTY_EXTRA_VALUE,d6 	| load H with DIFFICULTY_BASE_VALUE and L with DIFFICULTY_EXTRA_VALUE [ld   hl,(0x421A)]
-	move.b	d6,d0                           	| [ld   a,h]
-	add.b	d5,d0                             	| Add DIFFICULTY_BASE_VALUE to DIFFICULTY_EXTRA_VALUE [add  a,l]
+	move.b	d5,d0                           	| [ld   a,h]
+	add.b	d6,d0                             	| Add DIFFICULTY_BASE_VALUE to DIFFICULTY_EXTRA_VALUE [add  a,l]
 	bne.b	0f
 	rts                                    	| exit if both DIFFICULTY_BASE_VALUE and DIFFICULTY_EXTRA_VALUE are 0 [ret  z]
 0:
@@ -7196,8 +7196,8 @@ ALIEN_ATTACK_COUNTER_DEFAULT_VALUES:
 HANDLE_CALC_INFLIGHT_ALIEN_SHOOTING_DISTANCE:
 	lea	HAVE_ALIENS_IN_ROW_FLAGS,a0                      	| load HL with address of HAVE_ALIENS_IN_ROW_FLAGS [ld   hl,0x41E8]
 	move.b	#0x04,d1                        	| we're testing potentially 4 pairs of rows. [ld   b,0x04]
-	move.b	DIFFICULTY_BASE_VALUE,d0                       	| read DIFFICULTY_BASE_VALUE [ld   a,(0x421B)]
-	tst.b	d0                               	| test if zero [and  a]
+	tst.b	DIFFICULTY_BASE_VALUE                       	| read DIFFICULTY_BASE_VALUE [ld   a,(0x421B)]
+											| test if zero [and  a]
 	jne	l_1615                             	| if non-zero, which it always is, goto 0x1615 [jr   nz,0x1615]
 
 * These two lines of code appear never to be called. This must be for an EASY difficulty level we've not seen.
@@ -7289,7 +7289,7 @@ HANDLE_LEVEL_COMPLETE:
 	cmp.b	#0x07,d0                         	| are we at max difficulty? [cp   0x07]
 	jeq	l_1662                             	| yes, goto 0x1662 [jr   z,0x1662]
 	jcc	CLAMP_DIFFICULTY_LEVEL                             	| edge case: we're above max difficulty! So clamp difficulty level to 7. [jr   nc,0x1683]
-	addq.b	#1,d0                           	| otherwise, increment DIFFICULTY_BASE_VALUE [inc  a]
+	addq.b	#1,d6                           	| otherwise, increment DIFFICULTY_BASE_VALUE [inc  a]+[ld   l,a]
 l_1662:
 	move.b	d5,PLAYER_LEVEL
 	move.b	d6,DIFFICULTY_BASE_VALUE 	| update PLAYER_LEVEL and DIFFICULTY_BASE_VALUE [ld   (0x421B),hl]

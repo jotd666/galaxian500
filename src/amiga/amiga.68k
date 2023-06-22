@@ -467,7 +467,8 @@ _demo_end:
 				
 _vblank:
     movem.l d0-d7/a0-a6,-(a7)
-	move.w	_custom+intreqr,d0
+	lea		_custom,a5
+	move.w	(intreqr,a5),d0
 	btst	#5,d0
 	beq.b		1f
 
@@ -485,13 +486,16 @@ _vblank:
 	bsr		toggle_pause
 0:
 
-
-	move.w	#0x20,_custom+intreq	
+	* ack vbl twice (040/pistorm bug)
+	move.w	#0x20,(intreq,a5)
+	move.w	#0x20,(intreq,a5)	
 	bra.b	3f
 1:
 	* has to be copper
 	* we're going to ack copper interrupt now
-	move.w	#0x10,_custom+intreq
+	* do it twice (040/pistorm bug)
+	move.w	#0x10,(intreq,a5)
+	move.w	#0x10,(intreq,a5)
 	
 	moveq	#ONE_TICK,d1
     move.w  vbl_counter(pc),d0
@@ -527,6 +531,7 @@ _vblank:
 	* rendering was so slow that we couldn't cope within a frame
 	* skip a tick and ack again, we lose one update frame
 	addq.b	#ONE_TICK,vb_ticks_count
+	move.w	#0x10,_custom+intreq
 	move.w	#0x10,_custom+intreq
 3:
     movem.l (a7)+,d0-d7/a0-a6
@@ -2030,8 +2035,8 @@ level2_interrupt:
 	
 toggle_pause:
 	* pause only within game
-	*tst.b	ingame_palette_loaded
-	*beq.b	0f
+	tst.b	IS_GAME_IN_PLAY
+	beq.b	0f				| no pause if game not in play
 	eor.b   #1,pause_flag
 0:
 	rts
