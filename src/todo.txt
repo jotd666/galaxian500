@@ -1,13 +1,13 @@
 transcode:
-- improve attack looped sound quality
+- improve attack looped sound quality: find the zeroes with the python script
+  and use those values instead of bare divides
 
 amiga:
 
+- use sprite engine from Pengo (disappearing sprites sometimes)
 - support dip switches from CLI but should be 1.3 compliant eeek
 - stars as sprites:
   * blink/change from time to time
-- bitplanes glitches with JIT
-- check alien bullets colors: should be whiter? not yellow
 - readargs to set options
 
 To rip the sounds:

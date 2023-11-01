@@ -358,11 +358,7 @@ _user:
 	move.l	dip_switch_bonus_ship(pc),d2
 	or.w	d2,start_lives_and_free_ship_dsw
 	
-	* we don't need extra joypad buttons, and that will save a few cycles
-	* because reading CD32 joypad is (relatively) costly. Usually it doesn't
-	* matter but I've seen issues (Shadow of the beast 3 for instance)
-	*
-	*jsr	 _detect_controller_types 
+	jsr	 _detect_controller_types 
 	clr.b	controller_joypad_0
 	clr.b	controller_joypad_1
 

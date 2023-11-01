@@ -7,14 +7,9 @@ This is a transcode from the original arcade game Z80 to 68K assembly.
 
 #### TRANSCODE
 
-- missing swarm sound
-- random issues "B" character displayed on screen (rare)
-- getting 4 lives (rare)
-
 #### AMIGA
 
 - fully playable with sound
-- possible graphical glitches (stars)
 
 #### NEO GEO
 
