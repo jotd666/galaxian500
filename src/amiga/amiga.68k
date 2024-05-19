@@ -2502,7 +2502,7 @@ _tag:
 cheat_flags:
 		.long	0
 		.long	WHDLTAG_CUSTOM3_GET
-		.word
+		.word	0
 slow_machine:
 		.word	0
 		.long	WHDLTAG_CUSTOM4_GET
@@ -2744,6 +2744,7 @@ blank_sound:
 	ds.l	4
 	
 debug_copperlist:
+	dc.w	bplcon0,0x200
 	dc.w	color
 debug_color:
 	dc.w	0

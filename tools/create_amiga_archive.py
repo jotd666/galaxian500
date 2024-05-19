@@ -1,6 +1,6 @@
 import subprocess,os,glob,shutil
 
-progdir = os.path.abspath(os.path.dirname(__file__))
+progdir = os.path.join(os.path.abspath(os.path.dirname(__file__)),"..")
 
 gamename = "galaxian"
 # JOTD path for cranker, adapt to wh :)
