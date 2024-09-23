@@ -859,6 +859,7 @@ platform_init:
 	.endif
 	
 	* restrict borders: we don't see bobs on the borders!
+	*         VVHH
     move.w #0x1C99,diwstrt(a5)
     move.w #0x1C81-8,diwstop(a5)
     move.w #0x0038,ddfstrt(a5)
@@ -2019,8 +2020,15 @@ level2_interrupt:
 
     bsr	toggle_pause
 0:
+	.ifndef	RELEASE
 	tst.l	_resload
 	bne.b	0f
+
+	cmp.b	#0x58,d0	| F9 key crashes game (restarts whdload)
+	bne.b	0f
+	illegal
+	.endif
+0:
 
 	cmp.b	_keyexit,d0	| "ESC" key or whdload quitkey
 	bne.b	0f
@@ -2875,10 +2883,9 @@ color_row_28:
 
 	* pal limit
     .word  0xFFDF,0xFFFE       | PAL wait (should be 0xFFDF but probably fmode=3 changes it)
-    .word  0x0401,0xFFFE
 
-	.set    beampos,0x0401
-    .word   beampos,0xFFFE	
+    .word   0x0001,0xFFFE	
+	.set    beampos,0x0001-0x100
 	
 color_row_29:
 	.word	start_color+2,0 
@@ -2887,9 +2894,7 @@ color_row_29:
 	.rept	8
 	.set	beampos,beampos+0x100
 	STAR_COPPER_ROW
-	.endr
-	
-	.set    beampos,0x0c01
+	.endr 	
 	
 color_row_30_plus:
 	.rept	4
@@ -2901,8 +2906,7 @@ color_row_30_plus:
 	STAR_COPPER_ROW
 	.endr
 	.endr
-
- 	.word	beampos+0x400,0xFFFE   | wait before interrupt, avoid losing last bobs lines
+	.word	beampos+0x400,0xFFFE   | wait before interrupt, avoid losing last bobs lines
     .word	 intreq,0x8010
     .long    -2					
 	.ascii	"ENDCPLST"

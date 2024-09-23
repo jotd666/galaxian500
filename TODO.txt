@@ -4,6 +4,8 @@ transcode:
 
 amiga:
 
+- pause with button 2
+- fix half hidden CREDIT line
 - use sprite engine from Pengo (disappearing sprites sometimes)
 - support dip switches from CLI but should be 1.3 compliant eeek
 - stars as sprites:
