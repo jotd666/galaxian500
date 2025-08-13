@@ -41,7 +41,7 @@ $(AMIGASRC)/sounds.68k: $(ASSETS)/convert_sounds.py
 	cmd /c $(ASSETS)\convert_sounds.py
 	
 $(MAIN): $(OBJS)
-	$(GCC_BIN)/m68k-amigaos-ld -o $(MAIN) $(OBJS)
+	$(GCC_BIN)/m68k-amigaos-ld $(OPT_RELEASE_LINK) -o $(MAIN) $(OBJS)
 
 galaxian.o: galaxian.68k galaxian.inc galaxian_ram.68k
 	$(ASM) galaxian.68k -o galaxian.o
