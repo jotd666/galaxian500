@@ -360,8 +360,6 @@ _user:
 	or.w	d2,start_lives_and_free_ship_dsw
 	
 	jsr	 _detect_controller_types 
-	clr.b	controller_joypad_0
-	clr.b	controller_joypad_1
 
 
 		moveq			#2,d0
